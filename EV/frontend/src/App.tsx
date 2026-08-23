@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, Check, ChevronLeft, ChevronRight, FileText, LayoutGrid, Menu, Plus, Settings, Sparkles, Target, TriangleAlert, X } from 'lucide-react'
-import { TransformationWorkspace } from './components/transformation/TransformationWorkspace'
+import {
+  TransformationWorkspace,
+  type GenerationConfig,
+} from './components/transformation/TransformationWorkspace'
 import { Badge } from './components/ui/Badge'
 import { Button } from './components/ui/Button'
 import {
@@ -24,6 +27,7 @@ import './layout-fixes.css'
 import './batch-source.css'
 import './dna.css'
 import './transformation.css'
+
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 
@@ -192,18 +196,33 @@ function App() {
     }, 450)
   }
 
-  async function generateOutputs(types: string[]) {
-    if (!active) return
-    setBusy(true)
-    setError('')
-    try {
-      replaceTransformation(await generateTransformationOutputs(active.id, types))
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Outputs could not be generated.')
-    } finally {
-      setBusy(false)
-    }
-  }
+  async function generateOutputs(
+      types: string[],
+      generationConfig: GenerationConfig,
+    ) {
+      if (!active) return
+
+      setBusy(true)
+      setError('')
+
+      try {
+        replaceTransformation(
+          await generateTransformationOutputs(
+            active.id,
+            types,
+            generationConfig,
+          ),
+        )
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : 'Outputs could not be generated.',
+        )
+      } finally {
+        setBusy(false)
+      }
+    } 
 
   async function restoreVersion(version: number) {
     if (!active) return
@@ -218,7 +237,8 @@ function App() {
     }
   }
 
-  return <div className="app-shell"><Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onNew={() => void newTransformation()} mobileOpen={mobileNav} onClose={() => setMobileNav(false)} active={active} transformations={transformations} onSelect={(id) => void selectTransformation(id)} /><main className="main-shell"><header className="topbar"><Button variant="ghost" className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={18} /></Button><div className="crumbs"><span>EV</span><span className="crumb-slash">/</span><span>Transformations</span><span className="crumb-slash">/</span><strong>{active?.title || 'New transformation'}</strong></div><div className="topbar-actions"><span className="sync-state"><span className="sync-icon"><span /></span>{saveState === 'saving' ? 'Saving...' : saveState === 'dirty' ? 'Unsaved changes' : saveState === 'error' ? 'Save failed' : 'Synced'}</span><Button variant="ghost" aria-label="Settings"><Settings size={17} /></Button></div></header>{error && <div className="error-banner" role="alert"><TriangleAlert size={17} /><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}{active ? <TransformationWorkspace key={active.id} transformation={active} busy={busy} saveState={saveState} onTexts={createTexts} onFiles={createFiles} onUrl={createUrl} onUnsupported={createUnsupported} onPatch={savePatch} onRename={rename} onRemoveSource={(id) => void removeSource(id)} onGenerateOutputs={(types) => void generateOutputs(types)} onRestoreVersion={(version) => void restoreVersion(version)} /> : <EmptyHome onNew={() => void newTransformation()} busy={busy} />}</main></div>
+  return <div className="app-shell"><Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} onNew={() => void newTransformation()} mobileOpen={mobileNav} onClose={() => setMobileNav(false)} active={active} transformations={transformations} onSelect={(id) => void selectTransformation(id)} /><main className="main-shell"><header className="topbar"><Button variant="ghost" className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={18} /></Button><div className="crumbs"><span>EV</span><span className="crumb-slash">/</span><span>Transformations</span><span className="crumb-slash">/</span><strong>{active?.title || 'New transformation'}</strong></div><div className="topbar-actions"><span className="sync-state"><span className="sync-icon"><span /></span>{saveState === 'saving' ? 'Saving...' : saveState === 'dirty' ? 'Unsaved changes' : saveState === 'error' ? 'Save failed' : 'Synced'}</span><Button variant="ghost" aria-label="Settings"><Settings size={17} /></Button></div></header>{error && <div className="error-banner" role="alert"><TriangleAlert size={17} /><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}{active ? <TransformationWorkspace key={active.id} transformation={active} busy={busy} saveState={saveState} onTexts={createTexts} onFiles={createFiles} onUrl={createUrl} onUnsupported={createUnsupported} onPatch={savePatch} onRename={rename} onRemoveSource={(id) => void removeSource(id)} onGenerateOutputs={(types, generationConfig) =>
+  void generateOutputs(types, generationConfig)} onRestoreVersion={(version) => void restoreVersion(version)} /> : <EmptyHome onNew={() => void newTransformation()} busy={busy} />}</main></div>
 }
 
 function EmptyHome({ onNew, busy }: { onNew: () => void; busy: boolean }) { return <section className="empty-home page-enter"><div className="empty-home-mark">EV</div><div className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> TRANSFORMATION WORKSPACE</div><h1>Make meaning from the material.</h1><p>Open a recent transformation or start a clean workspace for a new body of source material.</p><Button variant="primary" onClick={onNew} disabled={busy}><Plus size={16} />New Transformation</Button></section> }

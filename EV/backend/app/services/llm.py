@@ -242,6 +242,40 @@ REQUIRED STRUCTURE:
 
 GENERATION SETTINGS:
 
+The operator selected the following generation settings:
+
+- Target audience: {generation_config.get("audience", "General Public")}
+- Tone: {generation_config.get("tone", "Professional")}
+- Language: {generation_config.get("language", "English")}
+- Level of detail: {generation_config.get("detail", "Balanced")}
+- Communication objective: {generation_config.get("objective", "Inform")}
+- Content style: {generation_config.get("style", "Corporate")}
+
+You MUST adapt the generated artifact to these settings.
+
+TARGET AUDIENCE:
+Write for the selected target audience. Adjust terminology,
+technical depth, assumptions, and explanation level accordingly.
+
+TONE:
+Use the selected tone consistently throughout the artifact.
+
+LANGUAGE:
+Generate the artifact in the selected language.
+
+LEVEL OF DETAIL:
+Respect the selected level of detail without adding unsupported
+information. More detail means explaining supported source
+information more completely, not inventing additional facts.
+
+COMMUNICATION OBJECTIVE:
+Shape the communication around the selected objective while
+remaining faithful to the Content DNA.
+
+CONTENT STYLE:
+Follow the selected communication style while preserving the
+meaning and factual accuracy of the Content DNA.
+
 {generation_config}
 
 USER INSTRUCTIONS:

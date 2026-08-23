@@ -142,11 +142,32 @@ export function createReferenceStructure(
   })
 }
 
-export function generateTransformationOutputs(transformationId: string, types: string[], structureIds: string[] = []) {
-  return request<Transformation>(`/api/v1/transformations/${transformationId}/outputs`, {
-    method: 'POST',
-    body: JSON.stringify({ types, structure_ids: structureIds }),
-  })
+export type GenerationConfig = {
+  audience: string
+  tone: string
+  language: string
+  detail: string
+  objective: string
+  style: string
+}
+
+export function generateTransformationOutputs(
+  transformationId: string,
+  types: string[],
+  generationConfig: GenerationConfig,
+  structureIds: string[] = [],
+) {
+  return request<Transformation>(
+    `/api/v1/transformations/${transformationId}/outputs`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        types,
+        structure_ids: structureIds,
+        generation_config: generationConfig,
+      }),
+    },
+  )
 }
 
 export function restoreTransformationVersion(transformationId: string, version: number) {

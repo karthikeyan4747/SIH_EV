@@ -286,21 +286,59 @@ def generate_outputs(
     request: Request,
 ) -> Transformation:
     transformation = _get_transformation(transformation_id, request)
+
     if transformation.content_dna is None:
-        raise HTTPException(status_code=409, detail="Generate Content DNA before creating outputs")
+        raise HTTPException(
+            status_code=409,
+            detail="Generate Content DNA before creating outputs",
+        )
+
     dna_version = len(transformation.versions) or 1
+
     artifacts = [
-        _outputs(request).generate(transformation.id, transformation.content_dna, output_type, dna_version)
+        _outputs(request).generate(
+            transformation.id,
+            transformation.content_dna,
+            output_type,
+            dna_version,
+            generation_config=payload.generation_config,
+        )
         for output_type in payload.types
     ]
-    structure_map = {structure.id: structure for structure in transformation.structures}
+
+    structure_map = {
+        structure.id: structure
+        for structure in transformation.structures
+    }
+
     for structure_id in payload.structure_ids:
         structure = structure_map.get(structure_id)
-        if structure is None:
-            raise HTTPException(status_code=404, detail=f"Structure not found: {structure_id}")
-        artifacts.append(_outputs(request).generate_from_structure(transformation.id, transformation.content_dna, structure, dna_version))
-    return _storage(request).save(transformation.model_copy(update={"outputs": [*transformation.outputs, *artifacts]}))
 
+        if structure is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Structure not found: {structure_id}",
+            )
+
+        artifacts.append(
+            _outputs(request).generate_from_structure(
+                transformation.id,
+                transformation.content_dna,
+                structure,
+                dna_version,
+            )
+        )
+
+    return _storage(request).save(
+        transformation.model_copy(
+            update={
+                "outputs": [
+                    *transformation.outputs,
+                    *artifacts,
+                ]
+            }
+        )
+    )
 
 @router.post("/{transformation_id}/versions/{version}/restore", response_model=Transformation)
 def restore_version(transformation_id: str, version: int, request: Request) -> Transformation:

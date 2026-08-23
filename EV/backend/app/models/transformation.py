@@ -91,21 +91,20 @@ class UnsupportedSourceRequest(BaseModel):
     title: str = "Unsupported source"
     note: str = ""
 
-
 class OutputGenerateRequest(BaseModel):
-    types: list[
-        Literal[
-            "executive_summary",
-            "advisory",
-            "linkedin",
-            "twitter",
-            "presentation",
-            "video",
-            "infographic",
-        ]
-    ] = Field(min_length=1)
+    types: list[Literal[
+        "executive_summary",
+        "advisory",
+        "linkedin",
+        "twitter",
+        "presentation",
+        "video",
+        "infographic",
+    ]] = Field(min_length=1)
 
     structure_ids: list[str] = Field(default_factory=list)
+
+    generation_config: dict = Field(default_factory=dict)
 class StructureSectionInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
