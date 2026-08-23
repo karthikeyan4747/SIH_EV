@@ -1,0 +1,20 @@
+.batch-text-form { gap: 14px; }
+.text-draft { display: grid; gap: 14px; padding: 15px; background: #0d1014; border: 1px solid #2a3039; border-radius: 6px; }
+.draft-heading { display: flex; align-items: center; justify-content: space-between; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
+.icon-action { display: grid; place-items: center; padding: 5px; color: var(--muted); background: transparent; border: 0; border-radius: 4px; }
+.icon-action:hover { color: var(--danger); background: #2a171b; }
+.add-source-button { width: fit-content; padding-left: 0; }
+.batch-upload-zone { padding-top: 28px; }
+.file-queue { display: grid; gap: 7px; margin-top: 14px; }
+.file-row { display: flex; align-items: center; gap: 9px; padding: 10px 11px; color: var(--muted); background: #0d1014; border: 1px solid #2a3039; border-radius: 5px; font-size: 12px; }
+.file-row svg { color: var(--accent); }.file-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.file-row small { color: var(--dim); font-size: 10px; }
+.source-mode-grid { flex-wrap: wrap; }
+.source-mode-grid button { flex: 0 0 auto; }
+.source-mode-grid button.limited { color: #8a969a; }
+.source-mode-grid button.limited::after { content: 'limited'; margin-left: 3px; color: var(--dim); font-size: 8px; text-transform: uppercase; }
+.composer-meta { display: flex; gap: 12px; color: var(--dim); font-size: 10px; }
+.unsupported-source-panel { display: grid; gap: 12px; padding: 18px; background: #0d1216; border-top: 1px solid #2a3039; }
+.unsupported-source-panel strong { color: #dce4e5; font-size: 13px; }
+.unsupported-source-panel p { max-width: 620px; margin: 0; color: var(--dim); font-size: 12px; line-height: 1.6; }
+.unsupported-source-panel label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; }
+.unsupported-source-panel input { width: 100%; padding: 10px 11px; color: var(--text); background: #090d11; border: 1px solid #29313a; border-radius: 5px; outline: 0; }
