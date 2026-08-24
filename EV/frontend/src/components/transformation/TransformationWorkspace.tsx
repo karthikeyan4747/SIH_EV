@@ -489,8 +489,25 @@ function WorkspaceOutputs({
             value={generationConfig.language}
             options={[
               'English',
-              'Tamil',
               'Hindi',
+              'Bengali',
+              'Telugu',
+              'Marathi',
+              'Tamil',
+              'Gujarati',
+              'Urdu',
+              'Kannada',
+              'Odia',
+              'Malayalam',
+              'Punjabi',
+              'Assamese',
+              'Maithili',
+              'Sanskrit',
+              'Konkani',
+              'Nepali',
+              'Sindhi',
+              'Kashmiri',
+              'Manipuri',
             ]}
             onChange={(value) =>
               updateGenerationConfig('language', value)

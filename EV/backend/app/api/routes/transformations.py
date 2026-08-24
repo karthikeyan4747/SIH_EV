@@ -32,7 +32,9 @@ from app.services.ingestion import (
     UnsupportedIngestionProvider,
     DOCXIngestionProvider,
     YouTubeIngestionProvider,
-    ImageIngestionProvider
+    ImageIngestionProvider,
+    AudioIngestionProvider,
+    VideoIngestionProvider
 )
 from app.services.llm import LLMProviderError
 from app.services.output_generation import OutputGenerationService
@@ -171,10 +173,31 @@ async def add_file_source(
         else ""
     )
 
-    if suffix not in {"txt", "pdf", "docx","png","jpg","jpeg","webp"}:
+    if suffix not in {
+    "txt",
+    "pdf",
+    "docx",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "mp3",
+    "wav",
+    "m4a",
+    "aac",
+    "ogg",
+    "flac",
+    "wma",
+    "mp4",
+    "mov",
+    "mkv",
+    "webm",
+    "avi",
+}:
         raise HTTPException(
             status_code=415,
-            detail="Only TXT, PDF, and DOCX files are currently processable",
+            detail=
+    "Unsupported file type"
         )
 
     content = await file.read()
@@ -195,8 +218,12 @@ async def add_file_source(
             provider = PDFIngestionProvider()
         elif suffix == "docx":
             provider = DOCXIngestionProvider()
-        else:
+        elif suffix in {"png", "jpg", "jpeg", "webp"}:
             provider = ImageIngestionProvider()
+        elif suffix in {"mp3", "wav", "m4a", "aac", "ogg", "flac", "wma"}:
+            provider = AudioIngestionProvider()
+        else:
+            provider = VideoIngestionProvider()
 
         source = provider.ingest(
             str(uuid4()),

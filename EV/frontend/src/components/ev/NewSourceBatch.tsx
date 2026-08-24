@@ -20,8 +20,8 @@ const modes: { key: SourceMode; label: string; Icon: typeof FileText; supported:
   { key: 'url', label: 'URL', Icon: Link, supported: true },
   { key: 'youtube', label: 'YouTube', Icon: Video, supported: true },
   { key: 'image', label: 'Image', Icon: Image, supported: true },
-  { key: 'video', label: 'Video', Icon: Video, supported: false },
-  { key: 'audio', label: 'Audio', Icon: FileAudio, supported: false },
+  { key: 'audio', label: 'Audio', Icon: FileAudio, supported: true },
+  { key: 'video', label: 'Video', Icon: Video, supported: true },
 ]
 
 export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }: NewSourceBatchProps) {
@@ -29,6 +29,8 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
   const [drafts, setDrafts] = useState<TextDraft[]>([{ id: 1, title: '', text: '' }])
   const [files, setFiles] = useState<File[]>([])
   const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [videoFiles, setVideoFiles] = useState<File[]>([])
+  const [audioFiles, setAudioFiles] = useState<File[]>([])
   const [url, setUrl] = useState('')
   const [urlTitle, setUrlTitle] = useState('')
   const [youtubeUrl, setYoutubeUrl] = useState('')
@@ -57,26 +59,66 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
     const nextFiles = Array.from(selected).filter((file) => /\.(txt|pdf|docx)$/i.test(file.name))
     setFiles([...files, ...nextFiles.filter((file) => !files.some((existing) => existing.name === file.name && existing.size === file.size))])
   }
-  
+
   function selectImageFiles(selected: FileList | null) {
     if (!selected) return
 
     const nextImages = Array.from(selected).filter((file) =>
-    /\.(png|jpe?g|webp)$/i.test(file.name),
+      /\.(png|jpe?g|webp)$/i.test(file.name),
     )
 
-     setImageFiles((current) => [
-    ...current,
-    ...nextImages.filter(
-      (file) =>
-        !current.some(
-          (existing) =>
-            existing.name === file.name &&
-            existing.size === file.size,
+    setImageFiles((current) => [
+      ...current,
+      ...nextImages.filter(
+        (file) =>
+          !current.some(
+            (existing) =>
+              existing.name === file.name &&
+              existing.size === file.size,
           ),
-        ),
-  ])
-}
+      ),
+    ])
+  }
+
+  function selectAudioFiles(selected: FileList | null) {
+    if (!selected) return
+
+    const nextAudio = Array.from(selected).filter((file) =>
+      /\.(mp3|wav|m4a|aac|ogg|flac|wma)$/i.test(file.name),
+    )
+
+    setAudioFiles((current) => [
+      ...current,
+      ...nextAudio.filter(
+        (file) =>
+          !current.some(
+            (existing) =>
+              existing.name === file.name &&
+              existing.size === file.size,
+          ),
+      ),
+    ])
+  }
+
+  function selectVideoFiles(selected: FileList | null) {
+    if (!selected) return
+
+    const nextVideos = Array.from(selected).filter((file) =>
+      /\.(mp4|mov|mkv|webm|avi)$/i.test(file.name),
+    )
+
+    setVideoFiles((current) => [
+      ...current,
+      ...nextVideos.filter(
+        (file) =>
+          !current.some(
+            (existing) =>
+              existing.name === file.name &&
+              existing.size === file.size,
+          ),
+      ),
+    ])
+  }
 
   return <section className="new-source page-enter">
     <div className="eyebrow"><span className="eyebrow-line" /> SOURCE INTAKE <span className="eyebrow-line" /></div>
@@ -103,136 +145,277 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
         {files.length > 0 && <BatchFooter busy={busy} disabled={false} count={files.length} label={`${files.length} file${files.length === 1 ? '' : 's'} ready`} onClick={() => { onFiles(files); setFiles([]) }} />}
       </div>}
       {mode === 'image' && (
-  <div className="upload-zone batch-upload-zone">
-    <input
-      id="source-images"
-      type="file"
-      accept="image/png,image/jpeg,image/webp"
-      multiple
-      hidden
-      onChange={(event) =>
-        selectImageFiles(event.target.files)
-      }
-    />
+        <div className="upload-zone batch-upload-zone">
+          <input
+            id="source-images"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            hidden
+            onChange={(event) =>
+              selectImageFiles(event.target.files)
+            }
+          />
 
-    <label
-      htmlFor="source-images"
-      className="drop-label"
-    >
-      <Image size={28} />
-      <strong>Choose images</strong>
-      <span>
-        PNG, JPG, JPEG or WEBP images
-      </span>
-    </label>
-
-    {imageFiles.length > 0 && (
-      <div className="file-queue">
-        {imageFiles.map((file) => (
-          <div
-            className="file-row"
-            key={`${file.name}-${file.size}`}
+          <label
+            htmlFor="source-images"
+            className="drop-label"
           >
-            <Image size={16} />
+            <Image size={28} />
+            <strong>Choose images</strong>
+            <span>
+              PNG, JPG, JPEG or WEBP images
+            </span>
+          </label>
 
-            <span>{file.name}</span>
+          {imageFiles.length > 0 && (
+            <div className="file-queue">
+              {imageFiles.map((file) => (
+                <div
+                  className="file-row"
+                  key={`${file.name}-${file.size}`}
+                >
+                  <Image size={16} />
 
-            <small>
-              {(file.size / 1024).toFixed(1)} KB
-            </small>
+                  <span>{file.name}</span>
 
-            <button
-              className="icon-action"
-              aria-label={`Remove ${file.name}`}
-              onClick={() =>
-                setImageFiles((current) =>
-                  current.filter(
-                    (item) => item !== file,
-                  ),
-                )
-              }
-            >
-              <X size={15} />
-            </button>
-          </div>
-        ))}
-      </div>
-    )}
+                  <small>
+                    {(file.size / 1024).toFixed(1)} KB
+                  </small>
 
-    {imageFiles.length > 0 && (
-      <BatchFooter
-        busy={busy}
-        disabled={false}
-        count={imageFiles.length}
-        label={`${imageFiles.length} image${
-          imageFiles.length === 1 ? '' : 's'
-        } ready`}
-        onClick={() => {
-          onFiles(imageFiles)
-          setImageFiles([])
-        }}
-      />
-    )}
-  </div>
-)}
+                  <button
+                    className="icon-action"
+                    aria-label={`Remove ${file.name}`}
+                    onClick={() =>
+                      setImageFiles((current) =>
+                        current.filter(
+                          (item) => item !== file,
+                        ),
+                      )
+                    }
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {imageFiles.length > 0 && (
+            <BatchFooter
+              busy={busy}
+              disabled={false}
+              count={imageFiles.length}
+              label={`${imageFiles.length} image${imageFiles.length === 1 ? '' : 's'
+                } ready`}
+              onClick={() => {
+                onFiles(imageFiles)
+                setImageFiles([])
+              }}
+            />
+          )}
+        </div>
+      )}
+      {mode === 'audio' && (
+        <div className="upload-zone batch-upload-zone">
+          <input
+            id="source-audio"
+            type="file"
+            accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/ogg,audio/flac"
+            multiple
+            hidden
+            onChange={(event) =>
+              selectAudioFiles(event.target.files)
+            }
+          />
+
+          <label
+            htmlFor="source-audio"
+            className="drop-label"
+          >
+            <FileAudio size={28} />
+            <strong>Choose audio files</strong>
+            <span>
+              MP3, WAV, M4A, AAC, OGG, FLAC or WMA
+            </span>
+          </label>
+
+          {audioFiles.length > 0 && (
+            <div className="file-queue">
+              {audioFiles.map((file) => (
+                <div
+                  className="file-row"
+                  key={`${file.name}-${file.size}`}
+                >
+                  <FileAudio size={16} />
+
+                  <span>{file.name}</span>
+
+                  <small>
+                    {(file.size / 1024).toFixed(1)} KB
+                  </small>
+
+                  <button
+                    className="icon-action"
+                    aria-label={`Remove ${file.name}`}
+                    onClick={() =>
+                      setAudioFiles((current) =>
+                        current.filter(
+                          (item) => item !== file,
+                        ),
+                      )
+                    }
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {audioFiles.length > 0 && (
+            <BatchFooter
+              busy={busy}
+              disabled={false}
+              count={audioFiles.length}
+              label={`${audioFiles.length} audio ${audioFiles.length === 1 ? 'file' : 'files'
+                } ready`}
+              onClick={() => {
+                onFiles(audioFiles)
+                setAudioFiles([])
+              }}
+            />
+          )}
+        </div>
+      )}
+      {mode === 'video' && (
+        <div className="upload-zone batch-upload-zone">
+          <input
+            id="source-video"
+            type="file"
+            accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
+            multiple
+            hidden
+            onChange={(event) =>
+              selectVideoFiles(event.target.files)
+            }
+          />
+
+          <label
+            htmlFor="source-video"
+            className="drop-label"
+          >
+            <Video size={28} />
+            <strong>Choose video files</strong>
+            <span>MP4, MOV, MKV, WEBM or AVI</span>
+          </label>
+
+          {videoFiles.length > 0 && (
+            <div className="file-queue">
+              {videoFiles.map((file) => (
+                <div
+                  className="file-row"
+                  key={`${file.name}-${file.size}`}
+                >
+                  <Video size={16} />
+
+                  <span>{file.name}</span>
+
+                  <small>
+                    {(file.size / 1024 / 1024).toFixed(1)} MB
+                  </small>
+
+                  <button
+                    className="icon-action"
+                    aria-label={`Remove ${file.name}`}
+                    onClick={() =>
+                      setVideoFiles((current) =>
+                        current.filter(
+                          (item) => item !== file,
+                        ),
+                      )
+                    }
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {videoFiles.length > 0 && (
+            <BatchFooter
+              busy={busy}
+              disabled={false}
+              count={videoFiles.length}
+              label={`${videoFiles.length} video ${videoFiles.length === 1 ? 'file' : 'files'
+                } ready`}
+              onClick={() => {
+                onFiles(videoFiles)
+                setVideoFiles([])
+              }}
+            />
+          )}
+        </div>
+      )}
       {mode === 'url' && <div className="text-form batch-text-form">
         <div className="text-draft">
           <div className="draft-heading"><span>URL SOURCE</span></div>
           <label>Source title <input value={urlTitle} onChange={(event) => setUrlTitle(event.target.value)} placeholder="Optional readable title" /></label>
           <label>URL <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/article" /></label>
-        </div>  
+        </div>
         <BatchFooter busy={busy} disabled={!/^https?:\/\/.+/i.test(url)} count={1} label="Readable HTML and plain text URLs are supported" onClick={() => { onUrl(url, urlTitle); setUrl(''); setUrlTitle('') }} />
       </div>}
       {mode === 'youtube' && (
-  <div className="text-form batch-text-form">
-    <div className="text-draft">
-      <div className="draft-heading">
-        <span>YOUTUBE SOURCE</span>
-      </div>
+        <div className="text-form batch-text-form">
+          <div className="text-draft">
+            <div className="draft-heading">
+              <span>YOUTUBE SOURCE</span>
+            </div>
 
-      <label>
-        Video title
-        <input
-          value={youtubeTitle}
-          onChange={(event) =>
-            setYoutubeTitle(event.target.value)
-          }
-          placeholder="Optional video title"
-        />
-      </label>
+            <label>
+              Video title
+              <input
+                value={youtubeTitle}
+                onChange={(event) =>
+                  setYoutubeTitle(event.target.value)
+                }
+                placeholder="Optional video title"
+              />
+            </label>
 
-      <label>
-        YouTube URL
-        <input
-          value={youtubeUrl}
-          onChange={(event) =>
-            setYoutubeUrl(event.target.value)
-          }
-          placeholder="https://www.youtube.com/watch?v=..."
-        />
-      </label>
-    </div>
+            <label>
+              YouTube URL
+              <input
+                value={youtubeUrl}
+                onChange={(event) =>
+                  setYoutubeUrl(event.target.value)
+                }
+                placeholder="https://www.youtube.com/watch?v=..."
+              />
+            </label>
+          </div>
 
-    <BatchFooter
-      busy={busy}
-      disabled={
-        !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(
-          youtubeUrl.trim(),
-        )
-      }
-      count={1}
-      label="Transcript will be extracted automatically"
-      onClick={() => {
-        onUrl(
-          youtubeUrl.trim(),
-          youtubeTitle.trim() || 'YouTube source',
-        )
-        setYoutubeUrl('')
-        setYoutubeTitle('')
-      }}
-    />
-  </div>
-)}
+          <BatchFooter
+            busy={busy}
+            disabled={
+              !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(
+                youtubeUrl.trim(),
+              )
+            }
+            count={1}
+            label="Transcript will be extracted automatically"
+            onClick={() => {
+              onUrl(
+                youtubeUrl.trim(),
+                youtubeTitle.trim() || 'YouTube source',
+              )
+              setYoutubeUrl('')
+              setYoutubeTitle('')
+            }}
+          />
+        </div>
+      )}
       {!modes.find((item) => item.key === mode)?.supported && <div className="unsupported-source-panel">
         <strong>{modes.find((item) => item.key === mode)?.label} processing is not available</strong>
         <p>EV can record this source in the transformation history, but this backend cannot extract usable Content DNA from it yet.</p>

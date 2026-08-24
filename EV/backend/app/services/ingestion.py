@@ -20,6 +20,11 @@ import numpy as np
 
 from faster_whisper import WhisperModel
 
+import subprocess
+import tempfile
+
+from app.core.config import settings
+
 class IngestionError(ValueError):
     pass
 
@@ -196,6 +201,28 @@ class ImageIngestionProvider:
     def __init__(self) -> None:
         self.ocr = RapidOCR()
 
+
+    def extract_text_from_image_array(self, image_array) -> str:
+        try:
+            result, _ = self.ocr(image_array)
+        except Exception as exc:
+            raise IngestionError(
+                "Unable to analyze a video frame"
+            ) from exc
+
+        if not result:
+            return ""
+
+        parts: list[str] = []
+
+        for item in result:
+            text = str(item[1]).strip()
+
+            if text:
+                parts.append(text)
+
+        return "\n".join(parts).strip()
+
     def ingest(
         self,
         source_id: str,
@@ -254,6 +281,308 @@ class ImageIngestionProvider:
         )
 
 
+class AudioIngestionProvider:
+    source_type = "audio"
+
+    def __init__(self) -> None:
+        self.model = WhisperModel(
+            "base",
+            device="cpu",
+            compute_type="int8",
+        )
+
+    def ingest(
+        self,
+        source_id: str,
+        filename: str,
+        content: bytes,
+    ) -> RawContent:
+        temp_path: Path | None = None
+
+        try:
+            suffix = Path(filename).suffix or ".audio"
+
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=suffix,
+            ) as temp_file:
+                temp_file.write(content)
+                temp_path = Path(temp_file.name)
+
+            segments, info = self.model.transcribe(
+                str(temp_path),
+                beam_size=5,
+                vad_filter=True,
+            )
+
+            text_parts: list[str] = []
+
+            for segment in segments:
+                text = segment.text.strip()
+
+                if text:
+                    text_parts.append(text)
+
+            text = "\n".join(text_parts).strip()
+
+            if not text:
+                raise IngestionError(
+                    "No speech could be transcribed from the audio"
+                )
+
+            return RawContent(
+                source_id=source_id,
+                source_type=self.source_type,
+                title=Path(filename).stem or "Untitled audio",
+                text=text,
+                metadata={
+                    "filename": filename,
+                    "transcription_engine": "faster-whisper",
+                    "model": "base",
+                    "language": getattr(info, "language", ""),
+                    "language_probability": getattr(
+                        info,
+                        "language_probability",
+                        None,
+                    ),
+                    "duration_seconds": getattr(
+                        info,
+                        "duration",
+                        None,
+                    ),
+                },
+            )
+
+        except IngestionError:
+            raise
+
+        except Exception as exc:
+            raise IngestionError(
+                "Unable to transcribe the audio file"
+            ) from exc
+
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+
+def extract_video_frames(
+    video_path: Path,
+    interval_seconds: float = 5.0,
+) -> list[tuple[float, object]]:
+    capture = cv2.VideoCapture(str(video_path))
+
+    if not capture.isOpened():
+        raise IngestionError("Unable to open the video file")
+
+    fps = capture.get(cv2.CAP_PROP_FPS)
+
+    if not fps or fps <= 0:
+        capture.release()
+        raise IngestionError("Unable to determine video frame rate")
+
+    frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+    duration = frame_count / fps if frame_count else 0
+
+    frames: list[tuple[float, object]] = []
+    current_time = 0.0
+
+    while current_time <= duration:
+        capture.set(
+            cv2.CAP_PROP_POS_MSEC,
+            current_time * 1000,
+        )
+
+        success, frame = capture.read()
+
+        if success and frame is not None:
+            frames.append((current_time, frame))
+
+        current_time += interval_seconds
+
+    capture.release()
+
+    return frames
+
+class VideoIngestionProvider:
+    source_type = "video"
+
+    def __init__(self) -> None:
+        self.audio_provider = AudioIngestionProvider()
+        self.image_provider = ImageIngestionProvider()
+
+    def ingest(
+        self,
+        source_id: str,
+        filename: str,
+        content: bytes,
+    ) -> RawContent:
+        video_path: Path | None = None
+        audio_path: Path | None = None
+
+        try:
+            video_suffix = Path(filename).suffix or ".video"
+
+            # Save uploaded video temporarily.
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=video_suffix,
+            ) as video_file:
+                video_file.write(content)
+                video_path = Path(video_file.name)
+
+            # -----------------------------
+            # VISUAL BRANCH
+            # -----------------------------
+            frames = extract_video_frames(
+                video_path,
+                interval_seconds=5.0,
+            )
+
+            visual_parts: list[str] = []
+
+            for timestamp, frame in frames:
+                frame_text = (
+                    self.image_provider.extract_text_from_image_array(
+                        frame
+                    )
+                )
+
+                if frame_text:
+                    visual_parts.append(
+                        f"[Visual frame at {timestamp:.1f}s]\n"
+                        f"{frame_text}"
+                    )
+
+            # -----------------------------
+            # AUDIO BRANCH
+            # -----------------------------
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".wav",
+            ) as audio_file:
+                audio_path = Path(audio_file.name)
+
+            result = subprocess.run(
+                [
+                    settings.ffmpeg_path,
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "16000",
+                    "-c:a",
+                    "pcm_s16le",
+                    str(audio_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+
+            if result.returncode != 0:
+                raise IngestionError(
+                    "Unable to extract audio from the video file"
+                )
+
+            if (
+                not audio_path.exists()
+                or audio_path.stat().st_size == 0
+            ):
+                raise IngestionError(
+                    "The video does not contain an extractable audio track"
+                )
+
+            audio_content = audio_path.read_bytes()
+
+            audio_result = self.audio_provider.ingest(
+                source_id=source_id,
+                filename=f"{Path(filename).stem}.wav",
+                content=audio_content,
+            )
+
+            # -----------------------------
+            # COMBINE AUDIO + VISUAL TEXT
+            # -----------------------------
+            combined_text = audio_result.text
+
+            if visual_parts:
+                combined_text += (
+                    "\n\n"
+                    + "\n\n".join(visual_parts)
+                )
+
+            return RawContent(
+                source_id=source_id,
+                source_type=self.source_type,
+                title=(
+                    Path(filename).stem
+                    or "Untitled video"
+                ),
+                text=combined_text,
+                metadata={
+                    "filename": filename,
+                    "transcription_engine": audio_result.metadata.get(
+                        "transcription_engine",
+                        "faster-whisper",
+                    ),
+                    "model": audio_result.metadata.get(
+                        "model",
+                        "base",
+                    ),
+                    "language": audio_result.metadata.get(
+                        "language",
+                        "",
+                    ),
+                    "language_probability": audio_result.metadata.get(
+                        "language_probability",
+                        None,
+                    ),
+                    "duration_seconds": audio_result.metadata.get(
+                        "duration_seconds",
+                        None,
+                    ),
+                    "audio_extracted": True,
+                    "visual_analysis": bool(visual_parts),
+                    "ocr_engine": (
+                        "RapidOCR"
+                        if visual_parts
+                        else ""
+                    ),
+                    "frame_interval_seconds": 5.0,
+                    "visual_frame_count": len(frames),
+                    "ffmpeg": settings.ffmpeg_path,
+                },
+            )
+
+        except IngestionError:
+            raise
+
+        except subprocess.TimeoutExpired as exc:
+            raise IngestionError(
+                "Video audio extraction timed out"
+            ) from exc
+
+        except Exception as exc:
+            raise IngestionError(
+                "Unable to process the video file"
+            ) from exc
+
+        finally:
+            if video_path is not None:
+                video_path.unlink(
+                    missing_ok=True
+                )
+
+            if audio_path is not None:
+                audio_path.unlink(
+                    missing_ok=True
+                )
 class URLIngestionProvider:
     source_type = "url"
 
