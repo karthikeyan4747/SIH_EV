@@ -30,6 +30,9 @@ from app.services.ingestion import (
     TextIngestionProvider,
     URLIngestionProvider,
     UnsupportedIngestionProvider,
+    DOCXIngestionProvider,
+    YouTubeIngestionProvider,
+    ImageIngestionProvider
 )
 from app.services.llm import LLMProviderError
 from app.services.output_generation import OutputGenerationService
@@ -146,47 +149,164 @@ def add_text_source(
     return _storage(request).save(updated)
 
 
-@router.post("/{transformation_id}/sources/file", response_model=Transformation, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{transformation_id}/sources/file",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_file_source(
     transformation_id: str,
     request: Request,
     file: UploadFile = File(...),
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
     filename = file.filename or ""
-    suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    if suffix not in {"txt", "pdf"}:
-        raise HTTPException(status_code=415, detail="Only TXT and PDF files are currently processable")
+    suffix = (
+        filename.lower().rsplit(".", 1)[-1]
+        if "." in filename
+        else ""
+    )
+
+    if suffix not in {"txt", "pdf", "docx","png","jpg","jpeg","webp"}:
+        raise HTTPException(
+            status_code=415,
+            detail="Only TXT, PDF, and DOCX files are currently processable",
+        )
+
     content = await file.read()
-    if len(content) > request.app.state.settings.max_upload_size_bytes:
-        raise HTTPException(status_code=413, detail="Uploaded file is too large")
+
+    if (
+        len(content)
+        > request.app.state.settings.max_upload_size_bytes
+    ):
+        raise HTTPException(
+            status_code=413,
+            detail="Uploaded file is too large",
+        )
+
     try:
-        provider = TXTIngestionProvider() if suffix == "txt" else PDFIngestionProvider()
-        source = provider.ingest(str(uuid4()), filename, content)
+        if suffix == "txt":
+            provider = TXTIngestionProvider()
+        elif suffix == "pdf":
+            provider = PDFIngestionProvider()
+        elif suffix == "docx":
+            provider = DOCXIngestionProvider()
+        else:
+            provider = ImageIngestionProvider()
+
+        source = provider.ingest(
+            str(uuid4()),
+            filename,
+            content,
+        )
+
     except IngestionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    updated = transformation.model_copy(update={"sources": [*transformation.sources, source], "status": "processing"})
-    content_dna = _recompute_dna(updated, request)
-    updated = updated.model_copy(update={"content_dna": content_dna, "status": "ready" if content_dna else "empty"})
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    updated = transformation.model_copy(
+        update={
+            "sources": [
+                *transformation.sources,
+                source,
+            ],
+            "status": "processing",
+        }
+    )
+
+    content_dna = _recompute_dna(
+        updated,
+        request,
+    )
+
+    updated = updated.model_copy(
+        update={
+            "content_dna": content_dna,
+            "status": "ready" if content_dna else "empty",
+        }
+    )
+
     if content_dna is not None:
-        updated = _save_dna_version(updated, f"Generated after adding {filename}")
+        updated = _save_dna_version(
+            updated,
+            f"Generated after adding {filename}",
+        )
+
     return _storage(request).save(updated)
 
 
-@router.post("/{transformation_id}/sources/url", response_model=Transformation, status_code=status.HTTP_201_CREATED)
-def add_url_source(transformation_id: str, payload: URLSourceAddRequest, request: Request) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
-    try:
-        source = URLIngestionProvider().ingest(str(uuid4()), payload.title, payload.url)
-    except IngestionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    updated = transformation.model_copy(update={"sources": [*transformation.sources, source], "status": "processing"})
-    content_dna = _recompute_dna(updated, request)
-    updated = updated.model_copy(update={"content_dna": content_dna, "status": "ready" if content_dna else "empty"})
-    if content_dna is not None:
-        updated = _save_dna_version(updated, "Generated after adding URL source")
-    return _storage(request).save(updated)
+@router.post(
+    "/{transformation_id}/sources/url",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_url_source(
+    transformation_id: str,
+    payload: URLSourceAddRequest,
+    request: Request,
+) -> Transformation:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
 
+    try:
+        url_lower = payload.url.lower()
+
+        if "youtube.com" in url_lower or "youtu.be" in url_lower:
+            source = YouTubeIngestionProvider().ingest(
+                str(uuid4()),
+                payload.title,
+                payload.url,
+            )
+        else:
+            source = URLIngestionProvider().ingest(
+                str(uuid4()),
+                payload.title,
+                payload.url,
+            )
+
+    except IngestionError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    updated = transformation.model_copy(
+        update={
+            "sources": [
+                *transformation.sources,
+                source,
+            ],
+            "status": "processing",
+        }
+    )
+
+    content_dna = _recompute_dna(
+        updated,
+        request,
+    )
+
+    updated = updated.model_copy(
+        update={
+            "content_dna": content_dna,
+            "status": "ready" if content_dna else "empty",
+        }
+    )
+
+    if content_dna is not None:
+        updated = _save_dna_version(
+            updated,
+            "Generated after adding URL source",
+        )
+
+    return _storage(request).save(updated)
 
 @router.post("/{transformation_id}/sources/unsupported", response_model=Transformation, status_code=status.HTTP_201_CREATED)
 def add_unsupported_source(

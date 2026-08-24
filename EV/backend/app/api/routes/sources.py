@@ -8,10 +8,10 @@ from app.models.content_update import ContentDNAUpdate
 from app.models.source import SourceCreatedResponse, SourceResponse, TextSourceRequest
 from app.services.content_dna import ContentDNAService
 from app.services.ingestion import (
+    DOCXIngestionProvider,
     IngestionError,
     PDFIngestionProvider,
     TXTIngestionProvider,
-    TextIngestionProvider,
 )
 from app.services.llm import LLMProviderError
 from app.services.storage import LocalJSONStorage, SourceNotFoundError, SourceRecord
@@ -51,24 +51,59 @@ def create_text_source(payload: TextSourceRequest, request: Request) -> SourceCr
     return _create_source(request, raw_content)
 
 
-@router.post("/file", response_model=SourceCreatedResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/file",
+    response_model=SourceCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_file_source(
     request: Request,
     file: UploadFile = File(...),
 ) -> SourceCreatedResponse:
     filename = file.filename or ""
-    suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    if suffix not in {"txt", "pdf"}:
-        raise HTTPException(status_code=415, detail="Only TXT and PDF files are supported")
+    suffix = (
+        filename.lower().rsplit(".", 1)[-1]
+        if "." in filename
+        else ""
+    )
+
+    if suffix not in {"txt", "pdf", "docx","png","jpg","jpeg","webp"}:
+        raise HTTPException(
+            status_code=415,
+            detail="Only TXT, PDF, and DOCX files are supported",
+        )
 
     content = await file.read()
-    if len(content) > request.app.state.settings.max_upload_size_bytes:
-        raise HTTPException(status_code=413, detail="Uploaded file is too large")
+
+    if (
+        len(content)
+        > request.app.state.settings.max_upload_size_bytes
+    ):
+        raise HTTPException(
+            status_code=413,
+            detail="Uploaded file is too large",
+        )
+
     try:
-        provider = TXTIngestionProvider() if suffix == "txt" else PDFIngestionProvider()
-        raw_content = provider.ingest(str(uuid4()), filename, content)
+        if suffix == "txt":
+            provider = TXTIngestionProvider()
+        elif suffix == "pdf":
+            provider = PDFIngestionProvider()
+        else:
+            provider = DOCXIngestionProvider()
+
+        raw_content = provider.ingest(
+            str(uuid4()),
+            filename,
+            content,
+        )
+
     except IngestionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
     return _create_source(request, raw_content)
 
 
