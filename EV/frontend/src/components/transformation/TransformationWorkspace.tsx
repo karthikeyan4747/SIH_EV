@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useMemo, useState, useEffect } from 'react'
 import {
   BookOpen,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
+
 import { NewSourceBatch } from '../ev/NewSourceBatch'
 import { ContentDNAStructure } from '../dna/ContentDNAStructure'
 import type { DNASectionKey } from '../dna/dnaData'
@@ -23,11 +25,13 @@ import { getDNANodes } from '../dna/dnaData'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
+
 import type {
   ContentDNAPatch,
   RawContent,
   SourceType,
 } from '../../types/content'
+
 import type { Transformation } from '../../types/transformation'
 
 export type GenerationConfig = {
@@ -37,6 +41,14 @@ export type GenerationConfig = {
   detail: string
   objective: string
   style: string
+}
+
+type WorkflowTemplate = {
+  id: string
+  name: string
+  description: string
+  output_types: string[]
+  generation_config: Record<string, string>
 }
 
 interface TransformationWorkspaceProps {
@@ -366,6 +378,22 @@ function WorkspaceOutputs({
       style: 'Corporate',
     })
 
+  const [workflows, setWorkflows] = useState<
+    WorkflowTemplate[]
+  >([])
+
+  const [selectedWorkflow, setSelectedWorkflow] =
+    useState<string>('custom')
+
+  const [workflowLoading, setWorkflowLoading] =
+    useState(false)
+
+  const [showSaveWorkflow, setShowSaveWorkflow] =
+    useState(false)
+
+  const [customWorkflowName, setCustomWorkflowName] =
+    useState('')
+
   const options = [
     ['executive_summary', 'Executive Summary'],
     ['advisory', 'Advisory'],
@@ -392,6 +420,10 @@ function WorkspaceOutputs({
       ...current,
       [key]: value,
     }))
+
+    if (selectedWorkflow !== 'custom') {
+      setSelectedWorkflow('custom')
+    }
   }
 
   function download(
@@ -410,6 +442,121 @@ function WorkspaceOutputs({
     URL.revokeObjectURL(url)
   }
 
+  async function loadWorkflows() {
+    try {
+      setWorkflowLoading(true)
+
+      const response = await fetch(
+        'http://127.0.0.1:8000/api/v1/transformations/workflows',
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to load workflows')
+      }
+
+      const data =
+        (await response.json()) as WorkflowTemplate[]
+
+      setWorkflows(data)
+    } catch (error) {
+      console.error(
+        'Failed to load workflows:',
+        error,
+      )
+    } finally {
+      setWorkflowLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadWorkflows()
+  }, [])
+
+  function updateGenerationConfigFromWorkflow(
+    config: Record<string, string>,
+  ) {
+    setGenerationConfig((current) => ({
+      ...current,
+      audience:
+        config.audience ?? current.audience,
+      tone:
+        config.tone ?? current.tone,
+      language:
+        config.language ?? current.language,
+      detail:
+        config.detail ?? current.detail,
+      objective:
+        config.objective ?? current.objective,
+      style:
+        config.style ?? current.style,
+    }))
+  }
+
+  async function saveCustomWorkflow() {
+    const name = customWorkflowName.trim()
+
+    if (!name) {
+      return
+    }
+
+    const workflowId =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') ||
+      `custom_${Date.now()}`
+
+    const payload = {
+      id: workflowId,
+      name,
+      description:
+        'Custom operator workflow.',
+      output_types: selected,
+      generation_config: generationConfig,
+    }
+
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/api/v1/transformations/workflows',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+      )
+
+      if (!response.ok) {
+        const message = await response.text()
+
+        throw new Error(
+          message || 'Failed to save workflow',
+        )
+      }
+
+      const workflow =
+        (await response.json()) as WorkflowTemplate
+
+      setWorkflows((current) => [
+        ...current.filter(
+          (item) => item.id !== workflow.id,
+        ),
+        workflow,
+      ])
+
+      setSelectedWorkflow(workflow.id)
+      setShowSaveWorkflow(false)
+      setCustomWorkflowName('')
+    } catch (error) {
+      console.error(
+        'Failed to save custom workflow:',
+        error,
+      )
+    }
+  }
+
   function exportBundle() {
     download(
       `${transformation.title || 'ev-transformation'}.json`,
@@ -418,14 +565,41 @@ function WorkspaceOutputs({
           id: transformation.id,
           title: transformation.title,
           dnaVersion: transformation.versions.length,
-          contentDNA: transformation.content_dna,
+          contentDNA:
+            transformation.content_dna,
           outputs: transformation.outputs,
           generationConfig,
+          workflow:
+            selectedWorkflow,
         },
         null,
         2,
       ),
       'application/json',
+    )
+  }
+
+  function applyWorkflow(
+    workflowId: string,
+  ) {
+    setSelectedWorkflow(workflowId)
+
+    if (workflowId === 'custom') {
+      return
+    }
+
+    const workflow = workflows.find(
+      (item) => item.id === workflowId,
+    )
+
+    if (!workflow) {
+      return
+    }
+
+    setSelected(workflow.output_types)
+
+    updateGenerationConfigFromWorkflow(
+      workflow.generation_config,
     )
   }
 
@@ -449,7 +623,90 @@ function WorkspaceOutputs({
           </Badge>
         </div>
 
-        {/* GENERATION PARAMETERS */}
+        <div
+          style={{
+            padding: '16px 0',
+            borderBottom:
+              '1px solid rgba(255,255,255,0.07)',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '10px',
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              color: '#a7b0b8',
+              marginBottom: '5px',
+            }}
+          >
+            WORKFLOW
+          </div>
+
+          <div
+            style={{
+              fontSize: '12px',
+              color: '#737d86',
+              marginBottom: '10px',
+            }}
+          >
+            Configure outputs and generation settings
+            with one reusable workflow.
+          </div>
+
+          <select
+            className="workflow-select"
+            value={selectedWorkflow}
+            disabled={workflowLoading}
+            onChange={(event) =>
+              applyWorkflow(event.target.value)
+            }
+          >
+            <option value="custom">
+              Custom Workflow
+            </option>
+
+            {workflows.map((workflow) => (
+              <option
+                key={workflow.id}
+                value={workflow.id}
+              >
+                {workflow.name}
+              </option>
+            ))}
+          </select>
+
+          <div className="workflow-custom-row">
+            <div className="workflow-custom-copy">
+              <strong>Custom workflow</strong>
+              <span>Save the current outputs and generation settings for reuse.</span>
+            </div>
+
+            <button
+              type="button"
+              className="workflow-save-button"
+              onClick={() => setShowSaveWorkflow(true)}
+            >
+              <Sparkles size={14} />
+              Save workflow
+            </button>
+          </div>
+
+          {selectedWorkflow !== 'custom' && (
+            <div
+              style={{
+                marginTop: '9px',
+                fontSize: '11px',
+                color: '#737d86',
+              }}
+            >
+              {workflows.find(
+                (workflow) =>
+                  workflow.id ===
+                  selectedWorkflow,
+              )?.description}
+            </div>
+          )}
+        </div>
 
         <div className="generation-grid">
           <InlineGenerationSelect
@@ -464,7 +721,10 @@ function WorkspaceOutputs({
               'Researchers',
             ]}
             onChange={(value) =>
-              updateGenerationConfig('audience', value)
+              updateGenerationConfig(
+                'audience',
+                value,
+              )
             }
           />
 
@@ -480,7 +740,10 @@ function WorkspaceOutputs({
               'Urgent',
             ]}
             onChange={(value) =>
-              updateGenerationConfig('tone', value)
+              updateGenerationConfig(
+                'tone',
+                value,
+              )
             }
           />
 
@@ -508,9 +771,15 @@ function WorkspaceOutputs({
               'Sindhi',
               'Kashmiri',
               'Manipuri',
+              'Bodo',
+              'Dogri',
+              'Santali',
             ]}
             onChange={(value) =>
-              updateGenerationConfig('language', value)
+              updateGenerationConfig(
+                'language',
+                value,
+              )
             }
           />
 
@@ -524,7 +793,10 @@ function WorkspaceOutputs({
               'Comprehensive',
             ]}
             onChange={(value) =>
-              updateGenerationConfig('detail', value)
+              updateGenerationConfig(
+                'detail',
+                value,
+              )
             }
           />
 
@@ -540,7 +812,10 @@ function WorkspaceOutputs({
               'Announce',
             ]}
             onChange={(value) =>
-              updateGenerationConfig('objective', value)
+              updateGenerationConfig(
+                'objective',
+                value,
+              )
             }
           />
 
@@ -556,7 +831,10 @@ function WorkspaceOutputs({
               'News',
             ]}
             onChange={(value) =>
-              updateGenerationConfig('style', value)
+              updateGenerationConfig(
+                'style',
+                value,
+              )
             }
           />
         </div>
@@ -570,7 +848,18 @@ function WorkspaceOutputs({
                   ? 'selected'
                   : ''
               }
-              onClick={() => toggle(type)}
+              onClick={() => {
+                toggle(type)
+
+                if (
+                  selectedWorkflow !==
+                  'custom'
+                ) {
+                  setSelectedWorkflow(
+                    'custom',
+                  )
+                }
+              }}
             >
               {label}
             </button>
@@ -591,12 +880,16 @@ function WorkspaceOutputs({
             }
           >
             <Sparkles size={15} />
-            Generate
+            {selectedWorkflow !== 'custom'
+              ? 'Run Workflow'
+              : 'Generate'}
           </Button>
 
           <Button
             variant="ghost"
-            disabled={!transformation.outputs.length}
+            disabled={
+              !transformation.outputs.length
+            }
             onClick={exportBundle}
           >
             <FileJson size={15} />
@@ -606,55 +899,69 @@ function WorkspaceOutputs({
 
         {transformation.outputs.length ? (
           <div className="artifact-list">
-            {transformation.outputs.map((artifact) => (
-              <article
-                className="artifact-card"
-                key={artifact.id}
-              >
-                <div>
-                  <strong>
-                    {artifact.type.replaceAll('_', ' ')}
-                  </strong>
+            {transformation.outputs.map(
+              (artifact) => (
+                <article
+                  className="artifact-card"
+                  key={artifact.id}
+                >
+                  <div>
+                    <strong>
+                      {artifact.type.replaceAll(
+                        '_',
+                        ' ',
+                      )}
+                    </strong>
 
-                  <small>
-                    DNA v{artifact.dna_version}
-                  </small>
-                </div>
+                    <small>
+                      DNA v
+                      {
+                        artifact.dna_version
+                      }
+                    </small>
+                  </div>
 
-                <pre>{artifact.content}</pre>
+                  <pre>
+                    {artifact.content}
+                  </pre>
 
-                <div className="artifact-actions">
-                  <button
-                    onClick={() =>
-                      void navigator.clipboard.writeText(
-                        artifact.content,
-                      )
-                    }
-                  >
-                    <Clipboard size={14} />
-                    Copy
-                  </button>
+                  <div className="artifact-actions">
+                    <button
+                      onClick={() =>
+                        void navigator.clipboard.writeText(
+                          artifact.content,
+                        )
+                      }
+                    >
+                      <Clipboard
+                        size={14}
+                      />
+                      Copy
+                    </button>
 
-                  <button
-                    onClick={() =>
-                      download(
-                        `${artifact.type}-dna-v${artifact.dna_version}.md`,
-                        artifact.content,
-                        'text/markdown',
-                      )
-                    }
-                  >
-                    <Download size={14} />
-                    Download
-                  </button>
-                </div>
-              </article>
-            ))}
+                    <button
+                      onClick={() =>
+                        download(
+                          `${artifact.type}-dna-v${artifact.dna_version}.md`,
+                          artifact.content,
+                          'text/markdown',
+                        )
+                      }
+                    >
+                      <Download
+                        size={14}
+                      />
+                      Download
+                    </button>
+                  </div>
+                </article>
+              ),
+            )}
           </div>
         ) : (
           <p className="panel-empty-copy">
-            Choose one or more output formats to generate
-            your first artifact.
+            Choose one or more output formats to
+            generate your first artifact.
           </p>
         )}
       </Card>
@@ -667,13 +974,14 @@ function WorkspaceOutputs({
             </span>
 
             <p>
-              Versions are created on source processing and
-              saved DNA edits.
+              Versions are created on source processing
+              and saved DNA edits.
             </p>
           </div>
 
           <Badge>
-            {transformation.versions.length} versions
+            {transformation.versions.length}{' '}
+            versions
           </Badge>
         </div>
 
@@ -685,7 +993,9 @@ function WorkspaceOutputs({
                 <button
                   key={version.version}
                   onClick={() =>
-                    onRestoreVersion(version.version)
+                    onRestoreVersion(
+                      version.version,
+                    )
                   }
                 >
                   <span>
@@ -693,23 +1003,128 @@ function WorkspaceOutputs({
                   </span>
 
                   <small>
-                    {version.note || 'Saved version'}
+                    {version.note ||
+                      'Saved version'}
                   </small>
                 </button>
               ))}
           </div>
         ) : (
           <p className="panel-empty-copy">
-            DNA versions will appear after processing or
-            saving changes.
+            DNA versions will appear after
+            processing or saving changes.
           </p>
         )}
       </Card>
+
+      {showSaveWorkflow &&
+        createPortal(
+          <div
+            className="workflow-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setShowSaveWorkflow(false)
+                setCustomWorkflowName('')
+              }
+            }}
+          >
+            <div
+              className="workflow-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="save-workflow-title"
+            >
+              <div className="workflow-modal-header">
+                <div>
+                  <h3 id="save-workflow-title">
+                    Save Custom Workflow
+                  </h3>
+
+                  <p>
+                    Save the current outputs and generation settings
+                    as a reusable workflow.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="workflow-modal-close"
+                  aria-label="Close"
+                  onClick={() => {
+                    setShowSaveWorkflow(false)
+                    setCustomWorkflowName('')
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <label className="workflow-modal-field">
+                <span>Workflow name</span>
+
+                <input
+                  className="workflow-name-input"
+                  value={customWorkflowName}
+                  onChange={(event) =>
+                    setCustomWorkflowName(event.target.value)
+                  }
+                  placeholder="e.g. Student Awareness Campaign"
+                  autoFocus
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === 'Enter' &&
+                      customWorkflowName.trim()
+                    ) {
+                      void saveCustomWorkflow()
+                    }
+
+                    if (event.key === 'Escape') {
+                      setShowSaveWorkflow(false)
+                      setCustomWorkflowName('')
+                    }
+                  }}
+                />
+              </label>
+
+              <div className="workflow-modal-preview">
+                <span>
+                  {selected.length} output
+                  {selected.length === 1 ? '' : 's'}
+                </span>
+                <span>·</span>
+                <span>{generationConfig.language}</span>
+                <span>·</span>
+                <span>{generationConfig.audience}</span>
+              </div>
+
+              <div className="workflow-modal-actions">
+                <button
+                  type="button"
+                  className="workflow-cancel-button"
+                  onClick={() => {
+                    setShowSaveWorkflow(false)
+                    setCustomWorkflowName('')
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="workflow-save-confirm-button"
+                  disabled={!customWorkflowName.trim()}
+                  onClick={() => void saveCustomWorkflow()}
+                >
+                  Save Workflow
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
-
-
 
 function InlineGenerationSelect({
   label,
@@ -752,7 +1167,9 @@ function InlineGenerationSelect({
         <select
           className="generation-select"
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) =>
+            onChange(event.target.value)
+          }
           style={{
             width: '100%',
             height: '38px',
@@ -761,7 +1178,8 @@ function InlineGenerationSelect({
             WebkitAppearance: 'none',
             background: '#10161a',
             color: '#d7dde1',
-            border: '1px solid rgba(255,255,255,0.08)',
+            border:
+              '1px solid rgba(255,255,255,0.08)',
             borderRadius: '6px',
             outline: 'none',
             fontSize: '12px',
@@ -775,7 +1193,8 @@ function InlineGenerationSelect({
               key={option}
               value={option}
               style={{
-                backgroundColor: '#10161a',
+                backgroundColor:
+                  '#10161a',
                 color: '#d7dde1',
               }}
             >
@@ -790,7 +1209,8 @@ function InlineGenerationSelect({
             position: 'absolute',
             right: '10px',
             top: '50%',
-            transform: 'translateY(-50%)',
+            transform:
+              'translateY(-50%)',
             pointerEvents: 'none',
             color: '#737d86',
           }}

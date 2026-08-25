@@ -9,3 +9,283 @@
 .page-enter { animation: enter .35s ease both; } .spin { animation: spin 1s linear infinite; } @keyframes enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } } @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 900px) { .sidebar { width: 248px; transform: translateX(-100%); box-shadow: 14px 0 35px rgba(0,0,0,.35); }.sidebar.mobile-open { transform: translateX(0); }.sidebar-close { display: block; }.collapse-button { display: none; }.main-shell { width: 100%; margin-left: 0; }.mobile-menu { display: inline-flex; }.topbar { padding: 0 18px; }.workspace { padding: 28px 18px 50px; }.workspace-grid { grid-template-columns: 1fr; }.source-panel { position: relative; min-height: 300px; }.workspace-heading { align-items: start; flex-direction: column; margin-bottom: 23px; } }
 @media (max-width: 560px) { .topbar { height: 58px; }.topbar-actions .ui-button { display: none; }.new-source { width: calc(100% - 32px); margin-top: 8vh; }.input-tabs { flex-wrap: wrap; }.future-label { width: 100%; padding: 4px 10px 3px; }.text-form { padding: 17px; }.form-footer { align-items: flex-start; flex-direction: column; }.form-footer .ui-button { width: 100%; }.pipeline { flex-wrap: wrap; gap: 8px; }.dna-header { align-items: flex-start; flex-direction: column; }.dna-actions { width: 100%; justify-content: space-between; }.field-grid, .tag-grid, .list-grid { grid-template-columns: 1fr; }.field-large { grid-column: auto; }.field-large p { max-width: none; }.dna-section { padding: 17px; }.workspace-badge { align-self: flex-start; } }
+.workflow-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #15191d;
+  color: #e8edf1;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.workflow-select:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.workflow-select:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.workflow-select option {
+  background: #15191d;
+  color: #e8edf1;
+}
+
+.workflow-custom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.workflow-custom-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workflow-custom-copy strong {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d7dde1;
+}
+
+.workflow-custom-copy span {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #737d86;
+}
+
+.workflow-save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #151b20;
+  color: #d7dde1;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.workflow-save-button:hover {
+  background: #1b2228;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.workflow-save-button:active {
+  transform: translateY(1px);
+}
+
+.workflow-modal-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+
+  width: 100vw !important;
+  height: 100vh !important;
+
+  z-index: 999999 !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  padding: 24px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(7px);
+}
+
+.workflow-modal {
+  position: relative !important;
+
+  width: min(440px, calc(100vw - 48px)) !important;
+  max-width: 440px !important;
+
+  margin: 0 !important;
+
+  box-sizing: border-box;
+
+  padding: 22px;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+
+  background: #10161a;
+
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    0 8px 24px rgba(0, 0, 0, 0.3);
+
+  animation: workflow-modal-in 0.16s ease-out;
+}
+
+.workflow-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.workflow-modal-header h3 {
+  margin: 0 0 6px;
+  color: #edf1f3;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.workflow-modal-header p {
+  margin: 0;
+  max-width: 350px;
+  color: #7d878f;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.workflow-modal-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: transparent;
+  color: #7d878f;
+  cursor: pointer;
+}
+
+.workflow-modal-close:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #d7dde1;
+}
+
+.workflow-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.workflow-modal-field > span {
+  color: #a7b0b8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.workflow-name-input {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 7px;
+  outline: none;
+  background: #0b1014;
+  color: #e2e7ea;
+  font: inherit;
+  font-size: 12px;
+}
+
+.workflow-name-input::placeholder {
+  color: #56616a;
+}
+
+.workflow-name-input:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.workflow-modal-preview {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #737d86;
+  font-size: 10px;
+}
+
+.workflow-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.workflow-cancel-button,
+.workflow-save-confirm-button {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.workflow-cancel-button {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #9aa4ac;
+}
+
+.workflow-cancel-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #d7dde1;
+}
+
+.workflow-save-confirm-button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #e9edf0;
+  color: #10161a;
+}
+
+.workflow-save-confirm-button:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.workflow-save-confirm-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@keyframes workflow-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

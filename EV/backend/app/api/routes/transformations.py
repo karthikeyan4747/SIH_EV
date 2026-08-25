@@ -21,7 +21,9 @@ from app.models.transformation import (
     TransformationRenameRequest,
     URLSourceAddRequest,
     UnsupportedSourceRequest,
+    WorkflowTemplate,
 )
+
 from app.services.content_dna import ContentDNAService
 from app.services.ingestion import (
     IngestionError,
@@ -34,14 +36,29 @@ from app.services.ingestion import (
     YouTubeIngestionProvider,
     ImageIngestionProvider,
     AudioIngestionProvider,
-    VideoIngestionProvider
+    VideoIngestionProvider,
 )
+
 from app.services.llm import LLMProviderError
 from app.services.output_generation import OutputGenerationService
-from app.services.structure_extraction import StructureExtractionError, StructureExtractionService
-from app.services.storage import LocalTransformationStorage, TransformationNotFoundError
+from app.services.structure_extraction import (
+    StructureExtractionError,
+    StructureExtractionService,
+)
+from app.services.storage import (
+    LocalTransformationStorage,
+    TransformationNotFoundError,
+)
+from app.services.workflows import (
+    get_workflow_templates,
+    save_custom_workflow,
+)
 
-router = APIRouter(prefix="/api/v1/transformations", tags=["transformations"])
+
+router = APIRouter(
+    prefix="/api/v1/transformations",
+    tags=["transformations"],
+)
 
 
 def _storage(request: Request) -> LocalTransformationStorage:
@@ -56,100 +73,262 @@ def _outputs(request: Request) -> OutputGenerationService:
     return request.app.state.output_generation_service
 
 
-def _structure_extractor(request: Request) -> StructureExtractionService:
+def _structure_extractor(
+    request: Request,
+) -> StructureExtractionService:
     return request.app.state.structure_extraction_service
 
 
-def _get_transformation(transformation_id: str, request: Request) -> Transformation:
+def _get_transformation(
+    transformation_id: str,
+    request: Request,
+) -> Transformation:
     try:
         return _storage(request).get(transformation_id)
     except TransformationNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Transformation not found") from exc
+        raise HTTPException(
+            status_code=404,
+            detail="Transformation not found",
+        ) from exc
 
 
 def _merge_updates(existing: dict, updates: dict) -> dict:
     merged = existing.copy()
+
     for field, value in updates.items():
-        if isinstance(value, dict) and isinstance(merged.get(field), dict):
-            merged[field] = _merge_updates(merged[field], value)
+        if (
+            isinstance(value, dict)
+            and isinstance(merged.get(field), dict)
+        ):
+            merged[field] = _merge_updates(
+                merged[field],
+                value,
+            )
         else:
             merged[field] = value
+
     return merged
 
 
-def _recompute_dna(transformation: Transformation, request: Request) -> ContentDNA | None:
+def _recompute_dna(
+    transformation: Transformation,
+    request: Request,
+) -> ContentDNA | None:
     supported_sources = [
-        source for source in transformation.sources
-        if source.metadata.get("status") != "unsupported" and source.text.strip()
+        source
+        for source in transformation.sources
+        if source.metadata.get("status") != "unsupported"
+        and source.text.strip()
     ]
+
     if not supported_sources:
         return None
+
     try:
         if len(supported_sources) == 1:
-            return _dna_service(request).extract(supported_sources[0])
-        return _dna_service(request).extract_from_sources(supported_sources)
+            return _dna_service(request).extract(
+                supported_sources[0]
+            )
+
+        return _dna_service(request).extract_from_sources(
+            supported_sources
+        )
+
     except LLMProviderError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
 
 
-def _save_dna_version(transformation: Transformation, note: str) -> Transformation:
+def _save_dna_version(
+    transformation: Transformation,
+    note: str,
+) -> Transformation:
     if transformation.content_dna is None:
         return transformation
+
     next_version = len(transformation.versions) + 1
+
     return transformation.model_copy(
         update={
             "versions": [
                 *transformation.versions,
-                DNAVersion(version=next_version, content_dna=transformation.content_dna, note=note),
-            ]
+                DNAVersion(
+                    version=next_version,
+                    content_dna=transformation.content_dna,
+                    note=note,
+                ),
+            ],
         }
     )
 
 
-@router.get("", response_model=TransformationListResponse)
-def list_transformations(request: Request) -> TransformationListResponse:
-    return TransformationListResponse(transformations=_storage(request).list())
+# ============================================================
+# TRANSFORMATION COLLECTION
+# ============================================================
+
+@router.get(
+    "",
+    response_model=TransformationListResponse,
+)
+def list_transformations(
+    request: Request,
+) -> TransformationListResponse:
+    return TransformationListResponse(
+        transformations=_storage(request).list()
+    )
 
 
-@router.post("", response_model=Transformation, status_code=status.HTTP_201_CREATED)
-def create_transformation(payload: TransformationCreateRequest, request: Request) -> Transformation:
-    transformation = Transformation(id=str(uuid4()), title=payload.title.strip() or "Untitled Transformation")
+@router.post(
+    "",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_transformation(
+    payload: TransformationCreateRequest,
+    request: Request,
+) -> Transformation:
+    transformation = Transformation(
+        id=str(uuid4()),
+        title=payload.title.strip()
+        or "Untitled Transformation",
+    )
+
     return _storage(request).save(transformation)
 
 
-@router.get("/{transformation_id}", response_model=Transformation)
-def get_transformation(transformation_id: str, request: Request) -> Transformation:
-    return _get_transformation(transformation_id, request)
+# ============================================================
+# WORKFLOWS
+# IMPORTANT: STATIC /workflows ROUTES MUST COME BEFORE
+# /{transformation_id} ROUTES.
+# ============================================================
+
+@router.get(
+    "/workflows",
+    response_model=list[WorkflowTemplate],
+)
+def list_workflows() -> list[WorkflowTemplate]:
+    return get_workflow_templates()
 
 
-@router.patch("/{transformation_id}/title", response_model=Transformation)
+@router.post(
+    "/workflows",
+    response_model=WorkflowTemplate,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_workflow(
+    payload: WorkflowTemplate,
+) -> WorkflowTemplate:
+    return save_custom_workflow(payload)
+
+
+# ============================================================
+# SINGLE TRANSFORMATION
+# ============================================================
+
+@router.get(
+    "/{transformation_id}",
+    response_model=Transformation,
+)
+def get_transformation(
+    transformation_id: str,
+    request: Request,
+) -> Transformation:
+    return _get_transformation(
+        transformation_id,
+        request,
+    )
+
+
+@router.patch(
+    "/{transformation_id}/title",
+    response_model=Transformation,
+)
 def rename_transformation(
     transformation_id: str,
     payload: TransformationRenameRequest,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
-    return _storage(request).save(transformation.model_copy(update={"title": payload.title.strip()}))
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    return _storage(request).save(
+        transformation.model_copy(
+            update={
+                "title": payload.title.strip(),
+            }
+        )
+    )
 
 
-@router.post("/{transformation_id}/sources/text", response_model=Transformation, status_code=status.HTTP_201_CREATED)
+# ============================================================
+# TEXT SOURCE
+# ============================================================
+
+@router.post(
+    "/{transformation_id}/sources/text",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_text_source(
     transformation_id: str,
     payload: TextSourceAddRequest,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
     try:
-        source = TextIngestionProvider().ingest(str(uuid4()), payload.title, payload.text)
+        source = TextIngestionProvider().ingest(
+            str(uuid4()),
+            payload.title,
+            payload.text,
+        )
     except IngestionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    updated = transformation.model_copy(update={"sources": [*transformation.sources, source], "status": "processing"})
-    content_dna = _recompute_dna(updated, request)
-    updated = updated.model_copy(update={"content_dna": content_dna, "status": "ready" if content_dna else "empty"})
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    updated = transformation.model_copy(
+        update={
+            "sources": [
+                *transformation.sources,
+                source,
+            ],
+            "status": "processing",
+        }
+    )
+
+    content_dna = _recompute_dna(
+        updated,
+        request,
+    )
+
+    updated = updated.model_copy(
+        update={
+            "content_dna": content_dna,
+            "status": "ready" if content_dna else "empty",
+        }
+    )
+
     if content_dna is not None:
-        updated = _save_dna_version(updated, "Generated from text source")
+        updated = _save_dna_version(
+            updated,
+            "Generated from text source",
+        )
+
     return _storage(request).save(updated)
 
+
+# ============================================================
+# FILE SOURCE
+# ============================================================
 
 @router.post(
     "/{transformation_id}/sources/file",
@@ -167,6 +346,7 @@ async def add_file_source(
     )
 
     filename = file.filename or ""
+
     suffix = (
         filename.lower().rsplit(".", 1)[-1]
         if "." in filename
@@ -174,30 +354,29 @@ async def add_file_source(
     )
 
     if suffix not in {
-    "txt",
-    "pdf",
-    "docx",
-    "png",
-    "jpg",
-    "jpeg",
-    "webp",
-    "mp3",
-    "wav",
-    "m4a",
-    "aac",
-    "ogg",
-    "flac",
-    "wma",
-    "mp4",
-    "mov",
-    "mkv",
-    "webm",
-    "avi",
-}:
+        "txt",
+        "pdf",
+        "docx",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "mp3",
+        "wav",
+        "m4a",
+        "aac",
+        "ogg",
+        "flac",
+        "wma",
+        "mp4",
+        "mov",
+        "mkv",
+        "webm",
+        "avi",
+    }:
         raise HTTPException(
             status_code=415,
-            detail=
-    "Unsupported file type"
+            detail="Unsupported file type",
         )
 
     content = await file.read()
@@ -214,14 +393,32 @@ async def add_file_source(
     try:
         if suffix == "txt":
             provider = TXTIngestionProvider()
+
         elif suffix == "pdf":
             provider = PDFIngestionProvider()
+
         elif suffix == "docx":
             provider = DOCXIngestionProvider()
-        elif suffix in {"png", "jpg", "jpeg", "webp"}:
+
+        elif suffix in {
+            "png",
+            "jpg",
+            "jpeg",
+            "webp",
+        }:
             provider = ImageIngestionProvider()
-        elif suffix in {"mp3", "wav", "m4a", "aac", "ogg", "flac", "wma"}:
+
+        elif suffix in {
+            "mp3",
+            "wav",
+            "m4a",
+            "aac",
+            "ogg",
+            "flac",
+            "wma",
+        }:
             provider = AudioIngestionProvider()
+
         else:
             provider = VideoIngestionProvider()
 
@@ -268,6 +465,10 @@ async def add_file_source(
     return _storage(request).save(updated)
 
 
+# ============================================================
+# URL / YOUTUBE SOURCE
+# ============================================================
+
 @router.post(
     "/{transformation_id}/sources/url",
     response_model=Transformation,
@@ -286,7 +487,10 @@ def add_url_source(
     try:
         url_lower = payload.url.lower()
 
-        if "youtube.com" in url_lower or "youtu.be" in url_lower:
+        if (
+            "youtube.com" in url_lower
+            or "youtu.be" in url_lower
+        ):
             source = YouTubeIngestionProvider().ingest(
                 str(uuid4()),
                 payload.title,
@@ -335,62 +539,178 @@ def add_url_source(
 
     return _storage(request).save(updated)
 
-@router.post("/{transformation_id}/sources/unsupported", response_model=Transformation, status_code=status.HTTP_201_CREATED)
+
+# ============================================================
+# UNSUPPORTED SOURCE
+# ============================================================
+
+@router.post(
+    "/{transformation_id}/sources/unsupported",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_unsupported_source(
     transformation_id: str,
     payload: UnsupportedSourceRequest,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
     source = UnsupportedIngestionProvider().ingest(
         str(uuid4()),
         payload.source_type,
         payload.title,
         payload.note,
     )
-    updated = transformation.model_copy(update={"sources": [*transformation.sources, source]})
+
+    updated = transformation.model_copy(
+        update={
+            "sources": [
+                *transformation.sources,
+                source,
+            ],
+        }
+    )
+
     return _storage(request).save(updated)
 
 
-@router.delete("/{transformation_id}/sources/{source_id}", response_model=Transformation)
-def remove_source(transformation_id: str, source_id: str, request: Request) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
-    sources = [source for source in transformation.sources if source.source_id != source_id]
+# ============================================================
+# REMOVE SOURCE
+# ============================================================
+
+@router.delete(
+    "/{transformation_id}/sources/{source_id}",
+    response_model=Transformation,
+)
+def remove_source(
+    transformation_id: str,
+    source_id: str,
+    request: Request,
+) -> Transformation:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    sources = [
+        source
+        for source in transformation.sources
+        if source.source_id != source_id
+    ]
+
     if len(sources) == len(transformation.sources):
-        raise HTTPException(status_code=404, detail="Source not found")
-    updated = transformation.model_copy(update={"sources": sources, "status": "processing"})
-    content_dna = _recompute_dna(updated, request) if sources else None
-    updated = updated.model_copy(update={"content_dna": content_dna, "status": "ready" if content_dna else "empty"})
+        raise HTTPException(
+            status_code=404,
+            detail="Source not found",
+        )
+
+    updated = transformation.model_copy(
+        update={
+            "sources": sources,
+            "status": "processing",
+        }
+    )
+
+    content_dna = (
+        _recompute_dna(updated, request)
+        if sources
+        else None
+    )
+
+    updated = updated.model_copy(
+        update={
+            "content_dna": content_dna,
+            "status": "ready"
+            if content_dna
+            else "empty",
+        }
+    )
+
     if content_dna is not None:
-        updated = _save_dna_version(updated, "Regenerated after removing source")
+        updated = _save_dna_version(
+            updated,
+            "Regenerated after removing source",
+        )
+
     return _storage(request).save(updated)
 
 
-@router.patch("/{transformation_id}/content-dna", response_model=Transformation)
+# ============================================================
+# CONTENT DNA PATCH
+# ============================================================
+
+@router.patch(
+    "/{transformation_id}/content-dna",
+    response_model=Transformation,
+)
 def patch_transformation_dna(
     transformation_id: str,
     update: ContentDNAUpdate,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
-    current = transformation.content_dna or ContentDNA()
-    merged_data = _merge_updates(current.model_dump(), update.model_dump(exclude_unset=True))
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    current = (
+        transformation.content_dna
+        or ContentDNA()
+    )
+
+    merged_data = _merge_updates(
+        current.model_dump(),
+        update.model_dump(exclude_unset=True),
+    )
+
     try:
-        merged_content_dna = ContentDNA.model_validate(merged_data)
+        merged_content_dna = ContentDNA.model_validate(
+            merged_data
+        )
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail="Invalid Content DNA update") from exc
-    updated = transformation.model_copy(update={"content_dna": merged_content_dna, "status": "ready"})
-    updated = _save_dna_version(updated, "Saved DNA edit")
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Content DNA update",
+        ) from exc
+
+    updated = transformation.model_copy(
+        update={
+            "content_dna": merged_content_dna,
+            "status": "ready",
+        }
+    )
+
+    updated = _save_dna_version(
+        updated,
+        "Saved DNA edit",
+    )
+
     return _storage(request).save(updated)
 
 
-@router.post("/{transformation_id}/structures", response_model=Transformation, status_code=status.HTTP_201_CREATED)
+# ============================================================
+# CUSTOM STRUCTURE
+# ============================================================
+
+@router.post(
+    "/{transformation_id}/structures",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_structure(
     transformation_id: str,
     payload: StructureCreateRequest,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
     structure = Structure(
         id=str(uuid4()),
         name=payload.name.strip(),
@@ -403,44 +723,116 @@ def create_structure(
                 description=section.description,
                 order=index,
             )
-            for index, section in enumerate(payload.sections, start=1)
+            for index, section in enumerate(
+                payload.sections,
+                start=1,
+            )
         ],
     )
-    return _storage(request).save(transformation.model_copy(update={"structures": [*transformation.structures, structure]}))
+
+    return _storage(request).save(
+        transformation.model_copy(
+            update={
+                "structures": [
+                    *transformation.structures,
+                    structure,
+                ],
+            }
+        )
+    )
 
 
-@router.post("/{transformation_id}/structures/reference", response_model=Transformation, status_code=status.HTTP_201_CREATED)
+# ============================================================
+# REFERENCE STRUCTURE
+# ============================================================
+
+@router.post(
+    "/{transformation_id}/structures/reference",
+    response_model=Transformation,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_reference_structure(
     transformation_id: str,
     payload: StructureReferenceRequest,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
-    source = next((item for item in transformation.sources if item.source_id == payload.reference_source_id), None)
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    source = next(
+        (
+            item
+            for item in transformation.sources
+            if item.source_id
+            == payload.reference_source_id
+        ),
+        None,
+    )
+
     if source is None:
-        raise HTTPException(status_code=404, detail="Reference source not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Reference source not found",
+        )
+
     try:
-        structure = _structure_extractor(request).from_source(source, payload.name)
+        structure = _structure_extractor(
+            request
+        ).from_source(
+            source,
+            payload.name,
+        )
+
     except StructureExtractionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _storage(request).save(transformation.model_copy(update={"structures": [*transformation.structures, structure]}))
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    return _storage(request).save(
+        transformation.model_copy(
+            update={
+                "structures": [
+                    *transformation.structures,
+                    structure,
+                ],
+            }
+        )
+    )
 
 
-@router.post("/{transformation_id}/outputs", response_model=Transformation)
+# ============================================================
+# GENERATE OUTPUTS
+# ============================================================
+
+@router.post(
+    "/{transformation_id}/outputs",
+    response_model=Transformation,
+)
 def generate_outputs(
     transformation_id: str,
     payload: OutputGenerateRequest,
     request: Request,
 ) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
 
     if transformation.content_dna is None:
         raise HTTPException(
             status_code=409,
-            detail="Generate Content DNA before creating outputs",
+            detail=(
+                "Generate Content DNA before "
+                "creating outputs"
+            ),
         )
 
-    dna_version = len(transformation.versions) or 1
+    dna_version = (
+        len(transformation.versions) or 1
+    )
 
     artifacts = [
         _outputs(request).generate(
@@ -459,12 +851,17 @@ def generate_outputs(
     }
 
     for structure_id in payload.structure_ids:
-        structure = structure_map.get(structure_id)
+        structure = structure_map.get(
+            structure_id
+        )
 
         if structure is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Structure not found: {structure_id}",
+                detail=(
+                    f"Structure not found: "
+                    f"{structure_id}"
+                ),
             )
 
         artifacts.append(
@@ -482,39 +879,131 @@ def generate_outputs(
                 "outputs": [
                     *transformation.outputs,
                     *artifacts,
-                ]
+                ],
             }
         )
     )
 
-@router.post("/{transformation_id}/versions/{version}/restore", response_model=Transformation)
-def restore_version(transformation_id: str, version: int, request: Request) -> Transformation:
-    transformation = _get_transformation(transformation_id, request)
-    match = next((item for item in transformation.versions if item.version == version), None)
+
+# ============================================================
+# RESTORE DNA VERSION
+# ============================================================
+
+@router.post(
+    "/{transformation_id}/versions/{version}/restore",
+    response_model=Transformation,
+)
+def restore_version(
+    transformation_id: str,
+    version: int,
+    request: Request,
+) -> Transformation:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    match = next(
+        (
+            item
+            for item in transformation.versions
+            if item.version == version
+        ),
+        None,
+    )
+
     if match is None:
-        raise HTTPException(status_code=404, detail="DNA version not found")
-    updated = transformation.model_copy(update={"content_dna": match.content_dna, "status": "ready"})
-    updated = _save_dna_version(updated, f"Restored DNA v{version}")
+        raise HTTPException(
+            status_code=404,
+            detail="DNA version not found",
+        )
+
+    updated = transformation.model_copy(
+        update={
+            "content_dna": match.content_dna,
+            "status": "ready",
+        }
+    )
+
+    updated = _save_dna_version(
+        updated,
+        f"Restored DNA v{version}",
+    )
+
     return _storage(request).save(updated)
 
 
-@router.get("/{transformation_id}/search", response_model=SearchResponse)
-def search_transformation(transformation_id: str, q: str, request: Request) -> SearchResponse:
-    transformation = _get_transformation(transformation_id, request)
+# ============================================================
+# SEARCH
+# ============================================================
+
+@router.get(
+    "/{transformation_id}/search",
+    response_model=SearchResponse,
+)
+def search_transformation(
+    transformation_id: str,
+    q: str,
+    request: Request,
+) -> SearchResponse:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
     needle = q.strip().lower()
+
     if not needle:
-        return SearchResponse(query=q, results=[])
+        return SearchResponse(
+            query=q,
+            results=[],
+        )
+
     results: list[SearchResult] = []
+
     for source in transformation.sources:
-        haystack = f"{source.title}\n{source.text}"
+        haystack = (
+            f"{source.title}\n"
+            f"{source.text}"
+        )
+
         if needle in haystack.lower():
-            results.append(SearchResult(category="source", label=source.title, excerpt=source.text[:180]))
+            results.append(
+                SearchResult(
+                    category="source",
+                    label=source.title,
+                    excerpt=source.text[:180],
+                )
+            )
+
     if transformation.content_dna is not None:
-        for section, value in transformation.content_dna.model_dump().items():
+        for section, value in (
+            transformation.content_dna
+            .model_dump()
+            .items()
+        ):
             text = str(value)
+
             if needle in text.lower():
-                results.append(SearchResult(category="dna", label=section, excerpt=text[:180]))
+                results.append(
+                    SearchResult(
+                        category="dna",
+                        label=section,
+                        excerpt=text[:180],
+                    )
+                )
+
     for artifact in transformation.outputs:
         if needle in artifact.content.lower():
-            results.append(SearchResult(category="output", label=artifact.type, excerpt=artifact.content[:180]))
-    return SearchResponse(query=q, results=results[:25])
+            results.append(
+                SearchResult(
+                    category="output",
+                    label=artifact.type,
+                    excerpt=artifact.content[:180],
+                )
+            )
+
+    return SearchResponse(
+        query=q,
+        results=results[:25],
+    )

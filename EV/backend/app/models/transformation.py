@@ -51,6 +51,40 @@ class DNAVersion(BaseModel):
     created_at: str = Field(default_factory=utc_now)
 
 
+class WorkflowTemplate(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    output_types: list[
+        Literal[
+            "executive_summary",
+            "advisory",
+            "linkedin",
+            "twitter",
+            "presentation",
+            "video",
+            "infographic",
+        ]
+    ] = Field(default_factory=list)
+    generation_config: dict = Field(default_factory=dict)
+
+
+class WorkflowConfig(BaseModel):
+    workflow_id: str = "custom"
+    workflow_name: str = "Custom Workflow"
+    output_types: list[
+        Literal[
+            "executive_summary",
+            "advisory",
+            "linkedin",
+            "twitter",
+            "presentation",
+            "video",
+            "infographic",
+        ]
+    ] = Field(default_factory=list)
+    generation_config: dict = Field(default_factory=dict)
+
 class Transformation(BaseModel):
     id: str
     title: str = "Untitled Transformation"
