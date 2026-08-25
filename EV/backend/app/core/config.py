@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     transformation_storage_path: str = "data/transformations.json"
 
     allowed_origins: str = (
-        "http://127.0.0.1:5173,http://localhost:5173"
+        "http://127.0.0.1:5173,http://localhost:5173,https://ev-sih.vercel.app/"
     )
 
     ffmpeg_path: str = (
