@@ -27,3 +27,161 @@
 .panel-empty-copy { margin: 0; padding: 16px 17px 18px; line-height: 1.6; }
 @media (max-width: 1000px) { .transformation-workspace { padding-inline: 20px; }.embedded-dna-body { grid-template-columns: 1fr; }.compact-structure { border-right: 0; border-bottom: 1px solid var(--border); }.embedded-dna-body .dna-inspector { max-height: none; }.compact-structure .structure-stage { min-height: 590px; }.compact-structure .network-map { min-height: 470px; } }
 @media (max-width: 560px) { .empty-home { width: calc(100% - 32px); }.transformation-workspace { padding: 24px 12px 45px; }.transformation-header { align-items: flex-start; flex-direction: column; gap: 12px; }.transformation-status { padding: 0; }.workspace-panel-heading { padding-inline: 15px; }.attached-sources { padding-inline: 15px; }.inputs-panel > .new-source { padding-inline: 15px; }.inputs-panel > .new-source .input-tabs button { flex: 1; justify-content: center; padding-inline: 5px; }.inputs-panel > .new-source .future-label { display: none; }.dna-collapse-header { align-items: flex-start; padding: 15px; }.dna-collapse-meta { flex-wrap: wrap; justify-content: flex-end; gap: 5px; }.dna-collapse-title small { max-width: 145px; line-height: 1.4; }.flow-divider { gap: 5px; font-size: 8px; }.dna-empty { align-items: flex-start; flex-wrap: wrap; padding: 15px; }.dna-empty .ui-badge { margin-left: 43px; } }
+.outputs-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.workspace-lower-grid {
+  width: 100%;
+  grid-template-columns: minmax(0, 1.8fr) minmax(260px, 1fr);
+}
+
+.integrity-conflict-reason {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border-left: 2px solid rgba(190, 255, 60, 0.35);
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 0 6px 6px 0;
+}
+
+.integrity-conflict-reason > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8d989f;
+}
+
+.integrity-conflict-reason p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #b8c1c6;
+}
+
+/* =========================================================
+   SOURCE INTEGRITY — CONFLICT REVIEW UI
+   ========================================================= */
+
+.integrity-conflicts {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 180, 70, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 180, 70, 0.025);
+}
+
+.integrity-conflicts > h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e8edf0;
+}
+
+.integrity-conflict-item {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.integrity-conflict-item + .integrity-conflict-item {
+  margin-top: 10px;
+}
+
+.integrity-conflict-item .conflict-description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #c2c9ce;
+}
+
+.integrity-conflict-item .conflict-status {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: rgba(255, 180, 70, 0.08);
+  color: #e6b86a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.integrity-conflict-item .conflict-claims {
+  margin-top: 10px;
+  font-size: 10px;
+  color: #7f8a91;
+}
+
+/* =========================================================
+   SOURCE INTEGRITY — CONFLICT REVIEW
+   ========================================================= */
+
+.integrity-conflicts {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 180, 70, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 180, 70, 0.025);
+}
+
+.integrity-conflicts .integrity-evidence-heading {
+  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e8edf0;
+}
+
+.integrity-conflict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.integrity-conflict-row + .integrity-conflict-row {
+  margin-top: 8px;
+}
+
+.integrity-conflict-row > div {
+  min-width: 0;
+}
+
+.integrity-conflict-row strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #cdd4d8;
+  word-break: break-word;
+}
+
+.integrity-conflict-row small {
+  display: block;
+  margin-top: 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d6a85f;
+}
+
+.integrity-conflict-row .badge {
+  flex-shrink: 0;
+}

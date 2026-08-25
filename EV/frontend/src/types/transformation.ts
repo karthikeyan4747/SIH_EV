@@ -42,3 +42,48 @@ export interface Transformation {
   versions: DNAVersion[]
   status: 'empty' | 'processing' | 'ready' | 'error'
 }
+
+export interface ClaimEvidence {
+  source_id: string
+  source_reference: string
+  supporting_excerpt: string
+  page: number | null
+  section: string
+  timestamp: string
+  frame: string
+}
+
+export type ClaimStatus =
+  | 'supported'
+  | 'corroborated'
+  | 'conflict'
+  | 'uncertain'
+
+export interface IntegrityClaim {
+  claim_id: string
+  claim_key: string
+  subject: string
+  predicate: string
+  value: string | number | null
+  unit: string
+  time: string
+  location: string
+  scope: string
+  source_ids: string[]
+  evidence: ClaimEvidence[]
+  status: ClaimStatus
+}
+
+export interface IntegrityConflict {
+  conflict_id: string
+  claim_key: string
+  description: string
+  claim_ids: string[]
+  status: 'unresolved' | 'resolved'
+}
+
+export interface SourceIntegrity {
+  claims: IntegrityClaim[]
+  conflicts: IntegrityConflict[]
+  resolutions: Record<string, unknown>[]
+}

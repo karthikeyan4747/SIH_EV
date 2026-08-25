@@ -13,6 +13,35 @@ ArtifactStatus = Literal["draft", "generated", "error"]
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+class Claim(BaseModel):
+    claim_id: str
+    claim_key: str
+
+    subject: str
+    predicate: str
+    value: str
+
+    unit: str = ""
+    time: str = ""
+    location: str = ""
+    scope: str = ""
+
+    source_ids: list[str] = Field(
+        default_factory=list
+    )
+
+    evidence: list[ClaimEvidence] = Field(
+        default_factory=list
+    )
+
+    status: Literal[
+        "supported",
+        "corroborated",
+        "conflict",
+        "uncertain",
+        "unresolved",
+    ] = "supported"
+
 
 class StructureSection(BaseModel):
     id: str
@@ -85,19 +114,99 @@ class WorkflowConfig(BaseModel):
     ] = Field(default_factory=list)
     generation_config: dict = Field(default_factory=dict)
 
+
+class ClaimEvidence(BaseModel):
+    source_id: str
+    source_reference: str = ""
+    supporting_excerpt: str = ""
+    page: int | None = None
+    section: str = ""
+    timestamp: str = ""
+    frame: str = ""
+
+
+
+
+class Conflict(BaseModel):
+    conflict_id: str
+    claim_key: str
+    claim_ids: list[str] = Field(
+        default_factory=list
+    )
+    description: str = ""
+    status: Literal[
+        "unresolved",
+        "resolved",
+    ] = "unresolved"
+
+
+class ConflictResolution(BaseModel):
+    conflict_id: str
+    decision: Literal[
+        "accept_source_a",
+        "accept_source_b",
+        "retain_both",
+        "mark_unresolved",
+    ]
+    selected_claim_id: str | None = None
+    rationale: str = ""
+
+
+class SourceIntegrity(BaseModel):
+    claims: list[Claim] = Field(
+        default_factory=list
+    )
+    conflicts: list[Conflict] = Field(
+        default_factory=list
+    )
+    resolutions: list[ConflictResolution] = Field(
+        default_factory=list
+    )
+
 class Transformation(BaseModel):
     id: str
     title: str = "Untitled Transformation"
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
-    sources: list[RawContent] = Field(default_factory=list)
+
+    sources: list[RawContent] = Field(
+        default_factory=list
+    )
+
     content_dna: ContentDNA | None = None
-    outputs: list[Artifact] = Field(default_factory=list)
-    structures: list[Structure] = Field(default_factory=list)
-    versions: list[DNAVersion] = Field(default_factory=list)
+
+    source_integrity: SourceIntegrity = Field(
+        default_factory=SourceIntegrity
+    )
+
+    outputs: list[Artifact] = Field(
+        default_factory=list
+    )
+
+    structures: list[Structure] = Field(
+        default_factory=list
+    )
+
+    versions: list[DNAVersion] = Field(
+        default_factory=list
+    )
+
     status: TransformationStatus = "empty"
 
+class SourceIntegrity(BaseModel):
+    claims: list[Claim] = Field(
+        default_factory=list
+    )
 
+    conflicts: list[Conflict] = Field(
+        default_factory=list
+    )
+
+    resolutions: list[dict] = Field(
+        default_factory=list
+    )
+
+    
 class TransformationCreateRequest(BaseModel):
     title: str = "Untitled Transformation"
 

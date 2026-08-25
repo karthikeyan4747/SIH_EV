@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Activity, ArrowRight, FileAudio, FileText, Image, Link, Plus, Presentation, Sparkles, Trash2, Upload, Video, X } from 'lucide-react'
+import { Activity, ArrowRight, FileAudio, FileText, Image, Link, Plus, Sparkles, Trash2, Upload, Video, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import type { SourceType } from '../../types/content'
 

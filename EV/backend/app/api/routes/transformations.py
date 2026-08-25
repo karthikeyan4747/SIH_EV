@@ -2,7 +2,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 from pydantic import ValidationError
-
+from app.core.config import settings
+from app.models.transformation import SourceIntegrity
 from app.models.content import ContentDNA
 from app.models.content_update import ContentDNAUpdate
 from app.models.transformation import (
@@ -54,6 +55,10 @@ from app.services.workflows import (
     save_custom_workflow,
 )
 
+from app.services.source_integrity import (
+    SourceIntegrityError,
+    SourceIntegrityService,
+)
 
 router = APIRouter(
     prefix="/api/v1/transformations",
@@ -1003,7 +1008,45 @@ def search_transformation(
                 )
             )
 
+
     return SearchResponse(
         query=q,
         results=results[:25],
     )
+
+@router.post(
+    "/{transformation_id}/integrity",
+    response_model=SourceIntegrity,
+)
+def analyze_source_integrity(
+    transformation_id: str,
+    request: Request,
+) -> SourceIntegrity:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    if not transformation.sources:
+        raise HTTPException(
+            status_code=400,
+            detail="Transformation has no sources to analyze",
+        )
+
+    try:
+        service = SourceIntegrityService(
+            api_key=settings.groq_api_key,
+            model=settings.groq_model,
+        )
+
+        result = service.analyze(
+            transformation.sources
+        )
+
+        return result
+
+    except SourceIntegrityError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc

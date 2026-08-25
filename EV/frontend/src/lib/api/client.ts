@@ -1,5 +1,9 @@
 import type { ContentDNA, ContentDNAPatch, SourceCreatedResponse, SourceRecord } from '../../types/content'
-import type { Structure, Transformation } from '../../types/transformation'
+import type {
+  SourceIntegrity,
+  
+  Transformation,
+} from '../../types/transformation'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
@@ -174,4 +178,15 @@ export function restoreTransformationVersion(transformationId: string, version: 
   return request<Transformation>(`/api/v1/transformations/${transformationId}/versions/${version}/restore`, {
     method: 'POST',
   })
+}
+
+export function analyzeSourceIntegrity(
+  transformationId: string,
+) {
+  return request<SourceIntegrity>(
+    `/api/v1/transformations/${transformationId}/integrity`,
+    {
+      method: 'POST',
+    },
+  )
 }

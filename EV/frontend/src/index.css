@@ -134,7 +134,8 @@ button:disabled { cursor: not-allowed; }
    ========================================================= */
 
 .workspace-lower-grid {
-  background: transparent !important;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
 }
 
 .outputs-panel {

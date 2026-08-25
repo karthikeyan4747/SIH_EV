@@ -26,6 +26,20 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  ShieldCheck,
+} from 'lucide-react'
+
+import { analyzeSourceIntegrity } from '../../lib/api/client'
+
+import type {
+  IntegrityClaim,
+  SourceIntegrity,
+} from '../../types/transformation'
+
 import type {
   ContentDNAPatch,
   RawContent,
@@ -33,6 +47,24 @@ import type {
 } from '../../types/content'
 
 import type { Transformation } from '../../types/transformation'
+
+function getConflictReason(description: string): string {
+  const text = description.toLowerCase()
+
+  if (text.includes("time") || text.includes("date")) {
+    return "These claims refer to different reporting periods, so they are kept separate rather than treated as a conflict."
+  }
+
+  if (text.includes("location") || text.includes("scope")) {
+    return "These claims refer to different geographic locations or scopes, so they are kept separate rather than treated as a conflict."
+  }
+
+  if (text.includes("unit") || text.includes("measurement")) {
+    return "The sources report different measurements, so the claims are not treated as conflicting."
+  }
+
+  return "The sources refer to the same claim context but report different values, so the system flags the claim for review."
+}
 
 export type GenerationConfig = {
   audience: string
@@ -73,6 +105,8 @@ interface TransformationWorkspaceProps {
   onRestoreVersion: (version: number) => void
 }
 
+
+
 export function TransformationWorkspace({
   transformation,
   busy,
@@ -90,6 +124,18 @@ export function TransformationWorkspace({
   const [dnaOpen, setDnaOpen] = useState(
     Boolean(transformation.content_dna),
   )
+
+  const [integrity, setIntegrity] =
+    useState<SourceIntegrity | null>(null)
+
+  const [integrityLoading, setIntegrityLoading] =
+    useState(false)
+
+  const [integrityError, setIntegrityError] =
+    useState('')
+
+  const [expandedClaim, setExpandedClaim] =
+    useState<string | null>(null)
 
   const [selectedNode, setSelectedNode] =
     useState<DNASectionKey | null>(null)
@@ -113,6 +159,32 @@ export function TransformationWorkspace({
   function selectNode(key: DNASectionKey) {
     setSelectedNode(key)
     setDnaOpen(true)
+  }
+
+  async function runSourceIntegrity() {
+    if (!transformation.sources.length) {
+      setIntegrityError(
+        'Add at least one source before running Source Integrity.',
+      )
+      return
+    }
+
+    try {
+      setIntegrityLoading(true)
+      setIntegrityError('')
+
+      const result = await analyzeSourceIntegrity(transformation.id)
+      setIntegrity(result)
+    } catch (error) {
+      console.error('Failed to analyze source integrity:', error)
+      setIntegrityError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to analyze source integrity.',
+      )
+    } finally {
+      setIntegrityLoading(false)
+    }
   }
 
   return (
@@ -277,6 +349,109 @@ export function TransformationWorkspace({
           <Badge>Waiting for input</Badge>
         </Card>
       )}
+
+      <Card className="integrity-panel">
+        <div className="workspace-panel-heading compact-heading">
+          <div>
+            <span className="panel-kicker">
+              <ShieldCheck size={14} /> SOURCE INTEGRITY
+            </span>
+            <p>
+              Compare claims across sources, detect genuine conflicts, and inspect
+              the evidence behind each claim.
+            </p>
+          </div>
+
+          <Badge>
+            {integrity
+              ? `${integrity.claims.length} claims`
+              : 'Not analyzed'}
+          </Badge>
+        </div>
+
+        <div className="integrity-toolbar">
+          <div className="source-verification-heading">
+            <strong>Source verification</strong>
+            <span>
+              Same facts are corroborated while differences in time or location are kept separate.
+            </span>
+          </div>
+
+          <Button
+            variant="primary"
+            disabled={integrityLoading || !transformation.sources.length}
+            onClick={() => void runSourceIntegrity()}
+          >
+            <ShieldCheck size={15} />
+            {integrityLoading ? 'Analyzing...' : 'Run Source Integrity'}
+          </Button>
+        </div>
+
+        {integrityError && (
+          <div className="integrity-error" role="alert">
+            <AlertTriangle size={15} />
+            <span>{integrityError}</span>
+          </div>
+        )}
+
+        {integrity && (
+          <div className="integrity-results">
+            <div className="integrity-summary">
+              <span>
+                <strong>{integrity.claims.length}</strong> claims
+              </span>
+              <span>
+                <strong>{integrity.conflicts.length}</strong> conflicts
+              </span>
+            </div>
+
+            {integrity.claims.length ? (
+              <div className="integrity-claim-list">
+                {integrity.claims.map((claim) => (
+                  <IntegrityClaimCard
+                    key={claim.claim_id}
+                    claim={claim}
+                    conflict={integrity.conflicts.find((conflict) =>
+                      conflict.claim_ids.includes(claim.claim_id)
+                    )}
+                    expanded={expandedClaim === claim.claim_id}
+                    onToggle={() =>
+                      setExpandedClaim((current) =>
+                        current === claim.claim_id
+                          ? null
+                          : claim.claim_id,
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="panel-empty-copy">
+                No claims were extracted from the current sources.
+              </p>
+            )}
+
+            {integrity.conflicts.length > 0 && (
+              <div className="integrity-conflicts">
+                <div className="integrity-evidence-heading">
+                  Conflicts requiring review
+                </div>
+                {integrity.conflicts.map((conflict) => (
+                  <div className="integrity-conflict-row" key={conflict.conflict_id}>
+                    <div>
+                      <strong>{conflict.description}</strong>
+                      <small>
+                        Status: {conflict.status}
+                      </small>
+                    </div>
+                    <Badge>{conflict.claim_ids.length} claims</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       <WorkspaceOutputs
         transformation={transformation}
@@ -602,6 +777,7 @@ function WorkspaceOutputs({
       workflow.generation_config,
     )
   }
+
 
   return (
     <div className="workspace-lower-grid">
@@ -1217,5 +1393,173 @@ function InlineGenerationSelect({
         />
       </div>
     </label>
+  )
+}
+
+function IntegrityClaimCard({
+  claim,
+  conflict,
+  expanded,
+  onToggle,
+}: {
+  claim: IntegrityClaim
+  conflict?: {
+    conflict_id: string
+    claim_key: string
+    description: string
+    claim_ids: string[]
+    status: string
+  }
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const isConflict =
+    claim.status === 'conflict'
+
+  const isCorroborated =
+    claim.status === 'corroborated'
+
+  return (
+    <article
+      className={`integrity-claim-card ${isConflict
+        ? 'integrity-claim-conflict'
+        : ''
+        }`}
+    >
+      <button
+        type="button"
+        className="integrity-claim-header"
+        onClick={onToggle}
+      >
+        <div className="integrity-status-icon">
+          {isConflict ? (
+            <AlertTriangle size={16} />
+          ) : isCorroborated ? (
+            <CheckCircle2 size={16} />
+          ) : (
+            <ShieldCheck size={16} />
+          )}
+        </div>
+
+        <div className="integrity-claim-main">
+          <strong>
+            {claim.subject}
+            {' '}
+            {claim.predicate.replaceAll(
+              '_',
+              ' ',
+            )}
+          </strong>
+
+          <span>
+            {String(claim.value ?? 'Unknown')}
+            {claim.unit
+              ? ` ${claim.unit}`
+              : ''}
+          </span>
+        </div>
+
+        <div className="integrity-claim-meta">
+          <span
+            className={`integrity-status integrity-status-${claim.status}`}
+          >
+            {claim.status}
+          </span>
+
+          {expanded ? (
+            <ChevronDown size={15} />
+          ) : (
+            <ChevronRight size={15} />
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="integrity-claim-details">
+          <div className="integrity-detail-row">
+            <span>Claim</span>
+            <strong>
+              {claim.claim_key.replaceAll(
+                '_',
+                ' ',
+              )}
+            </strong>
+          </div>
+
+          {claim.time && (
+            <div className="integrity-detail-row">
+              <span>Time</span>
+              <strong>
+                {claim.time}
+              </strong>
+            </div>
+          )}
+
+          {claim.location && (
+            <div className="integrity-detail-row">
+              <span>Location</span>
+              <strong>
+                {claim.location}
+              </strong>
+            </div>
+          )}
+          {isConflict && conflict && (
+            <div className="integrity-conflict-reason">
+              <span>Why this conflict occurred</span>
+              <p>{getConflictReason(conflict.description)}</p>
+            </div>
+          )}
+
+          <div className="integrity-evidence-heading">
+            Evidence
+          </div>
+
+          {claim.evidence.length ? (
+            claim.evidence.map(
+              (evidence, index) => (
+                <div
+                  className="integrity-evidence"
+                  key={`${claim.claim_id}-evidence-${index}`}
+                >
+                  <div className="integrity-evidence-source">
+                    <strong>
+                      {evidence.source_reference}
+                    </strong>
+
+                    {evidence.page !== null && (
+                      <span>
+                        Page {evidence.page}
+                      </span>
+                    )}
+
+                    {evidence.section && (
+                      <span>
+                        {evidence.section}
+                      </span>
+                    )}
+                  </div>
+
+                  <blockquote>
+                    {evidence.supporting_excerpt}
+                  </blockquote>
+
+                  {evidence.timestamp && (
+                    <small>
+                      Timestamp:{' '}
+                      {evidence.timestamp}
+                    </small>
+                  )}
+                </div>
+              ),
+            )
+          ) : (
+            <p className="integrity-no-evidence">
+              No supporting evidence was attached
+              to this claim.
+            </p>
+          )}
+        </div>
+      )}
+    </article>
   )
 }
