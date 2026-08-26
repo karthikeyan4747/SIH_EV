@@ -1,0 +1,30 @@
+{
+  "49ff91be-f55b-4fd7-a07d-c9d89b26366f": {
+    "id": "49ff91be-f55b-4fd7-a07d-c9d89b26366f",
+    "title": "Media",
+    "created_at": "2026-08-26T10:35:12.305009+00:00",
+    "updated_at": "2026-08-26T10:35:12.322081+00:00",
+    "sources": [
+      {
+        "source_id": "5f667d88-0dfe-4bb4-8d5c-bede55fbacc7",
+        "source_type": "video",
+        "title": "Demo video",
+        "text": "VIDEO processing is not available in this EV backend configuration. This source was recorded for provenance but was not used to generate Content DNA.",
+        "metadata": {
+          "status": "unsupported",
+          "note": ""
+        }
+      }
+    ],
+    "content_dna": null,
+    "source_integrity": {
+      "claims": [],
+      "conflicts": [],
+      "resolutions": []
+    },
+    "outputs": [],
+    "structures": [],
+    "versions": [],
+    "status": "empty"
+  }
+}

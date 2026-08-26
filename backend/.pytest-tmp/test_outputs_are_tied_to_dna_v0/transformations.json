@@ -1,0 +1,130 @@
+{
+  "2c292c81-664e-442f-8aab-5e065a38808f": {
+    "id": "2c292c81-664e-442f-8aab-5e065a38808f",
+    "title": "Outputs",
+    "created_at": "2026-08-26T10:35:11.652437+00:00",
+    "updated_at": "2026-08-26T10:35:11.672462+00:00",
+    "sources": [
+      {
+        "source_id": "8468342d-35b8-422b-84a8-7a5187973fd2",
+        "source_type": "text",
+        "title": "Brief",
+        "text": "Team Pathenova won SIH.",
+        "metadata": {}
+      }
+    ],
+    "content_dna": {
+      "identity": {
+        "title": "Brief",
+        "content_type": "text",
+        "source_description": "Test source"
+      },
+      "overview": {
+        "summary": "Team Pathenova won SIH.",
+        "purpose": "Testing"
+      },
+      "entities": {
+        "people": [],
+        "organizations": [
+          "Team Pathenova"
+        ],
+        "locations": [],
+        "technologies": []
+      },
+      "facts": {
+        "claims": [
+          "Team Pathenova won SIH."
+        ],
+        "statistics": [],
+        "dates": [],
+        "events": [
+          "Team Pathenova won SIH"
+        ]
+      },
+      "findings": {
+        "key_findings": [
+          "Win identified"
+        ],
+        "risks": [],
+        "opportunities": [],
+        "implications": []
+      },
+      "recommendations": {
+        "recommendations": []
+      },
+      "context": {
+        "target_audience": "Judges",
+        "tone": "Formal",
+        "communication_objective": "Inform"
+      },
+      "evidence": {
+        "source_reference": "8468342d-35b8-422b-84a8-7a5187973fd2",
+        "supporting_excerpt": "Team Pathenova won SIH."
+      }
+    },
+    "source_integrity": {
+      "claims": [],
+      "conflicts": [],
+      "resolutions": []
+    },
+    "outputs": [],
+    "structures": [],
+    "versions": [
+      {
+        "version": 1,
+        "content_dna": {
+          "identity": {
+            "title": "Brief",
+            "content_type": "text",
+            "source_description": "Test source"
+          },
+          "overview": {
+            "summary": "Team Pathenova won SIH.",
+            "purpose": "Testing"
+          },
+          "entities": {
+            "people": [],
+            "organizations": [
+              "Team Pathenova"
+            ],
+            "locations": [],
+            "technologies": []
+          },
+          "facts": {
+            "claims": [
+              "Team Pathenova won SIH."
+            ],
+            "statistics": [],
+            "dates": [],
+            "events": [
+              "Team Pathenova won SIH"
+            ]
+          },
+          "findings": {
+            "key_findings": [
+              "Win identified"
+            ],
+            "risks": [],
+            "opportunities": [],
+            "implications": []
+          },
+          "recommendations": {
+            "recommendations": []
+          },
+          "context": {
+            "target_audience": "Judges",
+            "tone": "Formal",
+            "communication_objective": "Inform"
+          },
+          "evidence": {
+            "source_reference": "8468342d-35b8-422b-84a8-7a5187973fd2",
+            "supporting_excerpt": "Team Pathenova won SIH."
+          }
+        },
+        "note": "Generated from text source",
+        "created_at": "2026-08-26T10:35:11.671460+00:00"
+      }
+    ],
+    "status": "ready"
+  }
+}

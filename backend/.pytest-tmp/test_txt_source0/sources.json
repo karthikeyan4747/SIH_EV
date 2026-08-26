@@ -1,0 +1,54 @@
+{
+  "d90219dc-2ed1-4f1c-ac82-454c804e6033": {
+    "source": {
+      "source_id": "d90219dc-2ed1-4f1c-ac82-454c804e6033",
+      "source_type": "txt",
+      "title": "notes",
+      "text": "TXT source text",
+      "metadata": {
+        "filename": "notes.txt"
+      }
+    },
+    "content_dna": {
+      "identity": {
+        "title": "notes",
+        "content_type": "txt",
+        "source_description": ""
+      },
+      "overview": {
+        "summary": "TXT source text",
+        "purpose": ""
+      },
+      "entities": {
+        "people": [],
+        "organizations": [],
+        "locations": [],
+        "technologies": []
+      },
+      "facts": {
+        "claims": [],
+        "statistics": [],
+        "dates": [],
+        "events": []
+      },
+      "findings": {
+        "key_findings": [],
+        "risks": [],
+        "opportunities": [],
+        "implications": []
+      },
+      "recommendations": {
+        "recommendations": []
+      },
+      "context": {
+        "target_audience": "",
+        "tone": "",
+        "communication_objective": ""
+      },
+      "evidence": {
+        "source_reference": "d90219dc-2ed1-4f1c-ac82-454c804e6033",
+        "supporting_excerpt": "TXT source text"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+.nav-item,
+.nav-label {
+  min-width: 0;
+}
+
+.edit-controls .ui-button-ghost {
+  color: var(--text);
+  background: #1a2027;
+  border-color: #37404b;
+}
+
+.edit-controls .ui-button-ghost:hover:not(:disabled) {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}

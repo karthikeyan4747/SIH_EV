@@ -1,0 +1,219 @@
+@import 'tailwindcss';
+
+:root { font-family: 'DM Sans', 'Segoe UI', sans-serif; color: #e7e9ee; background: #0b0d10; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+#root { min-height: 100vh; }
+
+/* Output generation UI polish */
+.outputs-panel {
+  background:
+    radial-gradient(
+      circle at 15% 10%,
+      rgba(190, 255, 60, 0.035),
+      transparent 35%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(18, 24, 29, 0.96),
+      rgba(11, 16, 20, 0.98)
+    );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.generation-parameters {
+  padding: 16px 22px 15px;
+  background: rgba(255, 255, 255, 0.015);
+  border-top: 1px solid rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.generation-heading {
+  margin-bottom: 16px;
+}
+
+.generation-heading > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+.generation-heading p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.generation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.generation-field {
+  min-width: 0;
+}
+
+.generation-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.generation-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.generation-field select:focus {
+  border-color: var(--accent);
+}
+
+.outputs-panel .output-controls {
+  padding: 16px 24px 18px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.outputs-panel .output-controls > button {
+  flex: 0 0 auto;
+}
+
+.outputs-panel .artifact-list {
+  padding: 20px 24px 24px;
+}
+
+@media (max-width: 900px) {
+  .generation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .generation-parameters {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .outputs-panel .output-controls,
+  .outputs-panel .artifact-list {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .generation-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* =========================================================
+   OUTPUTS PANEL — FINAL OVERRIDES
+   ========================================================= */
+
+.workspace-lower-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+}
+
+.outputs-panel {
+  position: relative;
+  background: #0d1318 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
+/* Subtle panel depth */
+.outputs-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 12% 0%,
+      rgba(190, 255, 60, 0.035),
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.012),
+      transparent 35%
+    );
+}
+
+/* Keep actual content above the background layer */
+.outputs-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Generation parameters */
+.outputs-panel .generation-parameters {
+  padding: 16px 22px 15px !important;
+  background: rgba(255, 255, 255, 0.012) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Parameter grid */
+.outputs-panel .generation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* Make sure the area around the controls doesn't inherit
+   some random card background */
+.outputs-panel .output-controls {
+  background: transparent !important;
+}
+
+.generation-select {
+  width: 100%;
+  background: #10171c;
+  color: #e8edf0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  padding: 10px 34px 10px 12px;
+  outline: none;
+  appearance: auto;
+}
+
+.generation-select:focus {
+  border-color: rgba(190, 255, 60, 0.35);
+}
+
+.generation-select option {
+  background: #10171c;
+  color: #e8edf0;
+}
+
+.generation-select option:checked {
+  background: #1b252c;
+  color: #ffffff;
+}
+
