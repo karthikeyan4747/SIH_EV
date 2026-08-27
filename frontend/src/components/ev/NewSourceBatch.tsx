@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Activity, ArrowRight, FileAudio, FileText, Image, Link, Plus, Sparkles, Trash2, Upload, Video, X } from 'lucide-react'
+import { ArrowRight, FileAudio, FileText, Image, Link, Plus, Sparkles, Trash2, Upload, Video, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import type { SourceType } from '../../types/content'
 
@@ -420,7 +420,7 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
         <strong>{modes.find((item) => item.key === mode)?.label} processing is not available</strong>
         <p>EV can record this source in the transformation history, but this backend cannot extract usable Content DNA from it yet.</p>
         <label>Source title <input value={unsupportedTitle} onChange={(event) => setUnsupportedTitle(event.target.value)} placeholder={`${mode.toUpperCase()} source`} /></label>
-        <Button variant="ghost" disabled={busy} onClick={() => { onUnsupported(mode as SourceType, unsupportedTitle || `${mode.toUpperCase()} source`, 'Adapter unavailable in current backend'); setUnsupportedTitle('') }}>Record unavailable source</Button>
+        <Button variant="ghost" loading={busy} loadingLabel="Recording..." onClick={() => { onUnsupported(mode as SourceType, unsupportedTitle || `${mode.toUpperCase()} source`, 'Adapter unavailable in current backend'); setUnsupportedTitle('') }}>Record unavailable source</Button>
       </div>}
     </div>
     <div className="pipeline"><span><b>01</b> Source</span><ArrowRight size={15} /><span><b>02</b> Understand</span><ArrowRight size={15} /><span className="pipeline-current"><b>03</b> Review DNA</span><ArrowRight size={15} /><span className="pipeline-muted">04 Outputs</span></div>
@@ -428,5 +428,5 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
 }
 
 function BatchFooter({ busy, disabled, count, label, onClick }: { busy: boolean; disabled: boolean; count: number; label: string; onClick: () => void }) {
-  return <div className="form-footer"><span>{label}</span><Button variant="primary" disabled={busy || disabled} onClick={onClick}>{busy ? <><Activity size={16} className="spin" />Processing {count} source{count === 1 ? '' : 's'}...</> : <><Sparkles size={16} />Process {count} source{count === 1 ? '' : 's'}</>}</Button></div>
+  return <div className="form-footer"><span>{label}</span><Button variant="primary" disabled={disabled} loading={busy} loadingLabel={`Processing ${count} source${count === 1 ? '' : 's'}...`} onClick={onClick}><Sparkles size={16} />Process {count} source{count === 1 ? '' : 's'}</Button></div>
 }

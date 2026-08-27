@@ -379,11 +379,13 @@ export function TransformationWorkspace({
 
           <Button
             variant="primary"
-            disabled={integrityLoading || !transformation.sources.length}
+            disabled={!transformation.sources.length}
+            loading={integrityLoading}
+            loadingLabel="Analyzing..."
             onClick={() => void runSourceIntegrity()}
           >
             <ShieldCheck size={15} />
-            {integrityLoading ? 'Analyzing...' : 'Run Source Integrity'}
+            Run Source Integrity
           </Button>
         </div>
 
@@ -397,9 +399,6 @@ export function TransformationWorkspace({
         {integrity && (
           <div className="integrity-results">
             <div className="integrity-summary">
-              <span>
-                <strong>{integrity.claims.length}</strong> claims
-              </span>
               <span>
                 <strong>{integrity.conflicts.length}</strong> conflicts
               </span>
@@ -615,6 +614,414 @@ function WorkspaceOutputs({
     anchor.click()
 
     URL.revokeObjectURL(url)
+  }
+
+  function downloadBinary(filename: string, content: Uint8Array, type: string) {
+    const blob = new Blob([content.buffer.slice(0) as ArrayBuffer], { type })
+    const url = URL.createObjectURL(blob)
+
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    anchor.click()
+
+    URL.revokeObjectURL(url)
+  }
+
+  function xmlEscape(value: string) {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;')
+  }
+
+  function cleanSlideLine(value: string) {
+    return value
+      .replace(/^#{1,6}\s*/, '')
+      .replace(/^[-*]\s*/, '')
+      .replace(/^\d+[.)]\s*/, '')
+      .replace(/\*\*/g, '')
+      .trim()
+  }
+
+  function buildPresentationSlides(content: string) {
+    const slides: { title: string; bullets: string[] }[] = []
+    let currentSlide: { title: string; bullets: string[] } | null = null
+
+    function finishSlide() {
+      if (!currentSlide) return
+
+      const titleLineIndex = currentSlide.bullets.findIndex((line) =>
+        /^title\s*:/i.test(line),
+      )
+
+      if (titleLineIndex >= 0) {
+        currentSlide.title = currentSlide.bullets[titleLineIndex]
+          .replace(/^title\s*:\s*/i, '')
+          .trim() || currentSlide.title
+        currentSlide.bullets.splice(titleLineIndex, 1)
+      }
+
+      slides.push({
+        title: currentSlide.title,
+        bullets: currentSlide.bullets.filter(Boolean),
+      })
+    }
+
+    for (const rawLine of content.replaceAll('\r\n', '\n').split('\n')) {
+      const headingMatch = rawLine.match(
+        /^\s*(?:#{1,6}\s*)?(?:\*\*)?slide\s*(\d+)\s*(?::|-|\.|\u2013)?\s*(.*?)(?:\*\*)?\s*$/i,
+      )
+
+      if (headingMatch) {
+        finishSlide()
+
+        const slideNumber = headingMatch[1]
+        const title = cleanSlideLine(headingMatch[2] || '') || `Slide ${slideNumber}`
+
+        currentSlide = {
+          title,
+          bullets: [],
+        }
+
+        continue
+      }
+
+      if (currentSlide) {
+        const line = cleanSlideLine(rawLine)
+        if (line) currentSlide.bullets.push(line)
+      }
+    }
+
+    finishSlide()
+
+    if (slides.length) {
+      return slides
+    }
+
+    const headingBlocks = content
+      .replaceAll('\r\n', '\n')
+      .split(/\n(?=#{1,3}\s+)/)
+      .map((block) => block.trim())
+      .filter(Boolean)
+
+    if (headingBlocks.length > 1) {
+      return headingBlocks.map((block, index) => {
+        const lines = block.split('\n').map(cleanSlideLine).filter(Boolean)
+        return {
+          title: lines[0] || `Slide ${index + 1}`,
+          bullets: lines.slice(1),
+        }
+      })
+    }
+
+    const lines = content.split('\n').map(cleanSlideLine).filter(Boolean)
+    const chunkSize = 6
+
+    for (let index = 0; index < Math.max(lines.length, 1); index += chunkSize) {
+      const chunk = lines.slice(index, index + chunkSize)
+      slides.push({
+        title: index === 0 ? 'Presentation Overview' : `Slide ${slides.length + 1}`,
+        bullets: chunk,
+      })
+    }
+
+    return slides.length ? slides : [{ title: 'Presentation', bullets: ['No generated content available.'] }]
+  }
+
+  function crc32(data: Uint8Array) {
+    let crc = 0xffffffff
+
+    for (const byte of data) {
+      crc ^= byte
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+      }
+    }
+
+    return (crc ^ 0xffffffff) >>> 0
+  }
+
+  function createZip(files: { name: string; content: string }[]) {
+    const encoder = new TextEncoder()
+    const chunks: Uint8Array[] = []
+    const centralDirectory: Uint8Array[] = []
+    let offset = 0
+    const now = new Date()
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2)
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()
+
+    function write16(view: DataView, position: number, value: number) {
+      view.setUint16(position, value, true)
+    }
+
+    function write32(view: DataView, position: number, value: number) {
+      view.setUint32(position, value, true)
+    }
+
+    for (const file of files) {
+      const nameBytes = encoder.encode(file.name)
+      const contentBytes = encoder.encode(file.content)
+      const crc = crc32(contentBytes)
+      const localHeader = new Uint8Array(30 + nameBytes.length)
+      const localView = new DataView(localHeader.buffer)
+
+      write32(localView, 0, 0x04034b50)
+      write16(localView, 4, 20)
+      write16(localView, 6, 0)
+      write16(localView, 8, 0)
+      write16(localView, 10, dosTime)
+      write16(localView, 12, dosDate)
+      write32(localView, 14, crc)
+      write32(localView, 18, contentBytes.length)
+      write32(localView, 22, contentBytes.length)
+      write16(localView, 26, nameBytes.length)
+      write16(localView, 28, 0)
+      localHeader.set(nameBytes, 30)
+      chunks.push(localHeader, contentBytes)
+
+      const centralHeader = new Uint8Array(46 + nameBytes.length)
+      const centralView = new DataView(centralHeader.buffer)
+
+      write32(centralView, 0, 0x02014b50)
+      write16(centralView, 4, 20)
+      write16(centralView, 6, 20)
+      write16(centralView, 8, 0)
+      write16(centralView, 10, 0)
+      write16(centralView, 12, dosTime)
+      write16(centralView, 14, dosDate)
+      write32(centralView, 16, crc)
+      write32(centralView, 20, contentBytes.length)
+      write32(centralView, 24, contentBytes.length)
+      write16(centralView, 28, nameBytes.length)
+      write16(centralView, 30, 0)
+      write16(centralView, 32, 0)
+      write16(centralView, 34, 0)
+      write16(centralView, 36, 0)
+      write32(centralView, 38, 0)
+      write32(centralView, 42, offset)
+      centralHeader.set(nameBytes, 46)
+      centralDirectory.push(centralHeader)
+
+      offset += localHeader.length + contentBytes.length
+    }
+
+    const centralOffset = offset
+    const centralSize = centralDirectory.reduce((total, chunk) => total + chunk.length, 0)
+    const endRecord = new Uint8Array(22)
+    const endView = new DataView(endRecord.buffer)
+
+    write32(endView, 0, 0x06054b50)
+    write16(endView, 4, 0)
+    write16(endView, 6, 0)
+    write16(endView, 8, files.length)
+    write16(endView, 10, files.length)
+    write32(endView, 12, centralSize)
+    write32(endView, 16, centralOffset)
+    write16(endView, 20, 0)
+
+    const allChunks = [...chunks, ...centralDirectory, endRecord]
+    const totalLength = allChunks.reduce((total, chunk) => total + chunk.length, 0)
+    const zip = new Uint8Array(totalLength)
+    let cursor = 0
+
+    for (const chunk of allChunks) {
+      zip.set(chunk, cursor)
+      cursor += chunk.length
+    }
+
+    return zip
+  }
+
+  function slideXml(slide: { title: string; bullets: string[] }, index: number) {
+    const bulletRuns = slide.bullets.length
+      ? slide.bullets.map((bullet) => `
+        <a:p>
+          <a:pPr lvl="0"><a:buChar char="•"/></a:pPr>
+          <a:r><a:rPr lang="en-US" sz="2200"/><a:t>${xmlEscape(bullet)}</a:t></a:r>
+          <a:endParaRPr lang="en-US" sz="2200"/>
+        </a:p>
+      `).join('')
+      : '<a:p><a:r><a:rPr lang="en-US" sz="2200"/><a:t></a:t></a:r></a:p>'
+
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="${index === 0 ? 'F4FAF9' : 'FFFFFF'}"/></a:solidFill></p:bgPr></p:bg>
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="609600" y="457200"/><a:ext cx="7924800" cy="838200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+        <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3400" b="1"><a:solidFill><a:srgbClr val="17212F"/></a:solidFill></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r><a:endParaRPr lang="en-US" sz="3400"/></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="762000" y="1600200"/><a:ext cx="7620000" cy="4572000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+        <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${bulletRuns}</p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="4" name="Footer"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="609600" y="6350000"/><a:ext cx="7924800" cy="304800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+        <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="1100"><a:solidFill><a:srgbClr val="667386"/></a:solidFill></a:rPr><a:t>EV Workspace / Slide ${index + 1}</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`
+  }
+
+  function downloadPpt(filename: string, content: string) {
+    const slides = buildPresentationSlides(content)
+    const slideIds = slides.map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 1}"/>`).join('')
+    const presentationRelationships = slides.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${index + 1}.xml"/>`).join('')
+    const slideContentTypes = slides.map((_, index) => `<Override PartName="/ppt/slides/slide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')
+    const files = [
+      {
+        name: '[Content_Types].xml',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>${slideContentTypes}</Types>`,
+      },
+      {
+        name: '_rels/.rels',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>',
+      },
+      {
+        name: 'ppt/presentation.xml',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldSz cx="9144000" cy="6858000" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/><p:sldIdLst>${slideIds}</p:sldIdLst></p:presentation>`,
+      },
+      {
+        name: 'ppt/_rels/presentation.xml.rels',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${presentationRelationships}</Relationships>`,
+      },
+      ...slides.map((slide, index) => ({
+        name: `ppt/slides/slide${index + 1}.xml`,
+        content: slideXml(slide, index),
+      })),
+    ]
+
+    downloadBinary(filename, createZip(files), 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
+  }
+
+  function escapePdfText(value: string) {
+    return value
+      .replaceAll('\\', '\\\\')
+      .replaceAll('(', '\\(')
+      .replaceAll(')', '\\)')
+      .replaceAll('\r', '')
+  }
+
+  function wrapPdfText(text: string, maxCharacters = 86) {
+    const lines: string[] = []
+
+    for (const rawLine of text.split('\n')) {
+      const words = rawLine.trimEnd().split(/\s+/).filter(Boolean)
+
+      if (!words.length) {
+        lines.push('')
+        continue
+      }
+
+      let line = ''
+
+      for (const word of words) {
+        const nextLine = line ? `${line} ${word}` : word
+
+        if (nextLine.length > maxCharacters) {
+          if (line) lines.push(line)
+          line = word
+        } else {
+          line = nextLine
+        }
+      }
+
+      if (line) lines.push(line)
+    }
+
+    return lines
+  }
+
+  function downloadPdf(filename: string, title: string, content: string, dnaVersion: number) {
+    const pageWidth = 612
+    const pageHeight = 792
+    const margin = 54
+    const lineHeight = 15
+    const contentLines = wrapPdfText(content)
+    const pages: string[][] = []
+    let currentPage: string[] = []
+    let currentY = pageHeight - 138
+
+    for (const line of contentLines) {
+      if (currentY < margin) {
+        pages.push(currentPage)
+        currentPage = []
+        currentY = pageHeight - 82
+      }
+
+      currentPage.push(line)
+      currentY -= lineHeight
+    }
+
+    pages.push(currentPage)
+
+    const objects: string[] = []
+    const pageObjectIds: number[] = []
+
+    objects.push('<< /Type /Catalog /Pages 2 0 R >>')
+    objects.push('PAGES_PLACEHOLDER')
+    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+
+    pages.forEach((pageLines, index) => {
+      const pageNumber = index + 1
+      const streamParts = [
+        'BT',
+        '/F1 18 Tf',
+        '54 742 Td',
+        `(${escapePdfText(title)}) Tj`,
+        '/F1 9 Tf',
+        '0 -22 Td',
+        `(DNA v${dnaVersion} / Page ${pageNumber} of ${pages.length}) Tj`,
+        '/F1 11 Tf',
+        `0 ${index === 0 ? '-44' : '-20'} Td`,
+      ]
+
+      pageLines.forEach((line, lineIndex) => {
+        if (lineIndex > 0) streamParts.push(`0 -${lineHeight} Td`)
+        streamParts.push(`(${escapePdfText(line)}) Tj`)
+      })
+
+      streamParts.push('ET')
+
+      const stream = streamParts.join('\n')
+      const pageObjectId = objects.length + 1
+      const contentObjectId = pageObjectId + 1
+
+      pageObjectIds.push(pageObjectId)
+      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectId} 0 R >>`)
+      objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)
+    })
+
+    objects[1] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`
+
+    const pdfParts = ['%PDF-1.4\n']
+    const offsets: number[] = [0]
+
+    objects.forEach((object, index) => {
+      offsets.push(pdfParts.join('').length)
+      pdfParts.push(`${index + 1} 0 obj\n${object}\nendobj\n`)
+    })
+
+    const xrefOffset = pdfParts.join('').length
+    pdfParts.push(`xref\n0 ${objects.length + 1}\n`)
+    pdfParts.push('0000000000 65535 f \n')
+    offsets.slice(1).forEach((offset) => {
+      pdfParts.push(`${String(offset).padStart(10, '0')} 00000 n \n`)
+    })
+    pdfParts.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`)
+
+    download(filename, pdfParts.join(''), 'application/pdf')
   }
 
   async function loadWorkflows() {
@@ -1044,9 +1451,10 @@ function WorkspaceOutputs({
 
           <Button
             variant="primary"
+            loading={busy}
+            loadingLabel={selectedWorkflow !== 'custom' ? 'Running Workflow...' : 'Generating...'}
             disabled={
               !transformation.content_dna ||
-              busy ||
               !selected.length
             }
             onClick={() =>
@@ -1118,18 +1526,35 @@ function WorkspaceOutputs({
 
                     <button
                       onClick={() =>
-                        download(
-                          `${artifact.type}-dna-v${artifact.dna_version}.md`,
+                        downloadPdf(
+                          `${artifact.type}-dna-v${artifact.dna_version}.pdf`,
+                          artifact.type.replaceAll('_', ' '),
                           artifact.content,
-                          'text/markdown',
+                          artifact.dna_version,
                         )
                       }
                     >
                       <Download
                         size={14}
                       />
-                      Download
+                      Download PDF
                     </button>
+
+                    {artifact.type === 'presentation' && (
+                      <button
+                        onClick={() =>
+                          downloadPpt(
+                            `${artifact.type}-dna-v${artifact.dna_version}.pptx`,
+                            artifact.content,
+                          )
+                        }
+                      >
+                        <FileText
+                          size={14}
+                        />
+                        Download PPT
+                      </button>
+                    )}
                   </div>
                 </article>
               ),
@@ -1472,33 +1897,36 @@ function IntegrityClaimCard({
 
       {expanded && (
         <div className="integrity-claim-details">
-          <div className="integrity-detail-row">
-            <span>Claim</span>
-            <strong>
-              {claim.claim_key.replaceAll(
-                '_',
-                ' ',
-              )}
-            </strong>
+          <div className="integrity-detail-grid">
+            <div className="integrity-detail-row">
+              <span>Claim</span>
+              <strong>
+                {claim.claim_key.replaceAll(
+                  '_',
+                  ' ',
+                )}
+              </strong>
+            </div>
+
+            {claim.time && (
+              <div className="integrity-detail-row">
+                <span>Time</span>
+                <strong>
+                  {claim.time}
+                </strong>
+              </div>
+            )}
+
+            {claim.location && (
+              <div className="integrity-detail-row">
+                <span>Location</span>
+                <strong>
+                  {claim.location}
+                </strong>
+              </div>
+            )}
           </div>
 
-          {claim.time && (
-            <div className="integrity-detail-row">
-              <span>Time</span>
-              <strong>
-                {claim.time}
-              </strong>
-            </div>
-          )}
-
-          {claim.location && (
-            <div className="integrity-detail-row">
-              <span>Location</span>
-              <strong>
-                {claim.location}
-              </strong>
-            </div>
-          )}
           {isConflict && conflict && (
             <div className="integrity-conflict-reason">
               <span>Why this conflict occurred</span>
@@ -1506,54 +1934,57 @@ function IntegrityClaimCard({
             </div>
           )}
 
-          <div className="integrity-evidence-heading">
-            Evidence
-          </div>
+          <section className="integrity-evidence-section">
+            <div className="integrity-evidence-heading">
+              <span>Evidence</span>
+              <small>{claim.evidence.length} source{claim.evidence.length === 1 ? '' : 's'}</small>
+            </div>
 
-          {claim.evidence.length ? (
-            claim.evidence.map(
-              (evidence, index) => (
-                <div
-                  className="integrity-evidence"
-                  key={`${claim.claim_id}-evidence-${index}`}
-                >
-                  <div className="integrity-evidence-source">
-                    <strong>
-                      {evidence.source_reference}
-                    </strong>
+            {claim.evidence.length ? (
+              claim.evidence.map(
+                (evidence, index) => (
+                  <div
+                    className="integrity-evidence"
+                    key={`${claim.claim_id}-evidence-${index}`}
+                  >
+                    <div className="integrity-evidence-source">
+                      <strong>
+                        {evidence.source_reference}
+                      </strong>
 
-                    {evidence.page !== null && (
-                      <span>
-                        Page {evidence.page}
-                      </span>
-                    )}
+                      {evidence.page !== null && (
+                        <span>
+                          Page {evidence.page}
+                        </span>
+                      )}
 
-                    {evidence.section && (
-                      <span>
-                        {evidence.section}
-                      </span>
+                      {evidence.section && (
+                        <span>
+                          {evidence.section}
+                        </span>
+                      )}
+                    </div>
+
+                    <blockquote>
+                      {evidence.supporting_excerpt}
+                    </blockquote>
+
+                    {evidence.timestamp && (
+                      <small>
+                        Timestamp:{' '}
+                        {evidence.timestamp}
+                      </small>
                     )}
                   </div>
-
-                  <blockquote>
-                    {evidence.supporting_excerpt}
-                  </blockquote>
-
-                  {evidence.timestamp && (
-                    <small>
-                      Timestamp:{' '}
-                      {evidence.timestamp}
-                    </small>
-                  )}
-                </div>
-              ),
-            )
-          ) : (
-            <p className="integrity-no-evidence">
-              No supporting evidence was attached
-              to this claim.
-            </p>
-          )}
+                ),
+              )
+            ) : (
+              <p className="integrity-no-evidence">
+                No supporting evidence was attached
+                to this claim.
+              </p>
+            )}
+          </section>
         </div>
       )}
     </article>
