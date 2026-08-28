@@ -4,6 +4,8 @@ from typing import Any, Protocol
 from groq import Groq
 from pydantic import ValidationError
 
+from ollama import Client
+
 from app.models.content import ContentDNA, RawContent
 
 
@@ -1183,3 +1185,202 @@ Return only the final artifact.
         )
 
         return raw_content.strip()
+
+
+class OllamaProvider:
+    def __init__(self, host: str, model: str) -> None:
+        self.host = host
+        self.model = model
+        self.client = Client(host=host)
+
+    def chat(
+        self,
+        messages: list[dict],
+        temperature: float = 0,
+    ) -> str:
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={
+                    "temperature": temperature,
+                },
+            )
+        except Exception as exc:
+            logger.exception(
+                "Ollama request failed (model=%s)",
+                self.model,
+            )
+            raise LLMProviderError(
+                "The local Ollama model request failed"
+            ) from exc
+
+        content = response.message.content
+
+        if not isinstance(content, str) or not content.strip():
+            raise LLMProviderError(
+                "The local Ollama model returned empty content"
+            )
+
+        return content.strip()
+
+
+    def generate_content_dna(self, content: RawContent) -> ContentDNA:
+        system_prompt = """
+    You are EV's Content DNA Extraction Engine.
+
+    Your task is to extract a COMPLETE and information-rich ContentDNA
+    object from the provided source.
+
+    CRITICAL RULES:
+
+    1. Read and understand the ENTIRE source before producing the JSON.
+
+    2. Remain completely faithful to the source.
+    NEVER invent facts, numbers, names, dates, organizations,
+    statistics, quotations, recommendations, or claims.
+
+    3. Populate EVERY ContentDNA field whenever the source provides
+    enough information to do so.
+
+    4. Do NOT leave fields empty merely because the information is not
+    explicitly formatted in the source. You may summarize or
+    restructure information that is clearly supported by the source.
+
+    5. If a field genuinely has no supporting information in the source,
+    return an empty string or empty array as required by the schema.
+
+    FIELD INSTRUCTIONS:
+
+    identity:
+    - title: preserve the source title.
+    - content_type: identify the type of content when it can be determined.
+    - source_description: briefly describe what the source contains.
+
+    overview:
+    - summary: provide a concise summary of the entire source.
+    - purpose: explain what the source is trying to communicate or accomplish.
+
+    entities:
+    - Extract all explicitly mentioned people, organizations, locations,
+    and technologies.
+    - Do not invent entities.
+
+    facts:
+    - claims: extract meaningful factual claims from the source.
+    - statistics: extract numerical statistics, measurements, percentages,
+    quantities, or comparisons.
+    - dates: extract explicitly mentioned dates or time periods.
+    - events: extract explicitly described events or occurrences.
+
+    findings:
+    - key_findings: identify the major conclusions or important ideas
+    supported by the source.
+    - risks: extract risks, limitations, problems, or threats mentioned
+    or clearly supported by the source.
+    - opportunities: extract opportunities or potential benefits supported
+    by the source.
+    - implications: explain the consequences or significance of the
+    source's findings when directly supported by the source.
+
+    recommendations:
+    - Extract recommendations explicitly provided by the source.
+    - If the source proposes actions or solutions, capture them.
+    - Do NOT invent recommendations.
+
+    context:
+    - target_audience: infer the intended audience from the source.
+    - tone: identify the communication tone.
+    - communication_objective: describe what the source is trying to
+    achieve through its communication.
+
+    evidence:
+    - source_reference: preserve any source/reference information provided.
+    - supporting_excerpt: include the most useful excerpt supporting
+    the extracted ContentDNA.
+
+    IMPORTANT:
+    - Prefer extracting MORE supported information rather than returning
+    empty fields.
+    - Every extracted item must be traceable to the source.
+    - Keep conflicting claims separate rather than merging them.
+    - Preserve important terminology and numbers.
+    - Do not hallucinate missing information.
+
+    Return ONLY valid JSON matching the ContentDNA schema.
+    Do not include explanations, markdown, or text outside the JSON.
+    """
+
+        user_message = f"""
+    SOURCE INFORMATION
+    ==============================
+
+    Title:
+    {content.title}
+
+    Source Type:
+    {content.source_type}
+
+    Source Content:
+    ------------------------------
+    {content.text}
+    ------------------------------
+
+    TASK:
+
+    Build a complete ContentDNA object from the source.
+
+    Important:
+    - Understand the entire source before extracting.
+    - Preserve important numbers, dates, names, terminology, and claims.
+    - Do not invent specific facts.
+    - Keep conflicting source claims distinguishable.
+    - Provide meaningful purpose, context, findings, recommendations,
+    and evidence when supported by the source.
+
+    Return ONLY the ContentDNA object.
+    """
+
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": user_message,
+                    },
+                ],
+                options={
+                    "temperature": 0,
+                },
+                format=ContentDNA.model_json_schema(),
+            )
+        except Exception as exc:
+            logger.exception(
+                "Ollama Content DNA generation failed (model=%s)",
+                self.model,
+            )
+            raise LLMProviderError(
+                "The local Content DNA generation request failed"
+            ) from exc
+
+        raw_content = response.message.content
+
+        if not isinstance(raw_content, str) or not raw_content.strip():
+            raise LLMProviderError(
+                "The local model returned empty Content DNA"
+            )
+
+        try:
+            return ContentDNA.model_validate_json(raw_content)
+        except (ValidationError, ValueError) as exc:
+            logger.exception(
+                "Ollama returned invalid Content DNA"
+            )
+            raise LLMProviderError(
+                "The local model returned invalid Content DNA"
+            ) from exc

@@ -45,7 +45,11 @@ def _create_source(request: Request, raw_content) -> SourceCreatedResponse:
 @router.post("/text", response_model=SourceCreatedResponse, status_code=status.HTTP_201_CREATED)
 def create_text_source(payload: TextSourceRequest, request: Request) -> SourceCreatedResponse:
     try:
-        raw_content = TextIngestionProvider().ingest(str(uuid4()), payload.title, payload.text)
+        raw_content = TXTIngestionProvider().ingest(
+        str(uuid4()),
+        payload.title,
+        payload.text.encode("utf-8")
+    )
     except IngestionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _create_source(request, raw_content)

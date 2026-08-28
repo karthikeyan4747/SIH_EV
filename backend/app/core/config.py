@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
 
+    llm_provider: str = "ollama"
+
+    ollama_host: str = "http://127.0.0.1:11434"
+
+    ollama_model: str = "qwen3:8b"
+
     max_upload_size_bytes: int = 10 * 1024 * 1024
 
     storage_path: str = "data/sources.json"
@@ -22,7 +28,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5177,http://localhost:5177,"
         "http://127.0.0.1:5178,http://localhost:5178,"
         "http://127.0.0.1:5179,http://localhost:5179,"
+        "http://localhost:5500,"
         "https://ev-sih.vercel.app/"
+        "http://localhost:5500"
     )
 
     ffmpeg_path: str = (

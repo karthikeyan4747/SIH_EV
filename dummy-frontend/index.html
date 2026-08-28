@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Local AI Test</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin: 8px 0 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        textarea {
+            height: 220px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 12px 22px;
+            border: none;
+            border-radius: 8px;
+            background: #111;
+            color: white;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        pre {
+            background: #111;
+            color: #eee;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+
+        .success {
+            color: green;
+        }
+
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>EV Local AI Test</h1>
+
+    <div class="subtitle">
+        FastAPI → Ollama → Qwen3:8b → Content DNA
+    </div>
+
+    <label>
+        Source Title
+    </label>
+
+    <input
+        id="title"
+        value="Electric Vehicle Test"
+    >
+
+    <label>
+        Source Content
+    </label>
+
+    <textarea id="content">Electric vehicles use electric motors powered by rechargeable batteries.
+
+They produce no tailpipe emissions while driving.
+
+Battery technology, charging infrastructure, and vehicle cost remain important factors affecting EV adoption.</textarea>
+
+    <button id="processBtn" onclick="processSource()">
+        Process with Local AI
+    </button>
+
+    <div id="status"></div>
+
+    <h2>Result</h2>
+
+    <pre id="result">No result yet.</pre>
+
+<script>
+
+async function processSource() {
+
+    const button = document.getElementById("processBtn");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+
+    const title = document.getElementById("title").value;
+    const content = document.getElementById("content").value;
+
+    if (!content.trim()) {
+        status.textContent = "Please enter some content.";
+        status.className = "error";
+        return;
+    }
+
+    button.disabled = true;
+
+    status.textContent = "Sending to FastAPI → Ollama → Qwen3...";
+    status.className = "";
+
+    result.textContent = "Processing...";
+
+    try {
+
+        const response = await fetch(
+            "http://127.0.0.1:8000/api/v1/sources/text",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    title: title,
+                    text: content
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail
+                    ? JSON.stringify(data.detail, null, 2)
+                    : JSON.stringify(data, null, 2)
+            );
+        }
+
+        status.textContent = "✅ Local AI processing completed!";
+        status.className = "success";
+
+        result.textContent =
+            JSON.stringify(data, null, 2);
+
+    } catch (error) {
+
+        status.textContent = "❌ Request failed";
+        status.className = "error";
+
+        result.textContent = error.toString();
+
+    } finally {
+
+        button.disabled = false;
+    }
+}
+
+</script>
+
+</body>
+</html>
