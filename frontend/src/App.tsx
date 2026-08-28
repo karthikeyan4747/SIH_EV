@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, FileText, Home, LogOut, Plus, Settings, SlidersHorizontal, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react'
+import { Bot, ChevronDown, Cloud, FileText, Home, LogOut, Plus, Settings, SlidersHorizontal, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react'
 import {
   TransformationWorkspace,
   type GenerationConfig,
@@ -13,13 +13,16 @@ import {
   createTransformation as createTransformationApi,
   deleteTransformation,
   generateTransformationOutputs,
+  getModelMode,
   getTransformation,
   listTransformations,
   patchTransformationDNA,
   removeTransformationSource,
   renameTransformation,
   restoreTransformationVersion,
+  toggleModelMode,
 } from './lib/api/client'
+import type { ModelMode } from './lib/api/client'
 import type { ContentDNAPatch, SourceType } from './types/content'
 import type { Transformation } from './types/transformation'
 import './App.css'
@@ -43,6 +46,8 @@ function App() {
   const [view, setView] = useState<ViewState>('workspace')
   const [homeMenuOpen, setHomeMenuOpen] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>('aesthetic')
+  const [modelMode, setModelMode] = useState<ModelMode>('local')
+  const [modelModeLoading, setModelModeLoading] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -52,6 +57,7 @@ function App() {
 
   useEffect(() => {
     void refreshTransformations()
+    void refreshModelMode()
   }, [])
 
   useEffect(() => {
@@ -83,6 +89,30 @@ function App() {
       setActiveId((current) => current || response.transformations[0]?.id || null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load transformations.')
+    }
+  }
+
+  async function refreshModelMode() {
+    try {
+      const response = await getModelMode()
+      setModelMode(response.mode)
+    } catch {
+      setModelMode('local')
+    }
+  }
+
+  async function switchModelMode() {
+    if (modelModeLoading) return
+
+    setModelModeLoading(true)
+    setError('')
+    try {
+      const response = await toggleModelMode()
+      setModelMode(response.mode)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Model mode could not be switched.')
+    } finally {
+      setModelModeLoading(false)
     }
   }
 
@@ -308,8 +338,15 @@ function App() {
 
   if (!isAuthenticated) return <LoginPage onLogin={login} themeMode={themeMode} />
 
-  return <div className={`app-shell theme-${themeMode}`}><Sidebar collapsed={collapsed} onCollapsedChange={setCollapsed} onHome={goHome} onNew={() => void newTransformation()} onSettings={openSettings} onLogout={logout} mobileOpen={mobileNav} onClose={() => setMobileNav(false)} active={active} homeOpen={homeMenuOpen} settingsActive={view === 'settings'} transformations={transformations} onSelect={(id) => void selectTransformation(id)} onDelete={setDeleteTargetId} /><main className="main-shell"><header className="topbar"><div className="crumbs"><span>EV</span><span className="crumb-slash">/</span><span>{view === 'settings' ? 'Settings' : 'Transformations'}</span><span className="crumb-slash">/</span><strong>{pageTitle}</strong></div><div className="topbar-actions"><span className="sync-state"><span className="sync-icon"><span /></span>{saveState === 'saving' ? 'Saving...' : saveState === 'dirty' ? 'Unsaved changes' : saveState === 'error' ? 'Save failed' : 'Synced'}</span><Button variant="ghost" aria-label="Settings" onClick={openSettings}><Settings size={17} /></Button></div></header>{error && <div className="error-banner" role="alert"><TriangleAlert size={17} /><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}{view === 'settings' ? <SettingsDashboard transformationCount={transformations.length} activeTitle={active?.title} themeMode={themeMode} onThemeModeChange={changeThemeMode} /> : active ? <TransformationWorkspace key={active.id} transformation={active} busy={busy} saveState={saveState} onTexts={createTexts} onFiles={createFiles} onUrl={createUrl} onUnsupported={createUnsupported} onPatch={savePatch} onRename={rename} onRemoveSource={(id) => void removeSource(id)} onGenerateOutputs={(types, generationConfig) =>
+  return <div className={`app-shell theme-${themeMode}`}><Sidebar collapsed={collapsed} onCollapsedChange={setCollapsed} onHome={goHome} onNew={() => void newTransformation()} onSettings={openSettings} onLogout={logout} mobileOpen={mobileNav} onClose={() => setMobileNav(false)} active={active} homeOpen={homeMenuOpen} settingsActive={view === 'settings'} transformations={transformations} onSelect={(id) => void selectTransformation(id)} onDelete={setDeleteTargetId} /><main className="main-shell"><header className="topbar"><div className="crumbs"><span>EV</span><span className="crumb-slash">/</span><span>{view === 'settings' ? 'Settings' : 'Transformations'}</span><span className="crumb-slash">/</span><strong>{pageTitle}</strong></div><div className="topbar-actions"><span className="sync-state"><span className="sync-icon"><span /></span>{saveState === 'saving' ? 'Saving...' : saveState === 'dirty' ? 'Unsaved changes' : saveState === 'error' ? 'Save failed' : 'Synced'}</span><ModelModeSwitch mode={modelMode} loading={modelModeLoading} onToggle={() => void switchModelMode()} /><Button variant="ghost" aria-label="Settings" onClick={openSettings}><Settings size={17} /></Button></div></header>{error && <div className="error-banner" role="alert"><TriangleAlert size={17} /><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}{view === 'settings' ? <SettingsDashboard transformationCount={transformations.length} activeTitle={active?.title} themeMode={themeMode} onThemeModeChange={changeThemeMode} /> : active ? <TransformationWorkspace key={active.id} transformation={active} busy={busy} saveState={saveState} onTexts={createTexts} onFiles={createFiles} onUrl={createUrl} onUnsupported={createUnsupported} onPatch={savePatch} onRename={rename} onRemoveSource={(id) => void removeSource(id)} onGenerateOutputs={(types, generationConfig) =>
   void generateOutputs(types, generationConfig)} onRestoreVersion={(version) => void restoreVersion(version)} /> : <EmptyHome onNew={() => void newTransformation()} busy={busy} />}</main>{deleteTargetId && <DeleteConfirmation target={transformations.find((item) => item.id === deleteTargetId)} busy={busy} onCancel={() => setDeleteTargetId(null)} onConfirm={() => void removeTransformation(deleteTargetId)} />}</div>
+}
+
+function ModelModeSwitch({ mode, loading, onToggle }: { mode: ModelMode; loading: boolean; onToggle: () => void }) {
+  const isApi = mode === 'api'
+  const Icon = isApi ? Cloud : Bot
+
+  return <button type="button" className={`model-mode-switch ${isApi ? 'api-active' : 'local-active'}`} aria-pressed={isApi} aria-label={`Switch to ${isApi ? 'local' : 'API'} model`} title={`Currently using ${isApi ? 'API model' : 'local model'}`} disabled={loading} onClick={onToggle}><span className="model-switch-track"><span className="model-switch-thumb"><Icon size={13} /></span></span><span className="model-switch-copy"><strong>{isApi ? 'API Model' : 'Local Model'}</strong><small>{loading ? 'Switching...' : isApi ? 'Groq/API active' : 'Ollama/local active'}</small></span></button>
 }
 
 function DeleteConfirmation({ target, busy, onCancel, onConfirm }: { target?: Transformation; busy: boolean; onCancel: () => void; onConfirm: () => void }) {

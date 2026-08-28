@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.health import router as health_router
+from app.api.routes.model_mode import router as model_mode_router
 from app.api.routes.sources import router as sources_router
 from app.api.routes.transformations import router as transformations_router
 from app.core.config import settings
@@ -19,13 +20,16 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 app.include_router(health_router)
+app.include_router(model_mode_router)
 app.include_router(sources_router)
 app.include_router(transformations_router)
 app.state.settings = settings
 app.state.storage = LocalJSONStorage(settings.storage_path)
 app.state.transformation_storage = LocalTransformationStorage(settings.transformation_storage_path)
 
-if settings.llm_provider.lower() == "ollama":
+app.state.llm_provider_mode = "local" if settings.llm_provider.lower() == "ollama" else "api"
+
+if app.state.llm_provider_mode == "local":
     provider = OllamaProvider(
         host=settings.ollama_host,
         model=settings.ollama_model,
