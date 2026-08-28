@@ -1589,6 +1589,9 @@ function WorkspaceOutputs({
               .map((version) => (
                 <button
                   key={version.version}
+                  type="button"
+                  title={`Restore DNA v${version.version}`}
+                  aria-label={`Restore DNA version ${version.version}`}
                   onClick={() =>
                     onRestoreVersion(
                       version.version,
@@ -1603,6 +1606,8 @@ function WorkspaceOutputs({
                     {version.note ||
                       'Saved version'}
                   </small>
+
+                  <em>Restore</em>
                 </button>
               ))}
           </div>

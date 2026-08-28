@@ -373,7 +373,7 @@ function Sidebar({
     >
       <div className="brand-row">
         <img className="brand-mark" src="/ev-logo.svg" alt="EV workspace" />
-        {!collapsed && <span className="brand-name">EV <small>WORKSPACE</small></span>}
+        {!collapsed && <span className="brand-name">EV</span>}
         <button className="sidebar-close" aria-label="Close navigation" onClick={onClose}><X size={18} /></button>
       </div>
 

@@ -18,8 +18,15 @@
   --coral: #e2604f;
   --mint: #66c6a2;
   --gold: #d59a2c;
-  --nav: #182231;
-  --nav-soft: #223047;
+  --nav: #e9e6eb;
+  --nav-soft: #fbf9fc;
+  --nav-ink: #111827;
+  --nav-muted: #334155;
+  --nav-blue: #3f7cff;
+  --nav-blue-deep: #2557d6;
+  --nav-hover: rgba(63, 124, 255, 0.13);
+  --nav-active: linear-gradient(90deg, rgba(63, 124, 255, 0.24), rgba(125, 92, 255, 0.16));
+  --nav-active-ink: #123a96;
   --shadow-panel: 0 18px 46px rgba(28, 45, 68, 0.11);
   --shadow-soft: 0 10px 24px rgba(28, 45, 68, 0.08);
   --focus-ring: rgba(15, 143, 140, 0.18);
@@ -45,9 +52,9 @@ body {
 
 .sidebar {
   background:
-    linear-gradient(180deg, rgba(24, 34, 49, 0.98), rgba(16, 24, 36, 0.98));
-  border-right: 0;
-  box-shadow: 18px 0 44px rgba(16, 24, 36, 0.18);
+    linear-gradient(180deg, color-mix(in srgb, var(--nav-soft) 68%, var(--nav)), var(--nav));
+  border-right: 1px solid rgba(17, 24, 39, 0.16);
+  box-shadow: 18px 0 44px rgba(28, 45, 68, 0.16);
   transition:
     width 0.28s ease,
     transform 0.24s ease,
@@ -60,7 +67,8 @@ body {
 }
 
 .brand-row {
-  height: 46px;
+  height: 58px;
+  gap: 12px;
 }
 
 .brand-mark,
@@ -81,42 +89,59 @@ body {
 }
 
 .brand-mark {
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
-  padding: 4px;
+  padding: 5px;
   background: #ffffff;
 }
 
 .brand-name {
-  color: #ffffff;
-  font-weight: 800;
+  color: var(--nav-ink);
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 0.04em;
 }
 
 .brand-name small {
-  color: #93a4ba;
+  color: var(--nav-muted);
 }
 
 .group-label {
-  color: #7f91aa;
+  color: var(--nav-muted);
 }
 
 .nav-item {
-  color: #aebbd0;
+  color: var(--nav-muted);
   border-radius: 8px;
+  font-weight: 800;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.16s ease;
 }
 
 .nav-item:hover:not(:disabled) {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--nav-ink);
+  background: var(--nav-hover);
+  border-color: rgba(63, 124, 255, 0.2);
+  transform: translateX(2px);
 }
 
 .nav-item.active {
-  color: #ffffff;
-  background: linear-gradient(90deg, rgba(15, 143, 140, 0.32), rgba(102, 198, 162, 0.14));
-  border-color: rgba(102, 198, 162, 0.32);
-  box-shadow: inset 3px 0 #66c6a2;
+  color: var(--nav-active-ink);
+  background: var(--nav-active);
+  border-color: rgba(63, 124, 255, 0.42);
+  box-shadow: 0 10px 24px rgba(63, 124, 255, 0.16);
+}
+
+.nav-item:active:not(:disabled),
+.home-submodule-item:active,
+.delete-transformation:active {
+  transform: translateX(2px) scale(0.97);
 }
 
 .transformation-nav-row {
@@ -131,10 +156,10 @@ body {
 }
 
 .transformation-nav-row.active .transformation-item {
-  color: #ffffff;
-  background: linear-gradient(90deg, rgba(15, 143, 140, 0.32), rgba(102, 198, 162, 0.14));
-  border-color: rgba(102, 198, 162, 0.32);
-  box-shadow: inset 3px 0 #66c6a2;
+  color: var(--nav-active-ink);
+  background: var(--nav-active);
+  border-color: rgba(63, 124, 255, 0.42);
+  box-shadow: 0 10px 24px rgba(63, 124, 255, 0.16);
 }
 
 .delete-transformation {
@@ -142,7 +167,7 @@ body {
   place-items: center;
   width: 30px;
   height: 30px;
-  color: #8fa0b7;
+  color: var(--nav-muted);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -190,20 +215,20 @@ body {
 }
 
 .sidebar-footer .nav-item {
-  color: #aebbd0;
+  color: var(--nav-ink);
 }
 
 .profile {
-  border-top-color: rgba(255, 255, 255, 0.1);
-  color: #9eacc1;
+  border-top-color: rgba(29, 36, 48, 0.1);
+  color: var(--nav-muted);
 }
 
 .profile strong {
-  color: #ffffff;
+  color: var(--nav-ink);
 }
 
 .profile span {
-  color: #7f91aa;
+  color: var(--nav-muted);
 }
 
 .avatar {
@@ -678,21 +703,34 @@ body {
 }
 
 .app-shell.theme-aesthetic {
-  --accent: #c45b48;
+  --panel: rgba(255, 253, 252, 0.94);
+  --elevated: #fff8f5;
+  --elevated-2: #f3fbf8;
+  --border: rgba(173, 116, 104, 0.28);
+  --border-strong: rgba(15, 143, 140, 0.38);
+  --text: #201821;
+  --muted: #685a6a;
+  --dim: #8d7c90;
+  --accent: #b94f70;
   --accent-ink: #ffffff;
-  --focus-ring: rgba(196, 91, 72, 0.2);
-  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  --coral: #e16455;
+  --mint: #35b79a;
+  --gold: #d99a35;
+  --focus-ring: rgba(185, 79, 112, 0.22);
+  --shadow-panel: 0 24px 58px rgba(100, 54, 74, 0.14);
+  --shadow-soft: 0 14px 32px rgba(100, 54, 74, 0.1);
+  font-family: "DM Sans", "Segoe UI", sans-serif;
   background:
-    radial-gradient(circle at 12% 8%, rgba(102, 198, 162, 0.15), transparent 28%),
-    radial-gradient(circle at 88% 12%, rgba(226, 96, 79, 0.14), transparent 30%),
-    linear-gradient(135deg, #fbfdfc 0%, #edf5f3 52%, #fff5f0 100%);
+    linear-gradient(135deg, rgba(53, 183, 154, 0.14) 0%, transparent 34%),
+    linear-gradient(225deg, rgba(185, 79, 112, 0.16) 0%, transparent 32%),
+    linear-gradient(180deg, #fffdfb 0%, #f7f0f6 46%, #eef8f5 100%);
 }
 
 .app-shell.theme-aesthetic h1,
 .app-shell.theme-aesthetic h2,
 .app-shell.theme-aesthetic h3,
 .app-shell.theme-aesthetic .transformation-title {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
   letter-spacing: 0;
 }
 
@@ -709,8 +747,9 @@ body {
 }
 
 .app-shell.theme-aesthetic .mode-options button.active {
-  background: #c45b48;
-  border-color: #c45b48;
+  background: linear-gradient(135deg, #b94f70, #e16455);
+  border-color: rgba(185, 79, 112, 0.42);
+  box-shadow: 0 12px 28px rgba(185, 79, 112, 0.22);
 }
 
 .app-shell.theme-dark .mode-options button.active {
@@ -728,11 +767,11 @@ body {
 }
 
 .app-shell.theme-aesthetic {
-  --page-panel: rgba(255, 255, 255, 0.88);
-  --page-soft: rgba(255, 249, 246, 0.9);
-  --page-input: rgba(255, 255, 255, 0.92);
-  --page-line: rgba(196, 91, 72, 0.22);
-  --page-highlight: #fff0eb;
+  --page-panel: rgba(255, 253, 252, 0.92);
+  --page-soft: rgba(255, 247, 251, 0.88);
+  --page-input: rgba(255, 255, 255, 0.96);
+  --page-line: rgba(185, 79, 112, 0.22);
+  --page-highlight: #fff0f6;
 }
 
 .app-shell.theme-dark {
@@ -741,6 +780,15 @@ body {
   --page-input: #0d1518;
   --page-line: #2b3b42;
   --page-highlight: rgba(131, 216, 192, 0.12);
+  --nav: #1a171f;
+  --nav-soft: #302b35;
+  --nav-ink: #ffffff;
+  --nav-muted: #ded6e4;
+  --nav-blue: #5ea2ff;
+  --nav-blue-deep: #8f7cff;
+  --nav-hover: rgba(94, 162, 255, 0.16);
+  --nav-active: linear-gradient(90deg, rgba(94, 162, 255, 0.34), rgba(143, 124, 255, 0.2));
+  --nav-active-ink: #ffffff;
 }
 
 /* Keep every Transformation surface attached to the selected mode. */
@@ -863,7 +911,76 @@ body {
 .app-shell.theme-aesthetic .integrity-panel,
 .app-shell.theme-aesthetic .outputs-panel,
 .app-shell.theme-aesthetic .versions-panel {
-  box-shadow: 0 18px 46px rgba(161, 76, 58, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 247, 251, 0.9)) !important;
+  border-color: rgba(185, 79, 112, 0.2) !important;
+  box-shadow:
+    0 24px 58px rgba(100, 54, 74, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.app-shell.theme-aesthetic {
+  --nav: #e9e6eb;
+  --nav-soft: #fffafd;
+  --nav-ink: #17111c;
+  --nav-muted: #3f3447;
+  --nav-blue: #4f7dff;
+  --nav-blue-deep: #6d5cff;
+  --nav-hover: rgba(79, 125, 255, 0.15);
+  --nav-active: linear-gradient(90deg, rgba(79, 125, 255, 0.24), rgba(109, 92, 255, 0.16));
+  --nav-active-ink: #1e3f9e;
+}
+
+.app-shell.theme-aesthetic .topbar {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 246, 250, 0.82));
+  border-bottom-color: rgba(185, 79, 112, 0.18);
+  box-shadow: 0 14px 34px rgba(100, 54, 74, 0.08);
+}
+
+.app-shell.theme-aesthetic .workspace-panel-heading,
+.app-shell.theme-aesthetic .dna-panel-bar,
+.app-shell.theme-aesthetic .compact-heading,
+.app-shell.theme-aesthetic .outputs-panel .output-controls {
+  background:
+    linear-gradient(135deg, rgba(255, 250, 253, 0.96), rgba(242, 252, 248, 0.88)) !important;
+  border-color: rgba(185, 79, 112, 0.18) !important;
+}
+
+.app-shell.theme-aesthetic .ui-button-primary,
+.app-shell.theme-aesthetic .outputs-panel .output-controls .ui-button-primary {
+  background: linear-gradient(135deg, #b94f70, #e16455) !important;
+  border-color: rgba(185, 79, 112, 0.45) !important;
+  box-shadow: 0 16px 34px rgba(185, 79, 112, 0.24);
+}
+
+.app-shell.theme-aesthetic .ui-button-primary:hover:not(:disabled),
+.app-shell.theme-aesthetic .outputs-panel .output-controls .ui-button-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #a94366, #d95246) !important;
+}
+
+.app-shell.theme-aesthetic .output-controls button.selected,
+.app-shell.theme-aesthetic .view-switcher button.active {
+  background: linear-gradient(135deg, #b94f70, #e16455) !important;
+  border-color: rgba(185, 79, 112, 0.42) !important;
+  box-shadow: 0 12px 28px rgba(185, 79, 112, 0.18);
+}
+
+.app-shell.theme-aesthetic .source-type-icon,
+.app-shell.theme-aesthetic .dna-mini-mark,
+.app-shell.theme-aesthetic .dna-symbol,
+.app-shell.theme-aesthetic .node-icon,
+.app-shell.theme-aesthetic .home-module-icon {
+  color: #b94f70 !important;
+  background: linear-gradient(135deg, #fff0f6, #edf9f5) !important;
+  border-color: rgba(185, 79, 112, 0.2) !important;
+}
+
+.app-shell.theme-aesthetic .structure-stage {
+  background-color: rgba(255, 249, 252, 0.78) !important;
+  background-image:
+    linear-gradient(rgba(185, 79, 112, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(53, 183, 154, 0.08) 1px, transparent 1px) !important;
 }
 
 .logout-button {
@@ -874,7 +991,7 @@ body {
   width: 100%;
   min-height: 36px;
   padding: 0 10px;
-  color: #aebbd0;
+  color: var(--nav-ink);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -1116,9 +1233,9 @@ body {
   min-height: 36px;
   width: 100%;
   padding: 0 10px;
-  color: #9fafc3;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  color: var(--nav-muted);
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(17, 24, 39, 0.1);
   border-radius: 8px;
   font: inherit;
   font-size: 12px;
@@ -1142,21 +1259,22 @@ body {
 }
 
 .home-submodule-item:hover {
-  color: #ffffff;
-  background: rgba(102, 198, 162, 0.12);
-  border-color: rgba(102, 198, 162, 0.28);
+  color: var(--nav-ink);
+  background: var(--nav-hover);
+  border-color: rgba(63, 124, 255, 0.28);
 }
 
 .home-submodule-item.active {
-  color: #ffffff;
-  background: linear-gradient(90deg, rgba(15, 143, 140, 0.26), rgba(102, 198, 162, 0.1));
-  border-color: rgba(102, 198, 162, 0.3);
+  color: var(--nav-active-ink);
+  background: var(--nav-active);
+  border-color: rgba(63, 124, 255, 0.42);
+  box-shadow: 0 10px 24px rgba(63, 124, 255, 0.14);
 }
 
 .home-submodule-item:focus-visible {
   outline: none;
-  border-color: rgba(102, 198, 162, 0.5);
-  box-shadow: 0 0 0 3px rgba(102, 198, 162, 0.16);
+  border-color: rgba(63, 124, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(63, 124, 255, 0.18);
 }
 
 .sidebar.collapsed .home-nav-item {
@@ -2305,6 +2423,42 @@ body {
   background: var(--page-panel) !important;
 }
 
+.versions-panel .version-list button {
+  position: relative;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.versions-panel .version-list button:hover,
+.versions-panel .version-list button:focus-visible {
+  border-color: rgba(15, 143, 140, 0.42) !important;
+  outline: 0;
+  box-shadow: 0 12px 26px rgba(24, 40, 64, 0.1);
+  transform: translateY(-1px);
+}
+
+.versions-panel .version-list button em {
+  margin-left: auto;
+  padding: 7px 10px;
+  color: #0b7774;
+  background: #e5f4f3;
+  border: 1px solid #b8dfdc;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-shell.theme-dark .versions-panel .version-list button em {
+  color: #8ee7ef;
+  background: rgba(27, 224, 236, 0.12);
+  border-color: rgba(27, 224, 236, 0.24);
+}
+
 @media (max-width: 720px) {
   .outputs-panel .workspace-panel-heading,
   .versions-panel .workspace-panel-heading,
@@ -3113,6 +3267,11 @@ body {
   width: 100%;
 }
 
+.embedded-dna + .integrity-panel,
+.dna-empty + .integrity-panel {
+  margin-top: 14px;
+}
+
 .ui-button,
 .input-tabs button,
 .output-controls button:not(.ui-button),
@@ -3254,7 +3413,29 @@ body {
   box-sizing: border-box;
 }
 
+.transformation-workspace .workspace-lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr) !important;
+  align-items: stretch;
+  gap: 18px;
+}
+
+.transformation-workspace .workspace-lower-grid .versions-panel {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.transformation-workspace .versions-panel .version-list,
+.transformation-workspace .versions-panel .panel-empty-copy {
+  flex: 1;
+}
+
 @media (max-width: 720px) {
+  .transformation-workspace .workspace-lower-grid {
+    grid-template-columns: 1fr !important;
+  }
+
   .workspace-panel-heading,
   .dna-collapse-header,
   .outputs-panel .workspace-panel-heading,
@@ -3647,19 +3828,50 @@ body {
   border-color: var(--border) !important;
 }
 
+.app-shell.theme-dark .integrity-panel .compact-heading {
+  background:
+    linear-gradient(135deg, rgba(27, 224, 236, 0.12), transparent 44%),
+    #111a20 !important;
+  border-bottom-color: #263840 !important;
+}
+
+.app-shell.theme-dark .integrity-panel .panel-kicker {
+  color: #d9f8fb !important;
+  text-shadow: 0 0 10px rgba(27, 224, 236, 0.18);
+}
+
+.app-shell.theme-dark .integrity-panel .panel-kicker svg {
+  color: #8ee7ef !important;
+}
+
+.app-shell.theme-dark .integrity-panel .workspace-panel-heading p {
+  color: #b8c8d3 !important;
+}
+
+.app-shell.theme-dark .integrity-panel .workspace-panel-heading .ui-badge {
+  color: #d8fbff !important;
+  background: rgba(27, 224, 236, 0.12) !important;
+  border-color: rgba(142, 231, 239, 0.34) !important;
+}
+
+.app-shell.theme-dark .integrity-toolbar {
+  background:
+    linear-gradient(180deg, #142126, #111b20) !important;
+}
+
 .app-shell.theme-dark .source-verification-heading strong,
 .app-shell.theme-dark .integrity-claim-main strong,
 .app-shell.theme-dark .integrity-summary strong,
 .app-shell.theme-dark .integrity-detail-row strong,
 .app-shell.theme-dark .integrity-evidence-source strong {
-  color: var(--text);
+  color: #f4fbff;
 }
 
 .app-shell.theme-dark .source-verification-heading span,
 .app-shell.theme-dark .integrity-claim-main span,
 .app-shell.theme-dark .integrity-detail-row span,
 .app-shell.theme-dark .integrity-evidence blockquote {
-  color: var(--muted);
+  color: #c2d0d8;
 }
 
 .app-shell.theme-dark .integrity-results {
@@ -3861,4 +4073,74 @@ body {
   .outputs-panel .artifact-actions button {
     width: 100%;
   }
+}
+
+/* Final aesthetic-mode polish */
+
+.app-shell.theme-aesthetic .inputs-panel,
+.app-shell.theme-aesthetic .embedded-dna,
+.app-shell.theme-aesthetic .dna-empty,
+.app-shell.theme-aesthetic .integrity-panel,
+.app-shell.theme-aesthetic .outputs-panel,
+.app-shell.theme-aesthetic .versions-panel,
+.app-shell.theme-aesthetic .home-module,
+.app-shell.theme-aesthetic .settings-dashboard .ui-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(255, 247, 251, 0.92)) !important;
+  border-color: rgba(185, 79, 112, 0.22) !important;
+  box-shadow:
+    0 24px 58px rgba(100, 54, 74, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+.app-shell.theme-aesthetic .workspace-panel-heading,
+.app-shell.theme-aesthetic .dna-collapse-header,
+.app-shell.theme-aesthetic .dna-panel-bar,
+.app-shell.theme-aesthetic .compact-heading,
+.app-shell.theme-aesthetic .outputs-panel .workspace-panel-heading,
+.app-shell.theme-aesthetic .versions-panel .workspace-panel-heading {
+  background:
+    linear-gradient(135deg, rgba(255, 250, 253, 0.98), rgba(241, 252, 248, 0.9)) !important;
+  border-color: rgba(185, 79, 112, 0.18) !important;
+}
+
+.app-shell.theme-aesthetic .ui-badge {
+  color: #7c2d55;
+  background: linear-gradient(135deg, #fff0f6, #edf9f5);
+  border-color: rgba(185, 79, 112, 0.22);
+}
+
+.app-shell.theme-aesthetic .text-form input,
+.app-shell.theme-aesthetic .text-form textarea,
+.app-shell.theme-aesthetic .workflow-select,
+.app-shell.theme-aesthetic .generation-select,
+.app-shell.theme-aesthetic .workflow-name-input,
+.app-shell.theme-aesthetic .inspector-field input,
+.app-shell.theme-aesthetic .inspector-field textarea,
+.app-shell.theme-aesthetic .array-item input,
+.app-shell.theme-aesthetic .add-row input,
+.app-shell.theme-aesthetic .outputs-panel .artifact-card pre {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(185, 79, 112, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.app-shell.theme-aesthetic .ui-button-primary,
+.app-shell.theme-aesthetic .outputs-panel .output-controls .ui-button-primary {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #b94f70, #e16455) !important;
+  border-color: rgba(185, 79, 112, 0.46) !important;
+  box-shadow: 0 16px 34px rgba(185, 79, 112, 0.24) !important;
+}
+
+.app-shell.theme-aesthetic .ui-button-primary:hover:not(:disabled),
+.app-shell.theme-aesthetic .outputs-panel .output-controls .ui-button-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #a94366, #d95246) !important;
+}
+
+.app-shell.theme-aesthetic .output-controls button.selected,
+.app-shell.theme-aesthetic .view-switcher button.active {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #b94f70, #e16455) !important;
+  border-color: rgba(185, 79, 112, 0.42) !important;
 }
