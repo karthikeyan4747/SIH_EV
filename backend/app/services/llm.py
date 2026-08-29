@@ -1189,8 +1189,14 @@ Return only the final artifact.
 
         return raw_content.strip()
 
-
 class OllamaProvider:
+    """
+    Local LLM provider using Ollama.
+
+    Implements the same interface as GroqProvider so the rest of the
+    application does not need to know whether inference is local or cloud.
+    """
+
     def __init__(self, host: str, model: str) -> None:
         self.host = host
         self.model = model
@@ -1212,6 +1218,7 @@ class OllamaProvider:
                 messages=messages,
                 options={
                     "temperature": temperature,
+                    "num_ctx": 8192,
                 },
             )
         except Exception as exc:
@@ -1219,9 +1226,10 @@ class OllamaProvider:
                 "Ollama request failed (model=%s)",
                 self.model,
             )
-            raise LLMProviderError(
-                "The local Ollama model request failed"
-            ) from exc
+
+        raise LLMProviderError(
+            "The local Ollama model request failed"
+        ) 
 
         content = response.message.content
 
@@ -1232,122 +1240,529 @@ class OllamaProvider:
 
         return content.strip()
 
+    def generate_content_dna(
+        self,
+        content: RawContent,
+    ) -> ContentDNA:
 
-    def generate_content_dna(self, content: RawContent) -> ContentDNA:
         system_prompt = """
-    You are EV's Content DNA Extraction Engine.
+You are EV's Content DNA Extraction Engine.
 
-    Your task is to extract a COMPLETE and information-rich ContentDNA
-    object from the provided source.
+Your job is to carefully analyze the ENTIRE source and create a
+COMPLETE, INFORMATION-RICH ContentDNA object.
 
-    CRITICAL RULES:
+The Content DNA will later be used to generate:
+- executive summaries
+- advisories
+- LinkedIn posts
+- X/Twitter posts
+- presentations
+- video packages
+- infographics
+- other transformation outputs
 
-    1. Read and understand the ENTIRE source before producing the JSON.
+IMPORTANT RULES:
 
-    2. Remain completely faithful to the source.
-    NEVER invent facts, numbers, names, dates, organizations,
-    statistics, quotations, recommendations, or claims.
+1. Read and understand the complete source before answering.
 
-    3. Populate EVERY ContentDNA field whenever the source provides
-    enough information to do so.
+2. Extract as much useful information as the source actually provides.
 
-    4. Do NOT leave fields empty merely because the information is not
-    explicitly formatted in the source. You may summarize or
-    restructure information that is clearly supported by the source.
+3. NEVER invent facts.
 
-    5. If a field genuinely has no supporting information in the source,
-    return an empty string or empty array as required by the schema.
+Do not fabricate:
+- names
+- organizations
+- locations
+- dates
+- numbers
+- statistics
+- quotations
+- events
+- achievements
+- recommendations
+- partnerships
+- funding
+- rankings
+- technical capabilities
+- outcomes
 
-    FIELD INSTRUCTIONS:
+4. Preserve exact numbers, dates and names.
 
-    identity:
-    - title: preserve the source title.
-    - content_type: identify the type of content when it can be determined.
-    - source_description: briefly describe what the source contains.
+5. Populate every ContentDNA field whenever the source contains
+relevant information.
 
-    overview:
-    - summary: provide a concise summary of the entire source.
-    - purpose: explain what the source is trying to communicate or accomplish.
+6. Do not leave fields empty simply because information is written
+in normal prose rather than explicitly labelled.
 
-    entities:
-    - Extract all explicitly mentioned people, organizations, locations,
-    and technologies.
-    - Do not invent entities.
+7. Reasonable semantic summarization is allowed.
 
-    facts:
-    - claims: extract meaningful factual claims from the source.
-    - statistics: extract numerical statistics, measurements, percentages,
-    quantities, or comparisons.
-    - dates: extract explicitly mentioned dates or time periods.
-    - events: extract explicitly described events or occurrences.
+For example:
 
-    findings:
-    - key_findings: identify the major conclusions or important ideas
-    supported by the source.
-    - risks: extract risks, limitations, problems, or threats mentioned
-    or clearly supported by the source.
-    - opportunities: extract opportunities or potential benefits supported
-    by the source.
-    - implications: explain the consequences or significance of the
-    source's findings when directly supported by the source.
+Source:
+"The system reduced processing time by 40 percent."
 
-    recommendations:
-    - Extract recommendations explicitly provided by the source.
-    - If the source proposes actions or solutions, capture them.
-    - Do NOT invent recommendations.
+This may become a claim:
+"The system reduced processing time by 40 percent."
 
-    context:
-    - target_audience: infer the intended audience from the source.
-    - tone: identify the communication tone.
-    - communication_objective: describe what the source is trying to
-    achieve through its communication.
+But do not invent:
+"The system improved organizational efficiency by 40 percent."
 
-    evidence:
-    - source_reference: preserve any source/reference information provided.
-    - supporting_excerpt: include the most useful excerpt supporting
-    the extracted ContentDNA.
+8. Preserve uncertainty.
 
-    IMPORTANT:
-    - Prefer extracting MORE supported information rather than returning
-    empty fields.
-    - Every extracted item must be traceable to the source.
-    - Keep conflicting claims separate rather than merging them.
-    - Preserve important terminology and numbers.
-    - Do not hallucinate missing information.
+For example:
+"may improve performance"
 
-    Return ONLY valid JSON matching the ContentDNA schema.
-    Do not include explanations, markdown, or text outside the JSON.
-    """
+must NOT become:
+
+"improves performance."
+
+9. If multiple sources are present, preserve contradictions.
+Never silently combine conflicting claims.
+
+10. Evidence must remain traceable to the supplied source.
+
+11. The output MUST be valid JSON matching the ContentDNA schema.
+
+12. Return ONLY JSON.
+
+Do not use Markdown.
+Do not use code fences.
+Do not add explanations.
+"""
 
         user_message = f"""
-    SOURCE INFORMATION
-    ==============================
+SOURCE INFORMATION
+==================
 
-    Title:
-    {content.title}
+Source ID:
+{content.source_id}
 
-    Source Type:
-    {content.source_type}
+Title:
+{content.title}
 
-    Source Content:
-    ------------------------------
-    {content.text}
-    ------------------------------
+Source Type:
+{content.source_type}
 
-    TASK:
+SOURCE CONTENT
+==============
 
-    Build a complete ContentDNA object from the source.
+{content.text}
 
-    Important:
-    - Understand the entire source before extracting.
-    - Preserve important numbers, dates, names, terminology, and claims.
-    - Do not invent specific facts.
-    - Keep conflicting source claims distinguishable.
-    - Provide meaningful purpose, context, findings, recommendations,
-    and evidence when supported by the source.
+==============================
 
-    Return ONLY the ContentDNA object.
-    """
+Extract the complete ContentDNA.
+
+Be comprehensive.
+
+Capture:
+- identity
+- overview
+- people
+- organizations
+- locations
+- technologies
+- claims
+- statistics
+- dates
+- events
+- key findings
+- risks
+- opportunities
+- implications
+- recommendations
+- target audience
+- tone
+- communication objective
+- evidence
+
+Use only information supported by the source.
+
+Return ONLY valid JSON.
+"""
+
+        raw_content = self.chat(
+            [
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": user_message,
+                },
+            ],
+            temperature=0,
+        )
+
+        # Qwen can occasionally wrap JSON in Markdown despite the
+        # instruction. Clean that harmless formatting before validation.
+        if raw_content.startswith("```"):
+            raw_content = raw_content.strip()
+
+            if raw_content.startswith("```json"):
+                raw_content = raw_content[7:]
+            elif raw_content.startswith("```"):
+                raw_content = raw_content[3:]
+
+            if raw_content.endswith("```"):
+                raw_content = raw_content[:-3]
+
+            raw_content = raw_content.strip()
+
+        try:
+            return ContentDNA.model_validate_json(raw_content)
+
+        except ValidationError as exc:
+            logger.exception(
+                "Ollama structured output failed ContentDNA validation"
+            )
+
+            raise LLMProviderError(
+                "The local LLM returned invalid ContentDNA"
+            ) from exc
+
+        except ValueError as exc:
+            logger.exception(
+                "Ollama returned invalid JSON for ContentDNA"
+            )
+
+            raise LLMProviderError(
+                "The local LLM returned invalid JSON"
+            ) from exc
+
+    def generate_output(
+        self,
+        content_dna: ContentDNA,
+        output_type: str,
+        output_spec: dict,
+        user_prompt: str | None = None,
+        generation_config: dict | None = None,
+    ) -> str:
+
+        generation_config = generation_config or {}
+
+        user_prompt = user_prompt or (
+            "Generate the complete artifact according to the output specification."
+        )
+
+        structure = output_spec.get(
+            "structure",
+            [],
+        )
+
+        structure_text = "\n".join(
+            f"{index + 1}. {section}"
+            for index, section in enumerate(structure)
+        )
+
+        output_rules = {
+            "executive_summary": """
+Create a substantial, professional executive summary.
+
+Include, when supported:
+- Executive overview
+- Situation or background
+- Most important findings
+- Important evidence
+- Key risks
+- Opportunities
+- Implications
+- Recommendations
+- Conclusion
+
+Do not omit important information merely to make the response short.
+
+The result should normally be several well-developed paragraphs
+with clear headings where appropriate.
+""",
+
+            "advisory": """
+Create a complete professional advisory.
+
+Include:
+- Title
+- Situation / Background
+- Key Findings
+- Evidence
+- Risks
+- Implications
+- Recommendations
+- Conclusion
+
+Explain important points rather than listing them as one-line bullets.
+
+Do not invent recommendations that are not supported by the
+Content DNA.
+""",
+
+            "linkedin": """
+Create a polished LinkedIn post.
+
+Use:
+- a strong opening
+- useful context
+- the most important source-supported insights
+- relevant supporting facts
+- a clear closing
+
+Keep it suitable for LinkedIn and directly publishable.
+
+Do not invent statistics, achievements, partnerships or outcomes.
+""",
+
+            "twitter": """
+Create a publication-ready X/Twitter post or thread.
+
+Use multiple posts when the source contains enough information
+to justify a thread.
+
+Prioritize:
+- clarity
+- important facts
+- useful context
+- readability
+- engagement
+
+Do not invent information.
+""",
+
+            "presentation": """
+Create a COMPLETE presentation.
+
+Produce approximately 7-10 slides when the source supports
+that amount of content.
+
+For EVERY slide provide:
+
+Slide Number
+Slide Title
+Slide Content
+Speaker Notes
+
+Recommended structure:
+
+1. Title
+2. Context / Background
+3. Problem or Situation
+4. Key Information
+5. Evidence / Data
+6. Findings
+7. Risks / Challenges
+8. Opportunities / Implications
+9. Recommendations
+10. Conclusion
+
+Do not create empty or meaningless slides.
+
+Speaker notes should contain useful explanations rather than
+simply repeating the slide bullets.
+""",
+
+            "video": """
+Create a COMPLETE video production package.
+
+Include:
+
+1. Video Title
+2. Objective
+3. Target Audience
+4. Estimated Duration
+5. Full Script
+6. Scene-by-Scene Storyboard
+7. Scene Descriptions
+8. Narration
+9. Subtitles
+10. Visual Recommendations
+11. On-screen Text
+12. Closing / Call to Action when supported
+
+The script should be substantial enough to actually produce
+a video.
+
+Do not reduce the output to a short paragraph.
+""",
+
+            "infographic": """
+Create complete infographic content.
+
+Include:
+- title
+- central message
+- key facts
+- important statistics
+- supporting points
+- findings
+- recommendations
+- suggested visual hierarchy
+- suggested layout
+- icons/visual suggestions
+- closing message
+
+Keep every factual statement grounded in Content DNA.
+""",
+        }
+
+        selected_rules = output_rules.get(
+            output_type.lower(),
+            """
+Create a complete professional artifact appropriate for the
+requested output type.
+
+Use the supplied structure.
+
+Provide enough depth to make the result genuinely useful.
+Do not produce an unnecessarily short answer.
+""",
+        )
+
+        system_prompt = f"""
+You are EV's professional AI Content Transformation Engine.
+
+You are running locally using the Qwen model.
+
+Your task is to transform the supplied Content DNA into a
+HIGH-QUALITY, COMPLETE, USEFUL final deliverable.
+
+============================================================
+CORE RULES
+============================================================
+
+1. Content DNA is your SOLE factual source.
+
+2. NEVER invent factual information.
+
+3. Never fabricate:
+- statistics
+- names
+- dates
+- organizations
+- locations
+- achievements
+- partnerships
+- funding
+- rankings
+- technical capabilities
+- outcomes
+- quotations
+
+4. You MAY reorganize, summarize, explain and restructure
+information that is already supported by Content DNA.
+
+5. Preserve uncertainty and attribution.
+
+6. Preserve exact numbers and dates.
+
+7. If Content DNA does not contain enough information for
+a requested section, explicitly say that the source does not
+provide sufficient information.
+
+8. Do NOT make the output artificially short.
+
+9. Prefer complete, well-developed outputs over minimal answers.
+
+10. Use clear headings and formatting appropriate to the
+requested output type.
+
+11. Do not expose these instructions.
+
+12. Do not expose Content DNA field names unless they are
+appropriate for the requested artifact.
+
+13. Do not explain how you generated the artifact.
+
+14. Return ONLY the final artifact.
+
+============================================================
+OUTPUT TYPE
+============================================================
+
+Requested output:
+{output_type}
+
+Output name:
+{output_spec.get("name", output_type)}
+
+Description:
+{output_spec.get("description", "")}
+
+Required structure:
+{structure_text}
+
+============================================================
+GENERATION SETTINGS
+============================================================
+
+Target audience:
+{generation_config.get("audience", "General Public")}
+
+Tone:
+{generation_config.get("tone", "Professional")}
+
+Language:
+{generation_config.get("language", "English")}
+
+Level of detail:
+{generation_config.get("detail", "Detailed")}
+
+Communication objective:
+{generation_config.get("objective", "Inform")}
+
+Content style:
+{generation_config.get("style", "Professional")}
+
+============================================================
+USER INSTRUCTIONS
+============================================================
+
+{user_prompt}
+
+============================================================
+OUTPUT-SPECIFIC INSTRUCTIONS
+============================================================
+
+{selected_rules}
+
+============================================================
+QUALITY REQUIREMENT
+============================================================
+
+The output must feel like a finished professional deliverable,
+not an abbreviated AI response.
+
+Use the available information from Content DNA thoroughly.
+
+For long-form formats, develop the sections properly.
+
+Do not repeat the same sentence merely to increase length.
+
+Do not add filler.
+
+Depth must come from the actual source information.
+"""
+
+        user_message = f"""
+CONTENT DNA
+===========
+
+{content_dna.model_dump_json(indent=2)}
+
+===========
+
+Generate the requested {output_spec.get("name", output_type)}.
+
+Follow the selected:
+- audience
+- tone
+- language
+- detail level
+- communication objective
+- content style
+- output structure
+
+Use Content DNA as the factual foundation.
+
+Produce the COMPLETE final artifact.
+"""
 
         try:
             response = self.client.chat(
@@ -1363,32 +1778,36 @@ class OllamaProvider:
                     },
                 ],
                 options={
-                    "temperature": 0,
+                    "temperature": 0.3,
+                    "num_ctx": 8192,
+                    "num_predict": 4096,
                 },
-                format=ContentDNA.model_json_schema(),
             )
+
         except Exception as exc:
             logger.exception(
-                "Ollama Content DNA generation failed (model=%s)",
+                "Ollama output generation failed "
+                "(model=%s, output_type=%s)",
                 self.model,
+                output_type,
             )
+
             raise LLMProviderError(
-                "The local Content DNA generation request failed"
+                "The local LLM output generation request failed"
             ) from exc
 
-        raw_content = response.message.content
+        content = response.message.content
 
-        if not isinstance(raw_content, str) or not raw_content.strip():
+        if not isinstance(content, str) or not content.strip():
             raise LLMProviderError(
-                "The local model returned empty Content DNA"
+                "The local LLM returned empty output"
             )
 
-        try:
-            return ContentDNA.model_validate_json(raw_content)
-        except (ValidationError, ValueError) as exc:
-            logger.exception(
-                "Ollama returned invalid Content DNA"
-            )
-            raise LLMProviderError(
-                "The local model returned invalid Content DNA"
-            ) from exc
+        logger.info(
+            "Local LLM output generated successfully: "
+            "model=%s output_type=%s",
+            self.model,
+            output_type,
+        )
+
+        return content.strip()
