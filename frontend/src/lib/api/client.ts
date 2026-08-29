@@ -5,7 +5,7 @@ import type {
   Transformation,
 } from '../../types/transformation'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 export type ModelMode = 'local' | 'api'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -202,7 +202,7 @@ export function analyzeSourceIntegrity(
 }
 
 export function getModelMode() {
-  return request<{ mode: ModelMode; label: string }>('/api/v1/model-mode')
+  return request<{ mode: ModelMode; label: string }>('/api/v1/model-mode/')
 }
 
 export function toggleModelMode() {

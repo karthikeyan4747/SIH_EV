@@ -33,7 +33,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
-import { analyzeSourceIntegrity } from '../../lib/api/client'
+import { API_BASE_URL, analyzeSourceIntegrity } from '../../lib/api/client'
 
 import type {
   IntegrityClaim,
@@ -640,34 +640,65 @@ function WorkspaceOutputs({
   function cleanSlideLine(value: string) {
     return value
       .replace(/^#{1,6}\s*/, '')
-      .replace(/^[-*]\s*/, '')
+      .replace(/^[-*•]\s*/, '')
       .replace(/^\d+[.)]\s*/, '')
-      .replace(/\*\*/g, '')
+      .replace(/\*/g, '')
       .trim()
   }
 
+  function stripContentLabel(value: string) {
+    return value
+      .replace(/^(content|speaker notes?|notes)\s*:\s*/i, '')
+      .trim()
+  }
+
+  function isSlideMetadataLine(value: string) {
+    return /^(content|speaker notes?|notes)\s*:?\s*$/i.test(value.trim()) || /^[\u2013-]$/.test(value.trim())
+  }
+
+  function isExcludedPptField(value: string) {
+    return /^(name|department|reg(?:istration)?\s*(?:no\.?|number)?)\s*:/i.test(value.trim())
+  }
+
+  function sectionLabelFromTitle(value: string) {
+    const words = cleanSlideLine(value)
+      .replace(/&/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+
+    return (words[0] || 'SECTION').toUpperCase().slice(0, 16)
+  }
+
   function buildPresentationSlides(content: string) {
-    const slides: { title: string; bullets: string[] }[] = []
-    let currentSlide: { title: string; bullets: string[] } | null = null
+    const slides: { section: string; title: string; bullets: string[] }[] = []
+    let currentSlide: { section: string; title: string; bullets: string[] } | null = null
 
     function finishSlide() {
       if (!currentSlide) return
 
       const titleLineIndex = currentSlide.bullets.findIndex((line) =>
-        /^title\s*:/i.test(line),
+        /^title\s*:/i.test(cleanSlideLine(line)),
       )
 
       if (titleLineIndex >= 0) {
-        currentSlide.title = currentSlide.bullets[titleLineIndex]
+        currentSlide.title = cleanSlideLine(currentSlide.bullets[titleLineIndex])
           .replace(/^title\s*:\s*/i, '')
           .trim() || currentSlide.title
         currentSlide.bullets.splice(titleLineIndex, 1)
       }
 
-      slides.push({
-        title: currentSlide.title,
-        bullets: currentSlide.bullets.filter(Boolean),
-      })
+      const bullets = currentSlide.bullets
+        .map(cleanSlideLine)
+        .map(stripContentLabel)
+        .filter((line) => line && !isSlideMetadataLine(line) && !isExcludedPptField(line))
+
+      if (bullets.length) {
+        slides.push({
+          section: currentSlide.section,
+          title: currentSlide.title,
+          bullets,
+        })
+      }
     }
 
     for (const rawLine of content.replaceAll('\r\n', '\n').split('\n')) {
@@ -682,6 +713,7 @@ function WorkspaceOutputs({
         const title = cleanSlideLine(headingMatch[2] || '') || `Slide ${slideNumber}`
 
         currentSlide = {
+          section: sectionLabelFromTitle(title),
           title,
           bullets: [],
         }
@@ -708,27 +740,44 @@ function WorkspaceOutputs({
       .filter(Boolean)
 
     if (headingBlocks.length > 1) {
-      return headingBlocks.map((block, index) => {
-        const lines = block.split('\n').map(cleanSlideLine).filter(Boolean)
-        return {
-          title: lines[0] || `Slide ${index + 1}`,
-          bullets: lines.slice(1),
-        }
-      })
+      const blockSlides = headingBlocks
+        .map((block, index) => {
+          const lines = block
+            .split('\n')
+            .map(cleanSlideLine)
+            .map(stripContentLabel)
+            .filter((line) => line && !isSlideMetadataLine(line) && !isExcludedPptField(line))
+
+          return {
+            section: sectionLabelFromTitle(lines[0] || `Slide ${index + 1}`),
+            title: lines[0] || `Slide ${index + 1}`,
+            bullets: lines.slice(1),
+          }
+        })
+        .filter((slide) => slide.bullets.length)
+
+      if (blockSlides.length) {
+        return blockSlides
+      }
     }
 
-    const lines = content.split('\n').map(cleanSlideLine).filter(Boolean)
-    const chunkSize = 6
+    const lines = content
+      .split('\n')
+      .map(cleanSlideLine)
+      .map(stripContentLabel)
+      .filter((line) => line && !isSlideMetadataLine(line) && !isExcludedPptField(line))
+    const chunkSize = 4
 
     for (let index = 0; index < Math.max(lines.length, 1); index += chunkSize) {
       const chunk = lines.slice(index, index + chunkSize)
       slides.push({
+        section: index === 0 ? 'OVERVIEW' : `PART ${slides.length + 1}`,
         title: index === 0 ? 'Presentation Overview' : `Slide ${slides.length + 1}`,
         bullets: chunk,
       })
     }
 
-    return slides.length ? slides : [{ title: 'Presentation', bullets: ['No generated content available.'] }]
+    return slides.length ? slides : [{ section: 'OVERVIEW', title: 'Presentation', bullets: ['No generated content available.'] }]
   }
 
   function crc32(data: Uint8Array) {
@@ -835,38 +884,63 @@ function WorkspaceOutputs({
     return zip
   }
 
-  function slideXml(slide: { title: string; bullets: string[] }, index: number) {
-    const bulletRuns = slide.bullets.length
-      ? slide.bullets.map((bullet) => `
+  function slideXml(slide: { section: string; title: string; bullets: string[] }, index: number, deckTitle: string) {
+    const bodyRuns = slide.bullets.length
+      ? slide.bullets.map((paragraph) => `
         <a:p>
-          <a:pPr lvl="0"><a:buChar char="•"/></a:pPr>
-          <a:r><a:rPr lang="en-US" sz="2200"/><a:t>${xmlEscape(bullet)}</a:t></a:r>
-          <a:endParaRPr lang="en-US" sz="2200"/>
+          <a:pPr algn="l" marL="0" indent="0"/>
+          <a:r><a:rPr lang="en-US" sz="1500" dirty="0"><a:solidFill><a:srgbClr val="252B3A"/></a:solidFill></a:rPr><a:t>${xmlEscape(paragraph)}</a:t></a:r>
+          <a:endParaRPr lang="en-US" sz="1500"/>
         </a:p>
       `).join('')
-      : '<a:p><a:r><a:rPr lang="en-US" sz="2200"/><a:t></a:t></a:r></a:p>'
+      : '<a:p><a:r><a:rPr lang="en-US" sz="1500" dirty="0"/><a:t>No slide content generated.</a:t></a:r></a:p>'
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
-    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="${index === 0 ? 'F4FAF9' : 'FFFFFF'}"/></a:solidFill></p:bgPr></p:bg>
+    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></p:bgPr></p:bg>
     <p:spTree>
       <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
       <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
       <p:sp>
-        <p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="609600" y="457200"/><a:ext cx="7924800" cy="838200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
-        <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3400" b="1"><a:solidFill><a:srgbClr val="17212F"/></a:solidFill></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r><a:endParaRPr lang="en-US" sz="3400"/></a:p></p:txBody>
+        <p:nvSpPr><p:cNvPr id="2" name="Section Icon"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="548640"/><a:ext cx="320040" cy="320040"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="25400"><a:solidFill><a:srgbClr val="17245A"/></a:solidFill></a:ln></p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
       </p:sp>
       <p:sp>
-        <p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="762000" y="1600200"/><a:ext cx="7620000" cy="4572000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
-        <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${bulletRuns}</p:txBody>
+        <p:nvSpPr><p:cNvPr id="3" name="Section Dot"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="546100" y="637540"/><a:ext cx="142240" cy="142240"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="17245A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
       </p:sp>
       <p:sp>
-        <p:nvSpPr><p:cNvPr id="4" name="Footer"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="609600" y="6350000"/><a:ext cx="7924800" cy="304800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
-        <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="1100"><a:solidFill><a:srgbClr val="667386"/></a:solidFill></a:rPr><a:t>EV Workspace / Slide ${index + 1}</a:t></a:r></a:p></p:txBody>
+        <p:nvSpPr><p:cNvPr id="4" name="Section Label"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="1143000" y="548640"/><a:ext cx="3657600" cy="365760"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr wrap="square" anchor="mid"/><a:lstStyle/><a:p><a:pPr/><a:r><a:rPr lang="en-US" sz="900" b="1" dirty="0" cap="all" spc="220"><a:solidFill><a:srgbClr val="596070"/></a:solidFill></a:rPr><a:t>${xmlEscape(slide.section)}</a:t></a:r><a:endParaRPr lang="en-US" sz="900"/></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="5" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="1051560"/><a:ext cx="11247120" cy="1188720"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/><a:p><a:pPr/><a:r><a:rPr lang="en-US" sz="2600" b="1" dirty="0"><a:solidFill><a:srgbClr val="17245A"/></a:solidFill></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r><a:endParaRPr lang="en-US" sz="2600"/></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="6" name="Divider"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="2291080"/><a:ext cx="914400" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="17245A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="7" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="2651760"/><a:ext cx="11247120" cy="3657600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/>${bodyRuns}</p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="8" name="Footer Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="6355080"/><a:ext cx="5486400" cy="320040"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr wrap="square" anchor="mid"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="650" dirty="0"><a:solidFill><a:srgbClr val="596070"/></a:solidFill></a:rPr><a:t>${xmlEscape(deckTitle)}</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="9" name="Slide Number"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="11368735" y="6355080"/><a:ext cx="457200" cy="320040"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr wrap="square" anchor="mid"/><a:lstStyle/><a:p><a:pPr algn="r"/><a:r><a:rPr lang="en-US" sz="650" dirty="0"><a:solidFill><a:srgbClr val="596070"/></a:solidFill></a:rPr><a:t>${index + 1}</a:t></a:r></a:p></p:txBody>
       </p:sp>
     </p:spTree>
   </p:cSld>
@@ -876,30 +950,65 @@ function WorkspaceOutputs({
 
   function downloadPpt(filename: string, content: string) {
     const slides = buildPresentationSlides(content)
+    const deckTitle = slides[0]?.title || filename.replace(/\.pptx$/i, '')
+    const masterRelationshipId = `rId${slides.length + 1}`
     const slideIds = slides.map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 1}"/>`).join('')
     const presentationRelationships = slides.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${index + 1}.xml"/>`).join('')
     const slideContentTypes = slides.map((_, index) => `<Override PartName="/ppt/slides/slide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')
+    const slideRelationshipFiles = slides.map((_, index) => ({
+      name: `ppt/slides/_rels/slide${index + 1}.xml.rels`,
+      content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>',
+    }))
     const files = [
       {
         name: '[Content_Types].xml',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>${slideContentTypes}</Types>`,
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${slideContentTypes}</Types>`,
       },
       {
         name: '_rels/.rels',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>',
+      },
+      {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(filename.replace(/\.pptx$/i, ''))}</dc:title><dc:creator>EV Workspace</dc:creator><cp:lastModifiedBy>EV Workspace</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`,
+      },
+      {
+        name: 'docProps/app.xml',
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>EV Workspace</Application><PresentationFormat>On-screen Show (4:3)</PresentationFormat><Slides>${slides.length}</Slides><Notes>0</Notes><HiddenSlides>0</HiddenSlides><ScaleCrop>false</ScaleCrop></Properties>`,
       },
       {
         name: 'ppt/presentation.xml',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldSz cx="9144000" cy="6858000" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/><p:sldIdLst>${slideIds}</p:sldIdLst></p:presentation>`,
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="${masterRelationshipId}"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/><p:defaultTextStyle><a:defPPr><a:defRPr lang="en-US"/></a:defPPr></p:defaultTextStyle></p:presentation>`,
       },
       {
         name: 'ppt/_rels/presentation.xml.rels',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${presentationRelationships}</Relationships>`,
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${presentationRelationships}<Relationship Id="${masterRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>`,
+      },
+      {
+        name: 'ppt/slideMasters/slideMaster1.xml',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>',
+      },
+      {
+        name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>',
+      },
+      {
+        name: 'ppt/slideLayouts/slideLayout1.xml',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>',
+      },
+      {
+        name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>',
+      },
+      {
+        name: 'ppt/theme/theme1.xml',
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="EV Workspace"><a:themeElements><a:clrScheme name="EV"><a:dk1><a:srgbClr val="17212F"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="253247"/></a:dk2><a:lt2><a:srgbClr val="F4FAF9"/></a:lt2><a:accent1><a:srgbClr val="0F9F92"/></a:accent1><a:accent2><a:srgbClr val="2563EB"/></a:accent2><a:accent3><a:srgbClr val="F97316"/></a:accent3><a:accent4><a:srgbClr val="22C55E"/></a:accent4><a:accent5><a:srgbClr val="64748B"/></a:accent5><a:accent6><a:srgbClr val="E2E8F0"/></a:accent6><a:hlink><a:srgbClr val="2563EB"/></a:hlink><a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink></a:clrScheme><a:fontScheme name="EV"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="EV"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>',
       },
       ...slides.map((slide, index) => ({
         name: `ppt/slides/slide${index + 1}.xml`,
-        content: slideXml(slide, index),
+        content: slideXml(slide, index, deckTitle),
       })),
+      ...slideRelationshipFiles,
     ]
 
     downloadBinary(filename, createZip(files), 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
@@ -1029,7 +1138,7 @@ function WorkspaceOutputs({
       setWorkflowLoading(true)
 
       const response = await fetch(
-        'http://127.0.0.1:8000/api/v1/transformations/workflows',
+        `${API_BASE_URL}/api/v1/transformations/workflows`,
       )
 
       if (!response.ok) {
@@ -1099,7 +1208,7 @@ function WorkspaceOutputs({
 
     try {
       const response = await fetch(
-        'http://127.0.0.1:8000/api/v1/transformations/workflows',
+        `${API_BASE_URL}/api/v1/transformations/workflows`,
         {
           method: 'POST',
           headers: {

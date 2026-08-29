@@ -34,7 +34,7 @@ def _response(mode: ModelMode) -> ModelModeResponse:
     )
 
 
-@router.get("", response_model=ModelModeResponse)
+@router.get("/", response_model=ModelModeResponse)
 def get_model_mode(request: Request) -> ModelModeResponse:
     mode = getattr(request.app.state, "llm_provider_mode", "local")
     return _response("api" if mode == "api" else "local")
