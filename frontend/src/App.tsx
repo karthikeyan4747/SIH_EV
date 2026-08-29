@@ -46,7 +46,7 @@ function App() {
   const [view, setView] = useState<ViewState>('workspace')
   const [homeMenuOpen, setHomeMenuOpen] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>('aesthetic')
-  const [modelMode, setModelMode] = useState<ModelMode>('local')
+  const [modelMode, setModelMode] = useState<ModelMode>('api')
   const [modelModeLoading, setModelModeLoading] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [busy, setBusy] = useState(false)
@@ -97,7 +97,7 @@ function App() {
       const response = await getModelMode()
       setModelMode(response.mode)
     } catch {
-      setModelMode('local')
+      setModelMode('api')
     }
   }
 

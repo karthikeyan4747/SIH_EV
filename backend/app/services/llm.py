@@ -4,7 +4,10 @@ from typing import Any, Protocol
 from groq import Groq
 from pydantic import ValidationError
 
-from ollama import Client
+try:
+    from ollama import Client
+except ImportError:
+    Client = None
 
 from app.models.content import ContentDNA, RawContent
 
@@ -1191,13 +1194,18 @@ class OllamaProvider:
     def __init__(self, host: str, model: str) -> None:
         self.host = host
         self.model = model
-        self.client = Client(host=host)
+        self.client = Client(host=host) if Client is not None else None
 
     def chat(
         self,
         messages: list[dict],
         temperature: float = 0,
     ) -> str:
+        if self.client is None:
+            raise LLMProviderError(
+                "The local Ollama client is not installed"
+            )
+
         try:
             response = self.client.chat(
                 model=self.model,

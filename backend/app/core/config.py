@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
 
-    llm_provider: str = "ollama"
+    llm_provider: str = "groq"
 
     ollama_host: str = "http://127.0.0.1:11434"
 
