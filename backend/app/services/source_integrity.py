@@ -491,6 +491,9 @@ Return ONLY valid JSON.
             groups[canonical_key].append(claim)
 
         conflicts: list[Conflict] = []
+        compared_pairs: set[
+            tuple[str, str]
+        ] = set()
 
         for canonical_key, group in groups.items():
 
@@ -501,99 +504,192 @@ Return ONLY valid JSON.
             # Compare every pair of claims with compatible context.
             # ----------------------------------------------------
 
-            compared_pairs: set[
-                tuple[str, str]
-            ] = set()
-
             for i in range(len(group)):
 
                 for j in range(
                     i + 1,
                     len(group),
                 ):
-                    claim_a = group[i]
-                    claim_b = group[j]
-
-                    if not self._contexts_compatible(
-                        claim_a,
-                        claim_b,
-                    ):
-                        continue
-
-                    pair_key = tuple(
-                        sorted(
-                            [
-                                claim_a.claim_id,
-                                claim_b.claim_id,
-                            ]
-                        )
+                    self._compare_claim_pair(
+                        claim_a=group[i],
+                        claim_b=group[j],
+                        claim_key=canonical_key,
+                        conflicts=conflicts,
+                        compared_pairs=compared_pairs,
                     )
 
-                    if pair_key in compared_pairs:
-                        continue
+        # LLM extraction can assign different claim keys or predicates to
+        # the same real-world measurement. Run a conservative second pass
+        # across groups so obvious conflicts are still surfaced.
+        for i in range(len(claims)):
+            for j in range(i + 1, len(claims)):
+                claim_a = claims[i]
+                claim_b = claims[j]
 
-                    compared_pairs.add(pair_key)
+                pair_key = self._pair_key(
+                    claim_a,
+                    claim_b,
+                )
 
-                    value_a = self._normalize_value(
-                        claim_a.value
-                    )
+                if pair_key in compared_pairs:
+                    continue
 
-                    value_b = self._normalize_value(
-                        claim_b.value
-                    )
+                if not self._claims_are_comparable(
+                    claim_a,
+                    claim_b,
+                ):
+                    continue
 
-                    # ------------------------------------------------
-                    # SAME VALUE → CORROBORATED
-                    # ------------------------------------------------
+                claim_key = self._canonical_claim_key(
+                    claim_a
+                )
 
-                    if (
-                        value_a
-                        and value_b
-                        and value_a == value_b
-                    ):
-                        claim_a.status = "corroborated"
-                        claim_b.status = "corroborated"
-
-                        continue
-
-                    # ------------------------------------------------
-                    # DIFFERENT VALUE → CONFLICT
-                    # ------------------------------------------------
-
-                    if (
-                        value_a
-                        and value_b
-                        and value_a != value_b
-                    ):
-                        description = (
-                            "Conflicting values detected for "
-                            f"{self._human_claim_key(claim_a)}: "
-                            f"{self._claim_source_label(claim_a)}: "
-                            f"{claim_a.value}; "
-                            f"{self._claim_source_label(claim_b)}: "
-                            f"{claim_b.value}"
-                        )
-
-                        conflicts.append(
-                            Conflict(
-                                conflict_id=(
-                                    f"conflict-"
-                                    f"{len(conflicts) + 1:03d}"
-                                ),
-                                claim_key=canonical_key,
-                                claim_ids=[
-                                    claim_a.claim_id,
-                                    claim_b.claim_id,
-                                ],
-                                description=description,
-                                status="unresolved",
-                            )
-                        )
-
-                        claim_a.status = "conflict"
-                        claim_b.status = "conflict"
+                self._compare_claim_pair(
+                    claim_a=claim_a,
+                    claim_b=claim_b,
+                    claim_key=claim_key,
+                    conflicts=conflicts,
+                    compared_pairs=compared_pairs,
+                )
 
         return conflicts
+
+    def _compare_claim_pair(
+        self,
+        claim_a: Claim,
+        claim_b: Claim,
+        claim_key: str,
+        conflicts: list[Conflict],
+        compared_pairs: set[tuple[str, str]],
+    ) -> None:
+        if not self._contexts_compatible(
+            claim_a,
+            claim_b,
+        ):
+            return
+
+        pair_key = self._pair_key(
+            claim_a,
+            claim_b,
+        )
+
+        if pair_key in compared_pairs:
+            return
+
+        compared_pairs.add(pair_key)
+
+        value_a = self._normalize_value(
+            claim_a.value
+        )
+
+        value_b = self._normalize_value(
+            claim_b.value
+        )
+
+        if not value_a or not value_b:
+            return
+
+        if value_a == value_b:
+            if claim_a.status != "conflict":
+                claim_a.status = "corroborated"
+
+            if claim_b.status != "conflict":
+                claim_b.status = "corroborated"
+
+            return
+
+        description = (
+            "Conflicting values detected for "
+            f"{self._human_claim_key(claim_a)}: "
+            f"{self._claim_source_label(claim_a)}: "
+            f"{claim_a.value}; "
+            f"{self._claim_source_label(claim_b)}: "
+            f"{claim_b.value}"
+        )
+
+        conflicts.append(
+            Conflict(
+                conflict_id=(
+                    f"conflict-"
+                    f"{len(conflicts) + 1:03d}"
+                ),
+                claim_key=claim_key,
+                claim_ids=[
+                    claim_a.claim_id,
+                    claim_b.claim_id,
+                ],
+                description=description,
+                status="unresolved",
+            )
+        )
+
+        claim_a.status = "conflict"
+        claim_b.status = "conflict"
+
+    def _pair_key(
+        self,
+        claim_a: Claim,
+        claim_b: Claim,
+    ) -> tuple[str, str]:
+        return tuple(
+            sorted(
+                [
+                    claim_a.claim_id,
+                    claim_b.claim_id,
+                ]
+            )
+        )
+
+    def _claims_are_comparable(
+        self,
+        claim_a: Claim,
+        claim_b: Claim,
+    ) -> bool:
+        if not self._contexts_compatible(
+            claim_a,
+            claim_b,
+        ):
+            return False
+
+        if not self._units_compatible(
+            claim_a.unit,
+            claim_b.unit,
+        ):
+            return False
+
+        if not (
+            self._normalize_value(claim_a.value)
+            and self._normalize_value(claim_b.value)
+        ):
+            return False
+
+        subject_a = self._normalize_subject(
+            claim_a.subject
+        )
+        subject_b = self._normalize_subject(
+            claim_b.subject
+        )
+
+        if subject_a and subject_a == subject_b:
+            return self._predicates_related(
+                claim_a.predicate,
+                claim_b.predicate,
+            )
+
+        key_a = self._keyword_set(
+            claim_a.claim_key,
+            claim_a.subject,
+            claim_a.predicate,
+            claim_a.unit,
+        )
+        key_b = self._keyword_set(
+            claim_b.claim_key,
+            claim_b.subject,
+            claim_b.predicate,
+            claim_b.unit,
+        )
+
+        return len(key_a & key_b) >= 2
 
     def _contexts_compatible(
         self,
@@ -830,11 +926,165 @@ Return ONLY valid JSON.
 
         return value.strip()
 
+    def _normalize_subject(
+        self,
+        value: str,
+    ) -> str:
+        normalized = self._normalize_text(value)
+
+        aliases = {
+            "entity": "organization",
+            "entities": "organization",
+            "org": "organization",
+            "orgs": "organization",
+            "organizations": "organization",
+            "institution": "organization",
+            "institutions": "organization",
+            "company": "organization",
+            "companies": "organization",
+            "people": "person",
+            "persons": "person",
+            "users": "user",
+            "customers": "customer",
+            "students": "student",
+            "incidents": "incident",
+            "events": "event",
+            "reports": "report",
+        }
+
+        return aliases.get(normalized, normalized)
+
+    def _units_compatible(
+        self,
+        unit_a: str,
+        unit_b: str,
+    ) -> bool:
+        normalized_a = self._normalize_subject(unit_a)
+        normalized_b = self._normalize_subject(unit_b)
+
+        if not normalized_a or not normalized_b:
+            return True
+
+        return normalized_a == normalized_b
+
+    def _predicates_related(
+        self,
+        predicate_a: str,
+        predicate_b: str,
+    ) -> bool:
+        normalized_a = self._normalize_predicate(
+            predicate_a
+        )
+        normalized_b = self._normalize_predicate(
+            predicate_b
+        )
+
+        if normalized_a == normalized_b:
+            return True
+
+        words_a = set(normalized_a.split())
+        words_b = set(normalized_b.split())
+
+        return bool(words_a & words_b)
+
+    def _normalize_predicate(
+        self,
+        value: str,
+    ) -> str:
+        normalized = self._normalize_text(value)
+
+        replacements = {
+            "impacted by incident": "affected by incident",
+            "impacted by": "affected by incident",
+            "affected by": "affected by incident",
+            "was impacted": "affected",
+            "impacted": "affected",
+            "reported as": "reported",
+            "was reported": "reported",
+            "were reported": "reported",
+            "estimated at": "estimated",
+        }
+
+        return replacements.get(normalized, normalized)
+
+    def _keyword_set(
+        self,
+        *values: str,
+    ) -> set[str]:
+        stopwords = {
+            "a",
+            "an",
+            "and",
+            "as",
+            "at",
+            "by",
+            "for",
+            "from",
+            "in",
+            "is",
+            "of",
+            "on",
+            "the",
+            "to",
+            "was",
+            "were",
+            "with",
+        }
+        text = " ".join(
+            self._normalize_text(value)
+            for value in values
+            if value
+        )
+
+        return {
+            self._normalize_subject(word)
+            for word in text.split()
+            if len(word) > 2 and word not in stopwords
+        }
+
     def _normalize_value(
         self,
         value: str,
     ) -> str:
         value = value.strip().lower()
+
+        number_words = {
+            "zero": "0",
+            "one": "1",
+            "two": "2",
+            "three": "3",
+            "four": "4",
+            "five": "5",
+            "six": "6",
+            "seven": "7",
+            "eight": "8",
+            "nine": "9",
+            "ten": "10",
+            "eleven": "11",
+            "twelve": "12",
+            "thirteen": "13",
+            "fourteen": "14",
+            "fifteen": "15",
+            "sixteen": "16",
+            "seventeen": "17",
+            "eighteen": "18",
+            "nineteen": "19",
+            "twenty": "20",
+            "thirty": "30",
+            "forty": "40",
+            "fifty": "50",
+            "sixty": "60",
+            "seventy": "70",
+            "eighty": "80",
+            "ninety": "90",
+        }
+
+        for word, number in number_words.items():
+            value = re.sub(
+                rf"\b{word}\b",
+                number,
+                value,
+            )
 
         # Normalize commas in numbers:
         # 17,304 -> 17304
@@ -851,6 +1101,37 @@ Return ONLY valid JSON.
             "₹",
             value,
         )
+
+        numeric_values = re.findall(
+            r"[-+]?\d+(?:\.\d+)?%?",
+            value,
+        )
+
+        if numeric_values:
+            modifiers = [
+                token
+                for token in (
+                    "₹",
+                    "$",
+                    "rs",
+                    "rupees",
+                    "lakh",
+                    "lakhs",
+                    "crore",
+                    "crores",
+                    "million",
+                    "billion",
+                    "thousand",
+                )
+                if token in value
+            ]
+
+            return " ".join(
+                [
+                    *numeric_values,
+                    *modifiers,
+                ]
+            )
 
         return value.strip()
 
