@@ -1,7 +1,8 @@
+__test__ = False
+
 from app.core.config import settings
 from app.models.content import RawContent
 from app.services.source_integrity import SourceIntegrityService
-from app.models.content import RawContent
 from app.models.transformation import (
     Claim,
     ClaimEvidence,

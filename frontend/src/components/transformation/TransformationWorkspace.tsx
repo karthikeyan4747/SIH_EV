@@ -550,7 +550,7 @@ function WorkspaceOutputs({
     useState<string>('custom')
 
   const [workflowLoading, setWorkflowLoading] =
-    useState(false)
+    useState(true)
 
   const [showSaveWorkflow, setShowSaveWorkflow] =
     useState(false)
@@ -606,25 +606,21 @@ function WorkspaceOutputs({
     URL.revokeObjectURL(url)
   }
 
-  async function loadWorkflows() {
-    try {
-      setWorkflowLoading(true)
-
-      const data = await listWorkflows()
-
-      setWorkflows(data)
-    } catch (error) {
-      console.error(
-        'Failed to load workflows:',
-        error,
-      )
-    } finally {
-      setWorkflowLoading(false)
-    }
-  }
-
   useEffect(() => {
-    void loadWorkflows()
+    let isMounted = true
+    listWorkflows()
+      .then((data) => {
+        if (isMounted) setWorkflows(data)
+      })
+      .catch((error) => {
+        console.error('Failed to load workflows:', error)
+      })
+      .finally(() => {
+        if (isMounted) setWorkflowLoading(false)
+      })
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   function updateGenerationConfigFromWorkflow(
@@ -1000,13 +996,12 @@ function WorkspaceOutputs({
           <Button
             variant="primary"
             disabled={
-              !transformation.content_dna ||
               busy ||
-              !selected.length
+              (!transformation.content_dna && !transformation.sources.length)
             }
             onClick={() =>
               onGenerateOutputs(
-                selected,
+                selected.length ? selected : ['executive_summary'],
                 generationConfig,
               )
             }

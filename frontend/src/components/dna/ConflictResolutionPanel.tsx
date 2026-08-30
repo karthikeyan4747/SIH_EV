@@ -295,6 +295,25 @@ export function ConflictResolutionPanel({
                   <h3>
                     {conflict.description}
                   </h3>
+
+                  {conflict.reason && (
+                    <div
+                      className="conflict-reason-banner"
+                      style={{
+                        marginTop: '8px',
+                        fontSize: '0.85rem',
+                        lineHeight: 1.45,
+                        color: 'var(--color-primary-400, #a855f7)',
+                        background: 'rgba(168, 85, 247, 0.08)',
+                        borderLeft: '3px solid #a855f7',
+                        padding: '6px 10px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>Why this conflict occurred: </span>
+                      <span>{conflict.reason}</span>
+                    </div>
+                  )}
                 </div>
 
                 {isResolved && (

@@ -113,9 +113,22 @@ def test_pdf_source_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invalid_file_and_empty_input_rejected(client: TestClient) -> None:
     assert client.post("/api/v1/sources/text", json={"title": "Empty", "text": " "}).status_code == 422
-    assert client.post("/api/v1/sources/file", files={"file": ("image.png", b"data")}).status_code == 415
+    assert client.post("/api/v1/sources/file", files={"file": ("program.exe", b"data")}).status_code == 415
     with pytest.raises(IngestionError):
         TXTIngestionProvider().ingest("id", "bad.txt", b"\xff")
+
+
+def test_file_exceeding_256mb_rejected(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Set a small test limit or test with mock
+    app.state.settings.max_upload_size_bytes = 100
+    response = client.post(
+        "/api/v1/sources/file",
+        files={"file": ("test.txt", b"x" * 200, "text/plain")},
+    )
+    assert response.status_code == 413
+    assert "256 MB" in response.json()["detail"]
+    # Restore standard setting
+    app.state.settings.max_upload_size_bytes = 256 * 1024 * 1024
 
 
 def test_content_dna_validation() -> None:

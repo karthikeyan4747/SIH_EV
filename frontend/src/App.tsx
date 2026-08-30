@@ -45,7 +45,13 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [view, setView] = useState<ViewState>('workspace')
   const [homeMenuOpen, setHomeMenuOpen] = useState(false)
-  const [themeMode, setThemeMode] = useState<ThemeMode>('aesthetic')
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    const savedMode = window.localStorage.getItem('ev-theme-mode')
+    if (savedMode === 'light' || savedMode === 'dark' || savedMode === 'aesthetic') {
+      return savedMode
+    }
+    return 'aesthetic'
+  })
   const [modelMode, setModelMode] = useState<ModelMode>('api')
   const [modelModeLoading, setModelModeLoading] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
@@ -56,15 +62,24 @@ function App() {
   const active = transformations.find((item) => item.id === activeId) || null
 
   useEffect(() => {
-    void refreshTransformations()
-    void refreshModelMode()
-  }, [])
+    async function init() {
+      try {
+        const response = await listTransformations()
+        setTransformations(response.transformations)
+        setActiveId((current) => current || response.transformations[0]?.id || null)
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Unable to load transformations.')
+      }
 
-  useEffect(() => {
-    const savedMode = window.localStorage.getItem('ev-theme-mode')
-    if (savedMode === 'light' || savedMode === 'dark' || savedMode === 'aesthetic') {
-      setThemeMode(savedMode)
+      try {
+        const modeResponse = await getModelMode()
+        setModelMode(modeResponse.mode)
+      } catch {
+        setModelMode('api')
+      }
     }
+
+    void init()
   }, [])
 
   function changeThemeMode(mode: ThemeMode) {
@@ -80,25 +95,6 @@ function App() {
   function logout() {
     window.localStorage.removeItem('ev-authenticated')
     setIsAuthenticated(false)
-  }
-
-  async function refreshTransformations() {
-    try {
-      const response = await listTransformations()
-      setTransformations(response.transformations)
-      setActiveId((current) => current || response.transformations[0]?.id || null)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to load transformations.')
-    }
-  }
-
-  async function refreshModelMode() {
-    try {
-      const response = await getModelMode()
-      setModelMode(response.mode)
-    } catch {
-      setModelMode('api')
-    }
   }
 
   async function switchModelMode() {

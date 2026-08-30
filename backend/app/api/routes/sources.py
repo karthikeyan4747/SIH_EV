@@ -8,10 +8,13 @@ from app.models.content_update import ContentDNAUpdate
 from app.models.source import SourceCreatedResponse, SourceResponse, TextSourceRequest
 from app.services.content_dna import ContentDNAService
 from app.services.ingestion import (
+    AudioIngestionProvider,
     DOCXIngestionProvider,
+    ImageIngestionProvider,
     IngestionError,
     PDFIngestionProvider,
     TXTIngestionProvider,
+    VideoIngestionProvider,
 )
 from app.services.llm import LLMProviderError
 from app.services.storage import LocalJSONStorage, SourceNotFoundError, SourceRecord
@@ -46,10 +49,10 @@ def _create_source(request: Request, raw_content) -> SourceCreatedResponse:
 def create_text_source(payload: TextSourceRequest, request: Request) -> SourceCreatedResponse:
     try:
         raw_content = TXTIngestionProvider().ingest(
-        str(uuid4()),
-        payload.title,
-        payload.text.encode("utf-8")
-    )
+            str(uuid4()),
+            payload.title,
+            payload.text.encode("utf-8"),
+        )
     except IngestionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _create_source(request, raw_content)
@@ -71,10 +74,30 @@ async def create_file_source(
         else ""
     )
 
-    if suffix not in {"txt", "pdf", "docx","png","jpg","jpeg","webp"}:
+    if suffix not in {
+        "txt",
+        "pdf",
+        "docx",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "mp3",
+        "wav",
+        "m4a",
+        "aac",
+        "ogg",
+        "flac",
+        "wma",
+        "mp4",
+        "mov",
+        "mkv",
+        "webm",
+        "avi",
+    }:
         raise HTTPException(
             status_code=415,
-            detail="Only TXT, PDF, and DOCX files are supported",
+            detail="Unsupported file type",
         )
 
     content = await file.read()
@@ -85,7 +108,7 @@ async def create_file_source(
     ):
         raise HTTPException(
             status_code=413,
-            detail="Uploaded file is too large",
+            detail="File is too large. Maximum supported file size is 256 MB.",
         )
 
     try:
@@ -93,8 +116,14 @@ async def create_file_source(
             provider = TXTIngestionProvider()
         elif suffix == "pdf":
             provider = PDFIngestionProvider()
-        else:
+        elif suffix == "docx":
             provider = DOCXIngestionProvider()
+        elif suffix in {"png", "jpg", "jpeg", "webp"}:
+            provider = ImageIngestionProvider()
+        elif suffix in {"mp3", "wav", "m4a", "aac", "ogg", "flac", "wma"}:
+            provider = AudioIngestionProvider()
+        else:
+            provider = VideoIngestionProvider()
 
         raw_content = provider.ingest(
             str(uuid4()),

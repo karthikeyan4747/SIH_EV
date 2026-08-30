@@ -133,6 +133,7 @@ class Conflict(BaseModel):
         default_factory=list
     )
     description: str = ""
+    reason: str = ""
     status: Literal[
         "unresolved",
         "resolved",
@@ -233,7 +234,7 @@ class OutputGenerateRequest(BaseModel):
         "presentation",
         "video",
         "infographic",
-    ]] = Field(min_length=1)
+    ]] = Field(default_factory=list)
 
     structure_ids: list[str] = Field(default_factory=list)
 

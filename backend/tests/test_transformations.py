@@ -24,11 +24,23 @@ class FakeProvider:
             evidence={"source_reference": content.source_id, "supporting_excerpt": text[:80]},
         )
 
+    def generate_output(
+        self,
+        content_dna: ContentDNA,
+        output_type: str,
+        output_spec: dict,
+        user_prompt: str | None = None,
+        generation_config: dict | None = None,
+    ) -> str:
+        return f"# Generated {output_type}\n\nContent for {content_dna.identity.title}"
+
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     app.state.transformation_storage = LocalTransformationStorage(str(tmp_path / "transformations.json"))
-    app.state.content_dna_service.provider = FakeProvider()
+    fake = FakeProvider()
+    app.state.content_dna_service.provider = fake
+    app.state.output_generation_service.llm_provider = fake
     return TestClient(app)
 
 

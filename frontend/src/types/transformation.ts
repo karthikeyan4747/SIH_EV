@@ -79,6 +79,7 @@ export interface IntegrityConflict {
   conflict_id: string
   claim_key: string
   description: string
+  reason?: string
   claim_ids: string[]
   status: 'unresolved' | 'resolved'
 }

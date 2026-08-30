@@ -55,19 +55,32 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
     setDrafts(drafts.filter((draft) => draft.id !== id))
   }
 
+  const MAX_FILE_SIZE_BYTES = 256 * 1024 * 1024
+  const [fileError, setFileError] = useState('')
+
   function selectFiles(selected: FileList | null) {
     if (!selected) return
-    const nextFiles = Array.from(selected).filter((file) => /\.(txt|pdf|docx)$/i.test(file.name))
+    const all = Array.from(selected).filter((file) => /\.(txt|pdf|docx)$/i.test(file.name))
+    const oversized = all.filter((file) => file.size > MAX_FILE_SIZE_BYTES)
+    if (oversized.length > 0) {
+      setFileError('File is too large. Maximum supported file size is 256 MB.')
+    } else {
+      setFileError('')
+    }
+    const nextFiles = all.filter((file) => file.size <= MAX_FILE_SIZE_BYTES)
     setFiles([...files, ...nextFiles.filter((file) => !files.some((existing) => existing.name === file.name && existing.size === file.size))])
   }
 
   function selectImageFiles(selected: FileList | null) {
     if (!selected) return
-
-    const nextImages = Array.from(selected).filter((file) =>
-      /\.(png|jpe?g|webp)$/i.test(file.name),
-    )
-
+    const all = Array.from(selected).filter((file) => /\.(png|jpe?g|webp)$/i.test(file.name))
+    const oversized = all.filter((file) => file.size > MAX_FILE_SIZE_BYTES)
+    if (oversized.length > 0) {
+      setFileError('File is too large. Maximum supported file size is 256 MB.')
+    } else {
+      setFileError('')
+    }
+    const nextImages = all.filter((file) => file.size <= MAX_FILE_SIZE_BYTES)
     setImageFiles((current) => [
       ...current,
       ...nextImages.filter(
@@ -83,11 +96,14 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
 
   function selectAudioFiles(selected: FileList | null) {
     if (!selected) return
-
-    const nextAudio = Array.from(selected).filter((file) =>
-      /\.(mp3|wav|m4a|aac|ogg|flac|wma)$/i.test(file.name),
-    )
-
+    const all = Array.from(selected).filter((file) => /\.(mp3|wav|m4a|aac|ogg|flac|wma)$/i.test(file.name))
+    const oversized = all.filter((file) => file.size > MAX_FILE_SIZE_BYTES)
+    if (oversized.length > 0) {
+      setFileError('File is too large. Maximum supported file size is 256 MB.')
+    } else {
+      setFileError('')
+    }
+    const nextAudio = all.filter((file) => file.size <= MAX_FILE_SIZE_BYTES)
     setAudioFiles((current) => [
       ...current,
       ...nextAudio.filter(
@@ -103,11 +119,14 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
 
   function selectVideoFiles(selected: FileList | null) {
     if (!selected) return
-
-    const nextVideos = Array.from(selected).filter((file) =>
-      /\.(mp4|mov|mkv|webm|avi)$/i.test(file.name),
-    )
-
+    const all = Array.from(selected).filter((file) => /\.(mp4|mov|mkv|webm|avi)$/i.test(file.name))
+    const oversized = all.filter((file) => file.size > MAX_FILE_SIZE_BYTES)
+    if (oversized.length > 0) {
+      setFileError('File is too large. Maximum supported file size is 256 MB.')
+    } else {
+      setFileError('')
+    }
+    const nextVideos = all.filter((file) => file.size <= MAX_FILE_SIZE_BYTES)
     setVideoFiles((current) => [
       ...current,
       ...nextVideos.filter(
@@ -125,6 +144,12 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
     <div className="eyebrow"><span className="eyebrow-line" /> SOURCE INTAKE <span className="eyebrow-line" /></div>
     <h1>Start with a source.</h1>
     <p className="lead">Give EV one source or a batch of materials. Supported inputs become one combined Content DNA.</p>
+    {fileError && (
+      <div className="error-banner" role="alert" style={{ marginBottom: '1rem' }}>
+        <span>{fileError}</span>
+        <button aria-label="Dismiss error" onClick={() => setFileError('')}><X size={16} /></button>
+      </div>
+    )}
     <div className="input-card">
       <div className="input-tabs source-mode-grid">
         {modes.map(({ key, label, Icon, supported }) => <button key={key} className={`${mode === key ? 'selected' : ''} ${supported ? '' : 'limited'}`} onClick={() => setMode(key)}><Icon size={16} />{label}</button>)}

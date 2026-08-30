@@ -706,7 +706,7 @@ async def add_file_source(
     ):
         raise HTTPException(
             status_code=413,
-            detail="Uploaded file is too large",
+            detail="File is too large. Maximum supported file size is 256 MB.",
         )
 
     try:
@@ -1367,17 +1367,23 @@ def generate_outputs(
     )
 
     if transformation.content_dna is None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Generate Content DNA before "
-                "creating outputs"
-            ),
-        )
+        if transformation.sources:
+            transformation.content_dna = _llm(request).generate_content_dna(transformation.sources[0])
+            _storage(request).save(transformation)
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Generate Content DNA before "
+                    "creating outputs"
+                ),
+            )
 
     dna_version = (
         len(transformation.versions) or 1
     )
+
+    output_types = payload.types if (payload.types or payload.structure_ids) else ["executive_summary"]
 
     try:
         artifacts = [
@@ -1388,7 +1394,7 @@ def generate_outputs(
                 dna_version,
                 generation_config=payload.generation_config,
             )
-            for output_type in payload.types
+            for output_type in output_types
         ]
 
     except LLMProviderError as exc:
@@ -1600,9 +1606,9 @@ def analyze_source_integrity(
         )
 
     try:
+        mode = getattr(request.app.state, "llm_provider_mode", "api")
         service = SourceIntegrityService(
-            api_key=settings.groq_api_key,
-            model=settings.groq_model,
+            mode=mode,
         )
 
         result = service.analyze(
