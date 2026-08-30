@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Protocol
 
@@ -1240,6 +1241,190 @@ class OllamaProvider:
 
         return content.strip()
 
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        text = text.strip()
+
+        if text.startswith("```"):
+            lines = text.split("\n")
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+
+        start = text.find("{")
+        if start == -1:
+            return text
+
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start: i + 1]
+
+        return text[start:]
+
+    @staticmethod
+    def _normalize_ollama_dna(
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        normalized: dict[str, Any] = {}
+
+        identity = data.get("identity", {})
+        if isinstance(identity, str):
+            normalized["identity"] = {
+                "title": identity,
+                "content_type": "",
+                "source_description": "",
+            }
+        elif isinstance(identity, dict):
+            normalized["identity"] = {
+                "title": identity.get("title", ""),
+                "content_type": identity.get("content_type", ""),
+                "source_description": identity.get(
+                    "source_description", ""
+                ),
+            }
+        else:
+            normalized["identity"] = {
+                "title": "",
+                "content_type": "",
+                "source_description": "",
+            }
+
+        overview = data.get("overview", {})
+        if isinstance(overview, str):
+            normalized["overview"] = {
+                "summary": overview,
+                "purpose": "",
+            }
+        elif isinstance(overview, dict):
+            normalized["overview"] = {
+                "summary": overview.get("summary", ""),
+                "purpose": overview.get("purpose", ""),
+            }
+        else:
+            normalized["overview"] = {
+                "summary": "",
+                "purpose": "",
+            }
+
+        entities = data.get("entities", {})
+        if not isinstance(entities, dict):
+            entities = {}
+        normalized["entities"] = {
+            "people": entities.get(
+                "people", data.get("people", [])
+            ),
+            "organizations": entities.get(
+                "organizations", data.get("organizations", [])
+            ),
+            "locations": entities.get(
+                "locations", data.get("locations", [])
+            ),
+            "technologies": entities.get(
+                "technologies", data.get("technologies", [])
+            ),
+        }
+
+        facts = data.get("facts", {})
+        if not isinstance(facts, dict):
+            facts = {}
+        normalized["facts"] = {
+            "claims": facts.get("claims", data.get("claims", [])),
+            "statistics": facts.get(
+                "statistics", data.get("statistics", [])
+            ),
+            "dates": facts.get("dates", data.get("dates", [])),
+            "events": facts.get("events", data.get("events", [])),
+        }
+
+        findings = data.get("findings", {})
+        if not isinstance(findings, dict):
+            findings = {}
+        normalized["findings"] = {
+            "key_findings": findings.get(
+                "key_findings", data.get("key_findings", [])
+            ),
+            "risks": findings.get(
+                "risks", data.get("risks", [])
+            ),
+            "opportunities": findings.get(
+                "opportunities", data.get("opportunities", [])
+            ),
+            "implications": findings.get(
+                "implications", data.get("implications", [])
+            ),
+        }
+
+        recommendations = data.get("recommendations", {})
+        if isinstance(recommendations, list):
+            normalized["recommendations"] = {
+                "recommendations": recommendations,
+            }
+        elif isinstance(recommendations, dict):
+            normalized["recommendations"] = {
+                "recommendations": recommendations.get(
+                    "recommendations", []
+                ),
+            }
+        else:
+            normalized["recommendations"] = {
+                "recommendations": [],
+            }
+
+        context = data.get("context", {})
+        if not isinstance(context, dict):
+            context = {}
+        target_audience = context.get(
+            "target_audience", data.get("target_audience", "")
+        )
+        if isinstance(target_audience, list):
+            target_audience = ", ".join(
+                str(x) for x in target_audience
+            )
+        normalized["context"] = {
+            "target_audience": target_audience,
+            "tone": context.get("tone", data.get("tone", "")),
+            "communication_objective": context.get(
+                "communication_objective",
+                data.get("communication_objective", ""),
+            ),
+        }
+
+        evidence = data.get("evidence", {})
+        if isinstance(evidence, str):
+            normalized["evidence"] = {
+                "source_reference": "",
+                "supporting_excerpt": evidence,
+            }
+        elif isinstance(evidence, list):
+            normalized["evidence"] = {
+                "source_reference": "",
+                "supporting_excerpt": "; ".join(
+                    str(x) for x in evidence
+                ),
+            }
+        elif isinstance(evidence, dict):
+            normalized["evidence"] = {
+                "source_reference": evidence.get(
+                    "source_reference", ""
+                ),
+                "supporting_excerpt": evidence.get(
+                    "supporting_excerpt", ""
+                ),
+            }
+        else:
+            normalized["evidence"] = {
+                "source_reference": "",
+                "supporting_excerpt": "",
+            }
+
+        return normalized
+
     def generate_content_dna(
         self,
         content: RawContent,
@@ -1328,6 +1513,65 @@ Never silently combine conflicting claims.
 Do not use Markdown.
 Do not use code fences.
 Do not add explanations.
+
+============================================================
+CONTENTDNA SCHEMA — FOLLOW THIS EXACT STRUCTURE
+============================================================
+
+The top-level JSON object MUST have these exact keys:
+
+{
+  "identity": {
+    "title": "descriptive title string",
+    "content_type": "meaningful type string",
+    "source_description": "concise description string"
+  },
+  "overview": {
+    "summary": "concise summary string",
+    "purpose": "purpose string"
+  },
+  "entities": {
+    "people": ["string"],
+    "organizations": ["string"],
+    "locations": ["string"],
+    "technologies": ["string"]
+  },
+  "facts": {
+    "claims": ["string"],
+    "statistics": ["string"],
+    "dates": ["string"],
+    "events": ["string"]
+  },
+  "findings": {
+    "key_findings": ["string"],
+    "risks": ["string"],
+    "opportunities": ["string"],
+    "implications": ["string"]
+  },
+  "recommendations": {
+    "recommendations": ["string"]
+  },
+  "context": {
+    "target_audience": "audience string",
+    "tone": "tone string",
+    "communication_objective": "objective string"
+  },
+  "evidence": {
+    "source_reference": "reference string",
+    "supporting_excerpt": "excerpt string"
+  }
+}
+
+CRITICAL RULES:
+
+- identity, overview, entities, facts, findings, recommendations,
+  context, and evidence MUST ALL BE OBJECTS, not strings or arrays.
+- Each nested object MUST contain the exact keys shown above.
+- Arrays must be arrays of strings.
+- Do NOT flatten the schema. Do NOT put arrays at the root level.
+- Do NOT invent extra top-level keys.
+- If a section has no information, return an empty object or empty
+  arrays as shown in the schema example above.
 """
 
         user_message = f"""
@@ -1380,54 +1624,67 @@ Use only information supported by the source.
 Return ONLY valid JSON.
 """
 
-        raw_content = self.chat(
-            [
-                {
-                    "role": "system",
-                    "content": system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": user_message,
-                },
-            ],
-            temperature=0,
-        )
-
-        # Qwen can occasionally wrap JSON in Markdown despite the
-        # instruction. Clean that harmless formatting before validation.
-        if raw_content.startswith("```"):
-            raw_content = raw_content.strip()
-
-            if raw_content.startswith("```json"):
-                raw_content = raw_content[7:]
-            elif raw_content.startswith("```"):
-                raw_content = raw_content[3:]
-
-            if raw_content.endswith("```"):
-                raw_content = raw_content[:-3]
-
-            raw_content = raw_content.strip()
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_message,
+            },
+        ]
 
         try:
-            return ContentDNA.model_validate_json(raw_content)
-
-        except ValidationError as exc:
-            logger.exception(
-                "Ollama structured output failed ContentDNA validation"
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={
+                    "temperature": 0,
+                    "num_ctx": 8192,
+                },
+            )
+            raw_content = response.message.content
+        except TypeError:
+            raw_content = self.chat(
+                messages,
+                temperature=0,
             )
 
-            raise LLMProviderError(
-                "The local LLM returned invalid ContentDNA"
-            ) from exc
+        raw_content = self._extract_json(raw_content)
 
+        try:
+            parsed = json.loads(raw_content)
         except ValueError as exc:
             logger.exception(
-                "Ollama returned invalid JSON for ContentDNA"
+                "Ollama returned invalid JSON for ContentDNA. "
+                "Raw content preview: %s",
+                raw_content[:500],
             )
 
             raise LLMProviderError(
                 "The local LLM returned invalid JSON"
+            ) from exc
+
+        if isinstance(parsed, dict):
+            parsed = self._normalize_ollama_dna(parsed)
+            raw_content = json.dumps(parsed)
+
+        try:
+            return ContentDNA.model_validate_json(
+                raw_content
+            )
+
+        except ValidationError as exc:
+            logger.exception(
+                "Ollama structured output failed ContentDNA "
+                "validation after normalization. "
+                "Raw content preview: %s",
+                raw_content[:500],
+            )
+
+            raise LLMProviderError(
+                "The local LLM returned invalid ContentDNA"
             ) from exc
 
     def generate_output(

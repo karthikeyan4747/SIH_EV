@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     ollama_model: str = "qwen3:8b"
 
-    max_upload_size_bytes: int = 10 * 1024 * 1024
+    max_upload_size_bytes: int = 100 * 1024 * 1024
 
     storage_path: str = "data/sources.json"
     transformation_storage_path: str = "data/transformations.json"
