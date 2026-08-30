@@ -37,6 +37,7 @@ export interface Transformation {
   updated_at: string
   sources: RawContent[]
   content_dna: ContentDNA | null
+  source_integrity?: SourceIntegrity | null
   outputs: Artifact[]
   structures: Structure[]
   versions: DNAVersion[]
@@ -82,8 +83,15 @@ export interface IntegrityConflict {
   status: 'unresolved' | 'resolved'
 }
 
+export interface IntegrityResolution {
+  conflict_id: string
+  decision: string
+  selected_claim_id?: string
+  final_value?: string
+}
+
 export interface SourceIntegrity {
   claims: IntegrityClaim[]
   conflicts: IntegrityConflict[]
-  resolutions: Record<string, unknown>[]
+  resolutions: IntegrityResolution[]
 }

@@ -562,7 +562,18 @@ Return ONLY valid JSON.
         conflicts: list[Conflict],
         compared_pairs: set[tuple[str, str]],
     ) -> None:
-        if not self._contexts_compatible(
+        # --------------------------------------------------------
+        # Only compare claims that actually represent the same
+        # semantic fact.
+        #
+        # This prevents unrelated claims such as:
+        #   ocr_tool vs video_processing_tool
+        #   frontend_technology vs backend_technology
+        #   input_types vs llm_inference_modes
+        # from being reported as conflicts.
+        # --------------------------------------------------------
+
+        if not self._claims_are_comparable(
             claim_a,
             claim_b,
         ):
@@ -589,6 +600,10 @@ Return ONLY valid JSON.
         if not value_a or not value_b:
             return
 
+        # --------------------------------------------------------
+        # Same normalized value = corroboration
+        # --------------------------------------------------------
+
         if value_a == value_b:
             if claim_a.status != "conflict":
                 claim_a.status = "corroborated"
@@ -597,6 +612,10 @@ Return ONLY valid JSON.
                 claim_b.status = "corroborated"
 
             return
+
+        # --------------------------------------------------------
+        # Same semantic claim + different value = real conflict
+        # --------------------------------------------------------
 
         description = (
             "Conflicting values detected for "
@@ -625,7 +644,6 @@ Return ONLY valid JSON.
 
         claim_a.status = "conflict"
         claim_b.status = "conflict"
-
     def _pair_key(
         self,
         claim_a: Claim,
@@ -645,6 +663,9 @@ Return ONLY valid JSON.
         claim_a: Claim,
         claim_b: Claim,
     ) -> bool:
+
+        if claim_a.claim_key != claim_b.claim_key:
+            return False
         if not self._contexts_compatible(
             claim_a,
             claim_b,

@@ -2,15 +2,17 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 from pydantic import ValidationError
+
 from app.core.config import settings
-from app.models.transformation import SourceIntegrity
 from app.models.content import ContentDNA, RawContent
 from app.models.content_update import ContentDNAUpdate
 from app.models.transformation import (
+    ConflictResolution,
     DNAVersion,
     OutputGenerateRequest,
     SearchResponse,
     SearchResult,
+    SourceIntegrity,
     Structure,
     StructureCreateRequest,
     StructureReferenceRequest,
@@ -54,16 +56,21 @@ from app.services.workflows import (
     get_workflow_templates,
     save_custom_workflow,
 )
-
 from app.services.source_integrity import (
     SourceIntegrityError,
     SourceIntegrityService,
 )
 
+
 router = APIRouter(
     prefix="/api/v1/transformations",
     tags=["transformations"],
 )
+
+
+# ============================================================
+# DEPENDENCIES / HELPERS
+# ============================================================
 
 
 def _storage(request: Request) -> LocalTransformationStorage:
@@ -185,8 +192,272 @@ def _save_dna_version(
 
 
 # ============================================================
+# APPLY SOURCE-INTEGRITY RESOLUTION TO CONTENT DNA
+# ============================================================
+
+
+def apply_resolution_to_dna(
+    dna: ContentDNA,
+    claim_key: str,
+    final_value: str,
+) -> ContentDNA:
+    """
+    Apply a resolved source-integrity claim to the
+    appropriate Content DNA dimension.
+    """
+
+    facts = dna.facts
+    findings = dna.findings
+    entities = dna.entities
+
+    # --------------------------------------------------------
+    # Overall winner / major conclusion
+    # --------------------------------------------------------
+
+    if claim_key in {
+        "declared_overall_winner",
+        "overall_winner",
+        "winner",
+    }:
+        text = f"Overall winner: {final_value}"
+
+        existing = [
+            item
+            for item in findings.key_findings
+            if not item.lower().startswith(
+                "overall winner:"
+            )
+        ]
+
+        updated_findings = findings.model_copy(
+            update={
+                "key_findings": [
+                    *existing,
+                    text,
+                ]
+            }
+        )
+
+        return dna.model_copy(
+            update={
+                "findings": updated_findings,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Input types
+    # --------------------------------------------------------
+
+    if claim_key in {
+        "supports_input_types",
+        "supported_input_types",
+        "input_types",
+    }:
+        text = (
+            f"Supported input types: {final_value}"
+        )
+
+        existing = [
+            item
+            for item in facts.claims
+            if not item.lower().startswith(
+                "supported input types:"
+            )
+        ]
+
+        updated_facts = facts.model_copy(
+            update={
+                "claims": [
+                    *existing,
+                    text,
+                ]
+            }
+        )
+
+        return dna.model_copy(
+            update={
+                "facts": updated_facts,
+            }
+        )
+
+    # --------------------------------------------------------
+    # LLM inference modes
+    # --------------------------------------------------------
+
+    if claim_key in {
+        "supports_llm_inference",
+        "llm_inference_modes",
+        "inference_modes",
+    }:
+        text = (
+            f"LLM inference modes: {final_value}"
+        )
+
+        existing = [
+            item
+            for item in facts.claims
+            if not item.lower().startswith(
+                "llm inference modes:"
+            )
+        ]
+
+        updated_facts = facts.model_copy(
+            update={
+                "claims": [
+                    *existing,
+                    text,
+                ]
+            }
+        )
+
+        return dna.model_copy(
+            update={
+                "facts": updated_facts,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Cloud LLM provider
+    # --------------------------------------------------------
+
+    if claim_key in {
+        "uses_cloud_llm_provider",
+        "cloud_llm_provider",
+    }:
+        text = (
+            f"Cloud LLM provider: {final_value}"
+        )
+
+        existing_claims = [
+            item
+            for item in facts.claims
+            if not item.lower().startswith(
+                "cloud llm provider:"
+            )
+        ]
+
+        updated_facts = facts.model_copy(
+            update={
+                "claims": [
+                    *existing_claims,
+                    text,
+                ]
+            }
+        )
+
+        existing_technologies = list(
+            entities.technologies
+        )
+
+        if final_value not in existing_technologies:
+            existing_technologies.append(
+                final_value
+            )
+
+        updated_entities = entities.model_copy(
+            update={
+                "technologies": existing_technologies,
+            }
+        )
+
+        return dna.model_copy(
+            update={
+                "facts": updated_facts,
+                "entities": updated_entities,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Local LLM technology
+    # --------------------------------------------------------
+
+    if claim_key in {
+        "uses_local_llm_technology",
+        "local_llm_technology",
+        "local_llm",
+    }:
+        text = (
+            f"Local LLM technology: {final_value}"
+        )
+
+        existing_claims = [
+            item
+            for item in facts.claims
+            if not item.lower().startswith(
+                "local llm technology:"
+            )
+        ]
+
+        updated_facts = facts.model_copy(
+            update={
+                "claims": [
+                    *existing_claims,
+                    text,
+                ]
+            }
+        )
+
+        existing_technologies = list(
+            entities.technologies
+        )
+
+        if final_value not in existing_technologies:
+            existing_technologies.append(
+                final_value
+            )
+
+        updated_entities = entities.model_copy(
+            update={
+                "technologies": existing_technologies,
+            }
+        )
+
+        return dna.model_copy(
+            update={
+                "facts": updated_facts,
+                "entities": updated_entities,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Fallback
+    # --------------------------------------------------------
+
+    text = (
+        f"{claim_key.replace('_', ' ').capitalize()}: "
+        f"{final_value}"
+    )
+
+    existing = list(facts.claims)
+
+    existing = [
+        item
+        for item in existing
+        if not item.lower().startswith(
+            f"{claim_key.replace('_', ' ').lower()}:"
+        )
+    ]
+
+    updated_facts = facts.model_copy(
+        update={
+            "claims": [
+                *existing,
+                text,
+            ]
+        }
+    )
+
+    return dna.model_copy(
+        update={
+            "facts": updated_facts,
+        }
+    )
+
+
+# ============================================================
 # TRANSFORMATION COLLECTION
 # ============================================================
+
 
 @router.get(
     "",
@@ -224,6 +495,7 @@ def create_transformation(
 # /{transformation_id} ROUTES.
 # ============================================================
 
+
 @router.get(
     "/workflows",
     response_model=list[WorkflowTemplate],
@@ -246,6 +518,7 @@ def create_workflow(
 # ============================================================
 # SINGLE TRANSFORMATION
 # ============================================================
+
 
 @router.get(
     "/{transformation_id}",
@@ -305,6 +578,7 @@ def rename_transformation(
 # TEXT SOURCE
 # ============================================================
 
+
 @router.post(
     "/{transformation_id}/sources/text",
     response_model=Transformation,
@@ -341,7 +615,11 @@ def add_text_source(
             "status": "processing",
         }
     )
-    updated = _apply_first_source_title(updated, source)
+
+    updated = _apply_first_source_title(
+        updated,
+        source,
+    )
 
     content_dna = _recompute_dna(
         updated,
@@ -351,7 +629,9 @@ def add_text_source(
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
-            "status": "ready" if content_dna else "empty",
+            "status": "ready"
+            if content_dna
+            else "empty",
         }
     )
 
@@ -367,6 +647,7 @@ def add_text_source(
 # ============================================================
 # FILE SOURCE
 # ============================================================
+
 
 @router.post(
     "/{transformation_id}/sources/file",
@@ -481,7 +762,11 @@ async def add_file_source(
             "status": "processing",
         }
     )
-    updated = _apply_first_source_title(updated, source)
+
+    updated = _apply_first_source_title(
+        updated,
+        source,
+    )
 
     content_dna = _recompute_dna(
         updated,
@@ -491,7 +776,9 @@ async def add_file_source(
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
-            "status": "ready" if content_dna else "empty",
+            "status": "ready"
+            if content_dna
+            else "empty",
         }
     )
 
@@ -507,6 +794,7 @@ async def add_file_source(
 # ============================================================
 # URL / YOUTUBE SOURCE
 # ============================================================
+
 
 @router.post(
     "/{transformation_id}/sources/url",
@@ -557,7 +845,11 @@ def add_url_source(
             "status": "processing",
         }
     )
-    updated = _apply_first_source_title(updated, source)
+
+    updated = _apply_first_source_title(
+        updated,
+        source,
+    )
 
     content_dna = _recompute_dna(
         updated,
@@ -567,7 +859,9 @@ def add_url_source(
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
-            "status": "ready" if content_dna else "empty",
+            "status": "ready"
+            if content_dna
+            else "empty",
         }
     )
 
@@ -583,6 +877,7 @@ def add_url_source(
 # ============================================================
 # UNSUPPORTED SOURCE
 # ============================================================
+
 
 @router.post(
     "/{transformation_id}/sources/unsupported",
@@ -614,7 +909,11 @@ def add_unsupported_source(
             ],
         }
     )
-    updated = _apply_first_source_title(updated, source)
+
+    updated = _apply_first_source_title(
+        updated,
+        source,
+    )
 
     return _storage(request).save(updated)
 
@@ -622,6 +921,7 @@ def add_unsupported_source(
 # ============================================================
 # REMOVE SOURCE
 # ============================================================
+
 
 @router.delete(
     "/{transformation_id}/sources/{source_id}",
@@ -643,7 +943,9 @@ def remove_source(
         if source.source_id != source_id
     ]
 
-    if len(sources) == len(transformation.sources):
+    if len(sources) == len(
+        transformation.sources
+    ):
         raise HTTPException(
             status_code=404,
             detail="Source not found",
@@ -657,7 +959,10 @@ def remove_source(
     )
 
     content_dna = (
-        _recompute_dna(updated, request)
+        _recompute_dna(
+            updated,
+            request,
+        )
         if sources
         else None
     )
@@ -683,6 +988,7 @@ def remove_source(
 # ============================================================
 # CONTENT DNA PATCH
 # ============================================================
+
 
 @router.patch(
     "/{transformation_id}/content-dna",
@@ -734,8 +1040,204 @@ def patch_transformation_dna(
 
 
 # ============================================================
+# CONFLICT RESOLUTION
+# ============================================================
+
+
+@router.post(
+    "/{transformation_id}/integrity/conflicts/{conflict_id}/resolve",
+    response_model=Transformation,
+)
+def resolve_transformation_conflict(
+    transformation_id: str,
+    conflict_id: str,
+    resolution: ConflictResolution,
+    request: Request,
+) -> Transformation:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    integrity = transformation.source_integrity
+
+    conflict = next(
+        (
+            item
+            for item in integrity.conflicts
+            if item.conflict_id == conflict_id
+        ),
+        None,
+    )
+
+    if conflict is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Conflict not found",
+        )
+
+    claim_map = {
+        claim.claim_id: claim
+        for claim in integrity.claims
+    }
+
+    selected_claim = None
+
+    if resolution.selected_claim_id:
+        selected_claim = claim_map.get(
+            resolution.selected_claim_id
+        )
+
+        if selected_claim is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Selected claim does not belong "
+                    "to this conflict"
+                ),
+            )
+
+        if (
+            resolution.selected_claim_id
+            not in conflict.claim_ids
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Selected claim does not belong "
+                    "to this conflict"
+                ),
+            )
+
+    # --------------------------------------------------------
+    # Determine final value
+    # --------------------------------------------------------
+
+    if resolution.decision in {
+        "accept_source_a",
+        "accept_source_b",
+    }:
+        if selected_claim is None:
+            raise HTTPException(
+                status_code=400,
+                detail="A claim must be selected",
+            )
+
+        final_value = str(
+            selected_claim.value
+        )
+
+    elif resolution.decision == "custom_value":
+        if not resolution.final_value:
+            raise HTTPException(
+                status_code=400,
+                detail="Custom value is required",
+            )
+
+        final_value = str(
+            resolution.final_value
+        )
+
+    elif resolution.decision == "retain_both":
+        conflict_claims = [
+            claim_map[claim_id]
+            for claim_id in conflict.claim_ids
+            if claim_id in claim_map
+        ]
+
+        final_value = "; ".join(
+            str(claim.value)
+            for claim in conflict_claims
+        )
+
+    else:
+        # mark_unresolved
+        final_value = None
+
+    # --------------------------------------------------------
+    # Update conflict status
+    # --------------------------------------------------------
+
+    updated_conflicts = []
+
+    for item in integrity.conflicts:
+        if item.conflict_id == conflict_id:
+            updated_conflicts.append(
+                item.model_copy(
+                    update={
+                        "status": (
+                            "resolved"
+                            if resolution.decision
+                            != "mark_unresolved"
+                            else "unresolved"
+                        )
+                    }
+                )
+            )
+        else:
+            updated_conflicts.append(item)
+
+    # --------------------------------------------------------
+    # Store resolution
+    # --------------------------------------------------------
+
+    updated_resolutions = [
+        *integrity.resolutions,
+        resolution,
+    ]
+
+    updated_integrity = integrity.model_copy(
+        update={
+            "conflicts": updated_conflicts,
+            "resolutions": updated_resolutions,
+        }
+    )
+
+    # --------------------------------------------------------
+    # Apply resolved value to Content DNA
+    # --------------------------------------------------------
+
+    updated_dna = transformation.content_dna
+
+    if (
+        final_value is not None
+        and updated_dna is not None
+    ):
+        updated_dna = apply_resolution_to_dna(
+            updated_dna,
+            conflict.claim_key,
+            final_value,
+        )
+
+    # --------------------------------------------------------
+    # Save transformation
+    # --------------------------------------------------------
+
+    updated = transformation.model_copy(
+        update={
+            "source_integrity": updated_integrity,
+            "content_dna": updated_dna,
+            "status": (
+                "ready"
+                if updated_dna is not None
+                else transformation.status
+            ),
+        }
+    )
+
+    updated = _save_dna_version(
+        updated,
+        f"Resolved source conflict: "
+        f"{conflict.claim_key}",
+    )
+
+    return _storage(request).save(updated)
+
+
+# ============================================================
 # CUSTOM STRUCTURE
 # ============================================================
+
 
 @router.post(
     "/{transformation_id}/structures",
@@ -786,6 +1288,7 @@ def create_structure(
 # ============================================================
 # REFERENCE STRUCTURE
 # ============================================================
+
 
 @router.post(
     "/{transformation_id}/structures/reference",
@@ -848,6 +1351,7 @@ def create_reference_structure(
 # GENERATE OUTPUTS
 # ============================================================
 
+
 @router.post(
     "/{transformation_id}/outputs",
     response_model=Transformation,
@@ -886,6 +1390,7 @@ def generate_outputs(
             )
             for output_type in payload.types
         ]
+
     except LLMProviderError as exc:
         raise HTTPException(
             status_code=502,
@@ -936,6 +1441,7 @@ def generate_outputs(
 # RESTORE DNA VERSION
 # ============================================================
 
+
 @router.post(
     "/{transformation_id}/versions/{version}/restore",
     response_model=Transformation,
@@ -984,6 +1490,7 @@ def restore_version(
 # SEARCH
 # ============================================================
 
+
 @router.get(
     "/{transformation_id}/search",
     response_model=SearchResponse,
@@ -1008,6 +1515,10 @@ def search_transformation(
 
     results: list[SearchResult] = []
 
+    # --------------------------------------------------------
+    # Sources
+    # --------------------------------------------------------
+
     for source in transformation.sources:
         haystack = (
             f"{source.title}\n"
@@ -1022,6 +1533,10 @@ def search_transformation(
                     excerpt=source.text[:180],
                 )
             )
+
+    # --------------------------------------------------------
+    # Content DNA
+    # --------------------------------------------------------
 
     if transformation.content_dna is not None:
         for section, value in (
@@ -1040,6 +1555,10 @@ def search_transformation(
                     )
                 )
 
+    # --------------------------------------------------------
+    # Outputs
+    # --------------------------------------------------------
+
     for artifact in transformation.outputs:
         if needle in artifact.content.lower():
             results.append(
@@ -1050,11 +1569,16 @@ def search_transformation(
                 )
             )
 
-
     return SearchResponse(
         query=q,
         results=results[:25],
     )
+
+
+# ============================================================
+# SOURCE INTEGRITY ANALYSIS
+# ============================================================
+
 
 @router.post(
     "/{transformation_id}/integrity",
@@ -1084,6 +1608,11 @@ def analyze_source_integrity(
         result = service.analyze(
             transformation.sources
         )
+
+        updated = transformation.model_copy(
+            update={"source_integrity": result}
+        )
+        _storage(request).save(updated)
 
         return result
 

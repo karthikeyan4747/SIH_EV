@@ -1227,9 +1227,9 @@ class OllamaProvider:
                 self.model,
             )
 
-        raise LLMProviderError(
-            "The local Ollama model request failed"
-        ) 
+            raise LLMProviderError(
+                "The local Ollama model request failed"
+            ) from exc
 
         content = response.message.content
 

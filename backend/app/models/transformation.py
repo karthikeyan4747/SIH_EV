@@ -144,10 +144,12 @@ class ConflictResolution(BaseModel):
     decision: Literal[
         "accept_source_a",
         "accept_source_b",
+        "custom_value",
         "retain_both",
         "mark_unresolved",
     ]
     selected_claim_id: str | None = None
+    final_value: str | None = None
     rationale: str = ""
 
 
@@ -192,18 +194,7 @@ class Transformation(BaseModel):
 
     status: TransformationStatus = "empty"
 
-class SourceIntegrity(BaseModel):
-    claims: list[Claim] = Field(
-        default_factory=list
-    )
 
-    conflicts: list[Conflict] = Field(
-        default_factory=list
-    )
-
-    resolutions: list[dict] = Field(
-        default_factory=list
-    )
 
     
 class TransformationCreateRequest(BaseModel):

@@ -33,7 +33,9 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
-import { API_BASE_URL, analyzeSourceIntegrity } from '../../lib/api/client'
+import { analyzeSourceIntegrity, listWorkflows, saveWorkflow } from '../../lib/api/client'
+import type { WorkflowTemplate } from '../../lib/api/client'
+import { ConflictResolutionPanel } from '../dna/ConflictResolutionPanel'
 
 import type {
   IntegrityClaim,
@@ -75,14 +77,6 @@ export type GenerationConfig = {
   style: string
 }
 
-type WorkflowTemplate = {
-  id: string
-  name: string
-  description: string
-  output_types: string[]
-  generation_config: Record<string, string>
-}
-
 interface TransformationWorkspaceProps {
   transformation: Transformation
   busy: boolean
@@ -103,6 +97,7 @@ interface TransformationWorkspaceProps {
     generationConfig: GenerationConfig,
   ) => void
   onRestoreVersion: (version: number) => void
+  onConflictResolved: (transformation: Transformation) => void
 }
 
 
@@ -120,13 +115,14 @@ export function TransformationWorkspace({
   onRemoveSource,
   onGenerateOutputs,
   onRestoreVersion,
+  onConflictResolved,
 }: TransformationWorkspaceProps) {
   const [dnaOpen, setDnaOpen] = useState(
     Boolean(transformation.content_dna),
   )
 
   const [integrity, setIntegrity] =
-    useState<SourceIntegrity | null>(null)
+  useState<SourceIntegrity | null>(null)
 
   const [integrityLoading, setIntegrityLoading] =
     useState(false)
@@ -379,13 +375,11 @@ export function TransformationWorkspace({
 
           <Button
             variant="primary"
-            disabled={!transformation.sources.length}
-            loading={integrityLoading}
-            loadingLabel="Analyzing..."
+            disabled={integrityLoading || !transformation.sources.length}
             onClick={() => void runSourceIntegrity()}
           >
             <ShieldCheck size={15} />
-            Run Source Integrity
+            {integrityLoading ? 'Analyzing...' : 'Run Source Integrity'}
           </Button>
         </div>
 
@@ -400,6 +394,9 @@ export function TransformationWorkspace({
           <div className="integrity-results">
             <div className="integrity-summary">
               <span>
+                <strong>{integrity.claims.length}</strong> claims
+              </span>
+              <span>
                 <strong>{integrity.conflicts.length}</strong> conflicts
               </span>
             </div>
@@ -410,9 +407,6 @@ export function TransformationWorkspace({
                   <IntegrityClaimCard
                     key={claim.claim_id}
                     claim={claim}
-                    conflict={integrity.conflicts.find((conflict) =>
-                      conflict.claim_ids.includes(claim.claim_id)
-                    )}
                     expanded={expandedClaim === claim.claim_id}
                     onToggle={() =>
                       setExpandedClaim((current) =>
@@ -431,22 +425,15 @@ export function TransformationWorkspace({
             )}
 
             {integrity.conflicts.length > 0 && (
-              <div className="integrity-conflicts">
-                <div className="integrity-evidence-heading">
-                  Conflicts requiring review
-                </div>
-                {integrity.conflicts.map((conflict) => (
-                  <div className="integrity-conflict-row" key={conflict.conflict_id}>
-                    <div>
-                      <strong>{conflict.description}</strong>
-                      <small>
-                        Status: {conflict.status}
-                      </small>
-                    </div>
-                    <Badge>{conflict.claim_ids.length} claims</Badge>
-                  </div>
-                ))}
-              </div>
+              <ConflictResolutionPanel
+                transformationId={transformation.id}
+                conflicts={integrity.conflicts}
+                claims={integrity.claims}
+                onResolved={(updated) => {
+                  setIntegrity(updated.source_integrity ?? null)
+                  onConflictResolved(updated)
+                }}
+              />
             )}
           </div>
         )}
@@ -616,537 +603,11 @@ function WorkspaceOutputs({
     URL.revokeObjectURL(url)
   }
 
-  function downloadBinary(filename: string, content: Uint8Array, type: string) {
-    const blob = new Blob([content.buffer.slice(0) as ArrayBuffer], { type })
-    const url = URL.createObjectURL(blob)
-
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = filename
-    anchor.click()
-
-    URL.revokeObjectURL(url)
-  }
-
-  function xmlEscape(value: string) {
-    return value
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&apos;')
-  }
-
-  function cleanSlideLine(value: string) {
-    return value
-      .replace(/^#{1,6}\s*/, '')
-      .replace(/^[-*•]\s*/, '')
-      .replace(/^\d+[.)]\s*/, '')
-      .replace(/\*/g, '')
-      .trim()
-  }
-
-  function stripContentLabel(value: string) {
-    return value
-      .replace(/^(content|speaker notes?|notes)\s*:\s*/i, '')
-      .trim()
-  }
-
-  function isSlideMetadataLine(value: string) {
-    return /^(content|speaker notes?|notes)\s*:?\s*$/i.test(value.trim()) || /^[\u2013-]$/.test(value.trim())
-  }
-
-  function isExcludedPptField(value: string) {
-    return /^(name|department|reg(?:istration)?\s*(?:no\.?|number)?)\s*:/i.test(value.trim())
-  }
-
-  function sectionLabelFromTitle(value: string) {
-    const words = cleanSlideLine(value)
-      .replace(/&/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean)
-
-    return (words[0] || 'SECTION').toUpperCase().slice(0, 16)
-  }
-
-  function buildPresentationSlides(content: string) {
-    const slides: { section: string; title: string; bullets: string[] }[] = []
-    let currentSlide: { section: string; title: string; bullets: string[] } | null = null
-
-    function finishSlide() {
-      if (!currentSlide) return
-
-      const titleLineIndex = currentSlide.bullets.findIndex((line) =>
-        /^title\s*:/i.test(cleanSlideLine(line)),
-      )
-
-      if (titleLineIndex >= 0) {
-        currentSlide.title = cleanSlideLine(currentSlide.bullets[titleLineIndex])
-          .replace(/^title\s*:\s*/i, '')
-          .trim() || currentSlide.title
-        currentSlide.bullets.splice(titleLineIndex, 1)
-      }
-
-      const bullets = currentSlide.bullets
-        .map(cleanSlideLine)
-        .map(stripContentLabel)
-        .filter((line) => line && !isSlideMetadataLine(line) && !isExcludedPptField(line))
-
-      if (bullets.length) {
-        slides.push({
-          section: currentSlide.section,
-          title: currentSlide.title,
-          bullets,
-        })
-      }
-    }
-
-    for (const rawLine of content.replaceAll('\r\n', '\n').split('\n')) {
-      const headingMatch = rawLine.match(
-        /^\s*(?:#{1,6}\s*)?(?:\*\*)?slide\s*(\d+)\s*(?::|-|\.|\u2013)?\s*(.*?)(?:\*\*)?\s*$/i,
-      )
-
-      if (headingMatch) {
-        finishSlide()
-
-        const slideNumber = headingMatch[1]
-        const title = cleanSlideLine(headingMatch[2] || '') || `Slide ${slideNumber}`
-
-        currentSlide = {
-          section: sectionLabelFromTitle(title),
-          title,
-          bullets: [],
-        }
-
-        continue
-      }
-
-      if (currentSlide) {
-        const line = cleanSlideLine(rawLine)
-        if (line) currentSlide.bullets.push(line)
-      }
-    }
-
-    finishSlide()
-
-    if (slides.length) {
-      return slides
-    }
-
-    const headingBlocks = content
-      .replaceAll('\r\n', '\n')
-      .split(/\n(?=#{1,3}\s+)/)
-      .map((block) => block.trim())
-      .filter(Boolean)
-
-    if (headingBlocks.length > 1) {
-      const blockSlides = headingBlocks
-        .map((block, index) => {
-          const lines = block
-            .split('\n')
-            .map(cleanSlideLine)
-            .map(stripContentLabel)
-            .filter((line) => line && !isSlideMetadataLine(line) && !isExcludedPptField(line))
-
-          return {
-            section: sectionLabelFromTitle(lines[0] || `Slide ${index + 1}`),
-            title: lines[0] || `Slide ${index + 1}`,
-            bullets: lines.slice(1),
-          }
-        })
-        .filter((slide) => slide.bullets.length)
-
-      if (blockSlides.length) {
-        return blockSlides
-      }
-    }
-
-    const lines = content
-      .split('\n')
-      .map(cleanSlideLine)
-      .map(stripContentLabel)
-      .filter((line) => line && !isSlideMetadataLine(line) && !isExcludedPptField(line))
-    const chunkSize = 4
-
-    for (let index = 0; index < Math.max(lines.length, 1); index += chunkSize) {
-      const chunk = lines.slice(index, index + chunkSize)
-      slides.push({
-        section: index === 0 ? 'OVERVIEW' : `PART ${slides.length + 1}`,
-        title: index === 0 ? 'Presentation Overview' : `Slide ${slides.length + 1}`,
-        bullets: chunk,
-      })
-    }
-
-    return slides.length ? slides : [{ section: 'OVERVIEW', title: 'Presentation', bullets: ['No generated content available.'] }]
-  }
-
-  function crc32(data: Uint8Array) {
-    let crc = 0xffffffff
-
-    for (const byte of data) {
-      crc ^= byte
-      for (let bit = 0; bit < 8; bit += 1) {
-        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
-      }
-    }
-
-    return (crc ^ 0xffffffff) >>> 0
-  }
-
-  function createZip(files: { name: string; content: string }[]) {
-    const encoder = new TextEncoder()
-    const chunks: Uint8Array[] = []
-    const centralDirectory: Uint8Array[] = []
-    let offset = 0
-    const now = new Date()
-    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2)
-    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()
-
-    function write16(view: DataView, position: number, value: number) {
-      view.setUint16(position, value, true)
-    }
-
-    function write32(view: DataView, position: number, value: number) {
-      view.setUint32(position, value, true)
-    }
-
-    for (const file of files) {
-      const nameBytes = encoder.encode(file.name)
-      const contentBytes = encoder.encode(file.content)
-      const crc = crc32(contentBytes)
-      const localHeader = new Uint8Array(30 + nameBytes.length)
-      const localView = new DataView(localHeader.buffer)
-
-      write32(localView, 0, 0x04034b50)
-      write16(localView, 4, 20)
-      write16(localView, 6, 0)
-      write16(localView, 8, 0)
-      write16(localView, 10, dosTime)
-      write16(localView, 12, dosDate)
-      write32(localView, 14, crc)
-      write32(localView, 18, contentBytes.length)
-      write32(localView, 22, contentBytes.length)
-      write16(localView, 26, nameBytes.length)
-      write16(localView, 28, 0)
-      localHeader.set(nameBytes, 30)
-      chunks.push(localHeader, contentBytes)
-
-      const centralHeader = new Uint8Array(46 + nameBytes.length)
-      const centralView = new DataView(centralHeader.buffer)
-
-      write32(centralView, 0, 0x02014b50)
-      write16(centralView, 4, 20)
-      write16(centralView, 6, 20)
-      write16(centralView, 8, 0)
-      write16(centralView, 10, 0)
-      write16(centralView, 12, dosTime)
-      write16(centralView, 14, dosDate)
-      write32(centralView, 16, crc)
-      write32(centralView, 20, contentBytes.length)
-      write32(centralView, 24, contentBytes.length)
-      write16(centralView, 28, nameBytes.length)
-      write16(centralView, 30, 0)
-      write16(centralView, 32, 0)
-      write16(centralView, 34, 0)
-      write16(centralView, 36, 0)
-      write32(centralView, 38, 0)
-      write32(centralView, 42, offset)
-      centralHeader.set(nameBytes, 46)
-      centralDirectory.push(centralHeader)
-
-      offset += localHeader.length + contentBytes.length
-    }
-
-    const centralOffset = offset
-    const centralSize = centralDirectory.reduce((total, chunk) => total + chunk.length, 0)
-    const endRecord = new Uint8Array(22)
-    const endView = new DataView(endRecord.buffer)
-
-    write32(endView, 0, 0x06054b50)
-    write16(endView, 4, 0)
-    write16(endView, 6, 0)
-    write16(endView, 8, files.length)
-    write16(endView, 10, files.length)
-    write32(endView, 12, centralSize)
-    write32(endView, 16, centralOffset)
-    write16(endView, 20, 0)
-
-    const allChunks = [...chunks, ...centralDirectory, endRecord]
-    const totalLength = allChunks.reduce((total, chunk) => total + chunk.length, 0)
-    const zip = new Uint8Array(totalLength)
-    let cursor = 0
-
-    for (const chunk of allChunks) {
-      zip.set(chunk, cursor)
-      cursor += chunk.length
-    }
-
-    return zip
-  }
-
-  function slideXml(slide: { section: string; title: string; bullets: string[] }, index: number, deckTitle: string) {
-    const bodyRuns = slide.bullets.length
-      ? slide.bullets.map((paragraph) => `
-        <a:p>
-          <a:pPr algn="l" marL="0" indent="0"/>
-          <a:r><a:rPr lang="en-US" sz="1500" dirty="0"><a:solidFill><a:srgbClr val="252B3A"/></a:solidFill></a:rPr><a:t>${xmlEscape(paragraph)}</a:t></a:r>
-          <a:endParaRPr lang="en-US" sz="1500"/>
-        </a:p>
-      `).join('')
-      : '<a:p><a:r><a:rPr lang="en-US" sz="1500" dirty="0"/><a:t>No slide content generated.</a:t></a:r></a:p>'
-
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></p:bgPr></p:bg>
-    <p:spTree>
-      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="2" name="Section Icon"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="457200" y="548640"/><a:ext cx="320040" cy="320040"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="25400"><a:solidFill><a:srgbClr val="17245A"/></a:solidFill></a:ln></p:spPr>
-        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="3" name="Section Dot"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="546100" y="637540"/><a:ext cx="142240" cy="142240"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="17245A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="4" name="Section Label"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="1143000" y="548640"/><a:ext cx="3657600" cy="365760"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr wrap="square" anchor="mid"/><a:lstStyle/><a:p><a:pPr/><a:r><a:rPr lang="en-US" sz="900" b="1" dirty="0" cap="all" spc="220"><a:solidFill><a:srgbClr val="596070"/></a:solidFill></a:rPr><a:t>${xmlEscape(slide.section)}</a:t></a:r><a:endParaRPr lang="en-US" sz="900"/></a:p></p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="5" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="457200" y="1051560"/><a:ext cx="11247120" cy="1188720"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/><a:p><a:pPr/><a:r><a:rPr lang="en-US" sz="2600" b="1" dirty="0"><a:solidFill><a:srgbClr val="17245A"/></a:solidFill></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r><a:endParaRPr lang="en-US" sz="2600"/></a:p></p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="6" name="Divider"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="457200" y="2291080"/><a:ext cx="914400" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="17245A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="7" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="457200" y="2651760"/><a:ext cx="11247120" cy="3657600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/>${bodyRuns}</p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="8" name="Footer Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="457200" y="6355080"/><a:ext cx="5486400" cy="320040"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr wrap="square" anchor="mid"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="650" dirty="0"><a:solidFill><a:srgbClr val="596070"/></a:solidFill></a:rPr><a:t>${xmlEscape(deckTitle)}</a:t></a:r></a:p></p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr><p:cNvPr id="9" name="Slide Number"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
-        <p:spPr><a:xfrm><a:off x="11368735" y="6355080"/><a:ext cx="457200" cy="320040"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-        <p:txBody><a:bodyPr wrap="square" anchor="mid"/><a:lstStyle/><a:p><a:pPr algn="r"/><a:r><a:rPr lang="en-US" sz="650" dirty="0"><a:solidFill><a:srgbClr val="596070"/></a:solidFill></a:rPr><a:t>${index + 1}</a:t></a:r></a:p></p:txBody>
-      </p:sp>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-</p:sld>`
-  }
-
-  function downloadPpt(filename: string, content: string) {
-    const slides = buildPresentationSlides(content)
-    const deckTitle = slides[0]?.title || filename.replace(/\.pptx$/i, '')
-    const masterRelationshipId = `rId${slides.length + 1}`
-    const slideIds = slides.map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 1}"/>`).join('')
-    const presentationRelationships = slides.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${index + 1}.xml"/>`).join('')
-    const slideContentTypes = slides.map((_, index) => `<Override PartName="/ppt/slides/slide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')
-    const slideRelationshipFiles = slides.map((_, index) => ({
-      name: `ppt/slides/_rels/slide${index + 1}.xml.rels`,
-      content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>',
-    }))
-    const files = [
-      {
-        name: '[Content_Types].xml',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${slideContentTypes}</Types>`,
-      },
-      {
-        name: '_rels/.rels',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>',
-      },
-      {
-        name: 'docProps/core.xml',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(filename.replace(/\.pptx$/i, ''))}</dc:title><dc:creator>EV Workspace</dc:creator><cp:lastModifiedBy>EV Workspace</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`,
-      },
-      {
-        name: 'docProps/app.xml',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>EV Workspace</Application><PresentationFormat>On-screen Show (4:3)</PresentationFormat><Slides>${slides.length}</Slides><Notes>0</Notes><HiddenSlides>0</HiddenSlides><ScaleCrop>false</ScaleCrop></Properties>`,
-      },
-      {
-        name: 'ppt/presentation.xml',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="${masterRelationshipId}"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/><p:defaultTextStyle><a:defPPr><a:defRPr lang="en-US"/></a:defPPr></p:defaultTextStyle></p:presentation>`,
-      },
-      {
-        name: 'ppt/_rels/presentation.xml.rels',
-        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${presentationRelationships}<Relationship Id="${masterRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>`,
-      },
-      {
-        name: 'ppt/slideMasters/slideMaster1.xml',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>',
-      },
-      {
-        name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>',
-      },
-      {
-        name: 'ppt/slideLayouts/slideLayout1.xml',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>',
-      },
-      {
-        name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>',
-      },
-      {
-        name: 'ppt/theme/theme1.xml',
-        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="EV Workspace"><a:themeElements><a:clrScheme name="EV"><a:dk1><a:srgbClr val="17212F"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="253247"/></a:dk2><a:lt2><a:srgbClr val="F4FAF9"/></a:lt2><a:accent1><a:srgbClr val="0F9F92"/></a:accent1><a:accent2><a:srgbClr val="2563EB"/></a:accent2><a:accent3><a:srgbClr val="F97316"/></a:accent3><a:accent4><a:srgbClr val="22C55E"/></a:accent4><a:accent5><a:srgbClr val="64748B"/></a:accent5><a:accent6><a:srgbClr val="E2E8F0"/></a:accent6><a:hlink><a:srgbClr val="2563EB"/></a:hlink><a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink></a:clrScheme><a:fontScheme name="EV"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="EV"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>',
-      },
-      ...slides.map((slide, index) => ({
-        name: `ppt/slides/slide${index + 1}.xml`,
-        content: slideXml(slide, index, deckTitle),
-      })),
-      ...slideRelationshipFiles,
-    ]
-
-    downloadBinary(filename, createZip(files), 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
-  }
-
-  function escapePdfText(value: string) {
-    return value
-      .replaceAll('\\', '\\\\')
-      .replaceAll('(', '\\(')
-      .replaceAll(')', '\\)')
-      .replaceAll('\r', '')
-  }
-
-  function wrapPdfText(text: string, maxCharacters = 86) {
-    const lines: string[] = []
-
-    for (const rawLine of text.split('\n')) {
-      const words = rawLine.trimEnd().split(/\s+/).filter(Boolean)
-
-      if (!words.length) {
-        lines.push('')
-        continue
-      }
-
-      let line = ''
-
-      for (const word of words) {
-        const nextLine = line ? `${line} ${word}` : word
-
-        if (nextLine.length > maxCharacters) {
-          if (line) lines.push(line)
-          line = word
-        } else {
-          line = nextLine
-        }
-      }
-
-      if (line) lines.push(line)
-    }
-
-    return lines
-  }
-
-  function downloadPdf(filename: string, title: string, content: string, dnaVersion: number) {
-    const pageWidth = 612
-    const pageHeight = 792
-    const margin = 54
-    const lineHeight = 15
-    const contentLines = wrapPdfText(content)
-    const pages: string[][] = []
-    let currentPage: string[] = []
-    let currentY = pageHeight - 138
-
-    for (const line of contentLines) {
-      if (currentY < margin) {
-        pages.push(currentPage)
-        currentPage = []
-        currentY = pageHeight - 82
-      }
-
-      currentPage.push(line)
-      currentY -= lineHeight
-    }
-
-    pages.push(currentPage)
-
-    const objects: string[] = []
-    const pageObjectIds: number[] = []
-
-    objects.push('<< /Type /Catalog /Pages 2 0 R >>')
-    objects.push('PAGES_PLACEHOLDER')
-    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
-
-    pages.forEach((pageLines, index) => {
-      const pageNumber = index + 1
-      const streamParts = [
-        'BT',
-        '/F1 18 Tf',
-        '54 742 Td',
-        `(${escapePdfText(title)}) Tj`,
-        '/F1 9 Tf',
-        '0 -22 Td',
-        `(DNA v${dnaVersion} / Page ${pageNumber} of ${pages.length}) Tj`,
-        '/F1 11 Tf',
-        `0 ${index === 0 ? '-44' : '-20'} Td`,
-      ]
-
-      pageLines.forEach((line, lineIndex) => {
-        if (lineIndex > 0) streamParts.push(`0 -${lineHeight} Td`)
-        streamParts.push(`(${escapePdfText(line)}) Tj`)
-      })
-
-      streamParts.push('ET')
-
-      const stream = streamParts.join('\n')
-      const pageObjectId = objects.length + 1
-      const contentObjectId = pageObjectId + 1
-
-      pageObjectIds.push(pageObjectId)
-      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectId} 0 R >>`)
-      objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)
-    })
-
-    objects[1] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`
-
-    const pdfParts = ['%PDF-1.4\n']
-    const offsets: number[] = [0]
-
-    objects.forEach((object, index) => {
-      offsets.push(pdfParts.join('').length)
-      pdfParts.push(`${index + 1} 0 obj\n${object}\nendobj\n`)
-    })
-
-    const xrefOffset = pdfParts.join('').length
-    pdfParts.push(`xref\n0 ${objects.length + 1}\n`)
-    pdfParts.push('0000000000 65535 f \n')
-    offsets.slice(1).forEach((offset) => {
-      pdfParts.push(`${String(offset).padStart(10, '0')} 00000 n \n`)
-    })
-    pdfParts.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`)
-
-    download(filename, pdfParts.join(''), 'application/pdf')
-  }
-
   async function loadWorkflows() {
     try {
       setWorkflowLoading(true)
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/transformations/workflows`,
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to load workflows')
-      }
-
-      const data =
-        (await response.json()) as WorkflowTemplate[]
+      const data = await listWorkflows()
 
       setWorkflows(data)
     } catch (error) {
@@ -1197,38 +658,14 @@ function WorkspaceOutputs({
         .replace(/^_+|_+$/g, '') ||
       `custom_${Date.now()}`
 
-    const payload = {
-      id: workflowId,
-      name,
-      description:
-        'Custom operator workflow.',
-      output_types: selected,
-      generation_config: generationConfig,
-    }
-
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/transformations/workflows`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(payload),
-        },
-      )
-
-      if (!response.ok) {
-        const message = await response.text()
-
-        throw new Error(
-          message || 'Failed to save workflow',
-        )
-      }
-
-      const workflow =
-        (await response.json()) as WorkflowTemplate
+      const workflow = await saveWorkflow({
+        id: workflowId,
+        name,
+        description: 'Custom operator workflow.',
+        output_types: selected,
+        generation_config: generationConfig,
+      })
 
       setWorkflows((current) => [
         ...current.filter(
@@ -1316,7 +753,6 @@ function WorkspaceOutputs({
         </div>
 
         <div
-          className="generation-parameters"
           style={{
             padding: '16px 0',
             borderBottom:
@@ -1560,10 +996,9 @@ function WorkspaceOutputs({
 
           <Button
             variant="primary"
-            loading={busy}
-            loadingLabel={selectedWorkflow !== 'custom' ? 'Running Workflow...' : 'Generating...'}
             disabled={
               !transformation.content_dna ||
+              busy ||
               !selected.length
             }
             onClick={() =>
@@ -1635,41 +1070,29 @@ function WorkspaceOutputs({
 
                     <button
                       onClick={() =>
-                        downloadPdf(
-                          `${artifact.type}-dna-v${artifact.dna_version}.pdf`,
-                          artifact.type.replaceAll('_', ' '),
+                        download(
+                          `${artifact.type}-dna-v${artifact.dna_version}.md`,
                           artifact.content,
-                          artifact.dna_version,
+                          'text/markdown',
                         )
                       }
                     >
                       <Download
                         size={14}
                       />
-                      Download PDF
+                      Download
                     </button>
-
-                    {artifact.type === 'presentation' && (
-                      <button
-                        onClick={() =>
-                          downloadPpt(
-                            `${artifact.type}-dna-v${artifact.dna_version}.pptx`,
-                            artifact.content,
-                          )
-                        }
-                      >
-                        <FileText
-                          size={14}
-                        />
-                        Download PPT
-                      </button>
-                    )}
                   </div>
                 </article>
               ),
             )}
           </div>
-        ) : null}
+        ) : (
+          <p className="panel-empty-copy">
+            Choose one or more output formats to
+            generate your first artifact.
+          </p>
+        )}
       </Card>
 
       <Card className="versions-panel">
@@ -1698,9 +1121,6 @@ function WorkspaceOutputs({
               .map((version) => (
                 <button
                   key={version.version}
-                  type="button"
-                  title={`Restore DNA v${version.version}`}
-                  aria-label={`Restore DNA version ${version.version}`}
                   onClick={() =>
                     onRestoreVersion(
                       version.version,
@@ -1715,8 +1135,6 @@ function WorkspaceOutputs({
                     {version.note ||
                       'Saved version'}
                   </small>
-
-                  <em>Restore</em>
                 </button>
               ))}
           </div>
@@ -1933,18 +1351,10 @@ function InlineGenerationSelect({
 
 function IntegrityClaimCard({
   claim,
-  conflict,
   expanded,
   onToggle,
 }: {
   claim: IntegrityClaim
-  conflict?: {
-    conflict_id: string
-    claim_key: string
-    description: string
-    claim_ids: string[]
-    status: string
-  }
   expanded: boolean
   onToggle: () => void
 }) {
@@ -2011,94 +1421,87 @@ function IntegrityClaimCard({
 
       {expanded && (
         <div className="integrity-claim-details">
-          <div className="integrity-detail-grid">
-            <div className="integrity-detail-row">
-              <span>Claim</span>
-              <strong>
-                {claim.claim_key.replaceAll(
-                  '_',
-                  ' ',
-                )}
-              </strong>
-            </div>
-
-            {claim.time && (
-              <div className="integrity-detail-row">
-                <span>Time</span>
-                <strong>
-                  {claim.time}
-                </strong>
-              </div>
-            )}
-
-            {claim.location && (
-              <div className="integrity-detail-row">
-                <span>Location</span>
-                <strong>
-                  {claim.location}
-                </strong>
-              </div>
-            )}
+          <div className="integrity-detail-row">
+            <span>Claim</span>
+            <strong>
+              {claim.claim_key.replaceAll(
+                '_',
+                ' ',
+              )}
+            </strong>
           </div>
 
-          {isConflict && conflict && (
-            <div className="integrity-conflict-reason">
-              <span>Why this conflict occurred</span>
-              <p>{getConflictReason(conflict.description)}</p>
+          {claim.time && (
+            <div className="integrity-detail-row">
+              <span>Time</span>
+              <strong>
+                {claim.time}
+              </strong>
             </div>
           )}
 
-          <section className="integrity-evidence-section">
-            <div className="integrity-evidence-heading">
-              <span>Evidence</span>
-              <small>{claim.evidence.length} source{claim.evidence.length === 1 ? '' : 's'}</small>
+          {claim.location && (
+            <div className="integrity-detail-row">
+              <span>Location</span>
+              <strong>
+                {claim.location}
+              </strong>
             </div>
+          )}
 
-            {claim.evidence.length ? (
-              claim.evidence.map(
-                (evidence, index) => (
-                  <div
-                    className="integrity-evidence"
-                    key={`${claim.claim_id}-evidence-${index}`}
-                  >
-                    <div className="integrity-evidence-source">
-                      <strong>
-                        {evidence.source_reference}
-                      </strong>
+          <div className="integrity-conflict-reason">
+            <span>Why this conflict occurred</span>
+            <p>{getConflictReason(`Conflicting values detected for ${claim.unit || claim.subject}: ${String(claim.value ?? 'unknown')}`)}</p>
+          </div>
 
-                      {evidence.page !== null && (
-                        <span>
-                          Page {evidence.page}
-                        </span>
-                      )}
+          <div className="integrity-evidence-heading">
+            Evidence
+          </div>
 
-                      {evidence.section && (
-                        <span>
-                          {evidence.section}
-                        </span>
-                      )}
-                    </div>
+          {claim.evidence.length ? (
+            claim.evidence.map(
+              (evidence, index) => (
+                <div
+                  className="integrity-evidence"
+                  key={`${claim.claim_id}-evidence-${index}`}
+                >
+                  <div className="integrity-evidence-source">
+                    <strong>
+                      {evidence.source_reference}
+                    </strong>
 
-                    <blockquote>
-                      {evidence.supporting_excerpt}
-                    </blockquote>
+                    {evidence.page !== null && (
+                      <span>
+                        Page {evidence.page}
+                      </span>
+                    )}
 
-                    {evidence.timestamp && (
-                      <small>
-                        Timestamp:{' '}
-                        {evidence.timestamp}
-                      </small>
+                    {evidence.section && (
+                      <span>
+                        {evidence.section}
+                      </span>
                     )}
                   </div>
-                ),
-              )
-            ) : (
-              <p className="integrity-no-evidence">
-                No supporting evidence was attached
-                to this claim.
-              </p>
-            )}
-          </section>
+
+                  <blockquote>
+                    {evidence.supporting_excerpt}
+                  </blockquote>
+
+                  {evidence.timestamp && (
+                    <small>
+                      Timestamp:{' '}
+                      {evidence.timestamp}
+                    </small>
+                  )}
+                </div>
+              ),
+            )
+          ) : (
+            <p className="integrity-no-evidence">
+              No supporting evidence was attached
+              to this claim.
+            </p>
+          )}
         </div>
       )}
     </article>
