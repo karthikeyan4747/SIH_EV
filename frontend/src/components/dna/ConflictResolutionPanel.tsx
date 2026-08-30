@@ -8,6 +8,7 @@ import {
 import {
   resolveTransformationConflict,
 } from '../../lib/api/client'
+import { DragInput } from '../ui/DragInput'
 
 import type {
   IntegrityClaim,
@@ -518,50 +519,54 @@ export function ConflictResolutionPanel({
                   Or define your own value
                 </div>
 
-                <input
-                  type="text"
-                  value={customValue}
-                  disabled={isLoading}
-                  placeholder="Enter the value you want to use..."
-                  onChange={(event) => {
-                    const value =
-                      event.target.value
+<DragInput
+                   as="input"
+                   input={{
+                     type: "text",
+                     value: customValue,
+                     disabled: isLoading,
+                     placeholder:
+                       "Enter the value you want to use...",
+                     onChange: (event) => {
+                       const value =
+                         event.target.value
 
-                    setCustomValues(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          value,
-                      }),
-                    )
+                       setCustomValues(
+                         (current) => ({
+                           ...current,
+                           [conflict.conflict_id]:
+                             value,
+                         }),
+                       )
 
-                    setSelected(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          value.trim()
-                            ? 'custom_value'
-                            : '',
-                      }),
-                    )
+                       setSelected(
+                         (current) => ({
+                           ...current,
+                           [conflict.conflict_id]:
+                             value.trim()
+                               ? 'custom_value'
+                               : '',
+                         }),
+                       )
 
-                    setResolved(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          false,
-                      }),
-                    )
+                       setResolved(
+                         (current) => ({
+                           ...current,
+                           [conflict.conflict_id]:
+                             false,
+                         }),
+                       )
 
-                    setErrors(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          '',
-                      }),
-                    )
-                  }}
-                />
+                       setErrors(
+                         (current) => ({
+                           ...current,
+                           [conflict.conflict_id]:
+                             '',
+                         }),
+                       )
+                     },
+                   }}
+                 />
               </div>
 
               {error && (

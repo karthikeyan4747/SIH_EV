@@ -25,6 +25,7 @@ import { getDNANodes } from '../dna/dnaData'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
+import { DragInput } from '../ui/DragInput'
 
 import {
   AlertTriangle,
@@ -191,14 +192,16 @@ export function TransformationWorkspace({
             <span className="eyebrow-dot" /> TRANSFORMATION
           </span>
 
-          <input
-            className="transformation-title"
-            value={transformation.title}
-            aria-label="Transformation title"
-            onChange={(event) =>
-              onRename(event.target.value)
-            }
-          />
+<DragInput
+              as="input"
+              input={{
+                className: "transformation-title",
+                value: transformation.title,
+                'aria-label': "Transformation title",
+                onChange: (event) =>
+                  onRename(event.target.value),
+              }}
+            />
 
           <p>
             Inputs become one isolated workspace. Content DNA
@@ -1191,29 +1194,31 @@ function WorkspaceOutputs({
               <label className="workflow-modal-field">
                 <span>Workflow name</span>
 
-                <input
-                  className="workflow-name-input"
-                  value={customWorkflowName}
-                  onChange={(event) =>
-                    setCustomWorkflowName(event.target.value)
-                  }
-                  placeholder="e.g. Student Awareness Campaign"
-                  autoFocus
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === 'Enter' &&
-                      customWorkflowName.trim()
-                    ) {
-                      void saveCustomWorkflow()
-                    }
+                 <DragInput
+                   as="input"
+                   input={{
+                     className: "workflow-name-input",
+                     value: customWorkflowName,
+                     onChange: (event) =>
+                       setCustomWorkflowName(event.target.value),
+                     placeholder: "e.g. Student Awareness Campaign",
+                      autoFocus: true,
+                     onKeyDown: (event) => {
+                       if (
+                         event.key === 'Enter' &&
+                         customWorkflowName.trim()
+                       ) {
+                         void saveCustomWorkflow()
+                       }
 
-                    if (event.key === 'Escape') {
-                      setShowSaveWorkflow(false)
-                      setCustomWorkflowName('')
-                    }
-                  }}
-                />
-              </label>
+                       if (event.key === 'Escape') {
+                         setShowSaveWorkflow(false)
+                         setCustomWorkflowName('')
+                       }
+                     },
+                   }}
+                  />
+               </label>
 
               <div className="workflow-modal-preview">
                 <span>

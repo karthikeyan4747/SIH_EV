@@ -1634,6 +1634,56 @@ body {
   color: var(--muted);
 }
 
+.drag-input-drop {
+  border-color: rgba(15, 143, 140, 0.55) !important;
+  box-shadow:
+    0 0 0 3px rgba(15, 143, 140, 0.12),
+    0 0 0 5px rgba(255, 255, 255, 0.8);
+}
+
+.drag-input-drop.text-form input,
+.drag-input-drop.text-form textarea {
+  border-color: rgba(15, 143, 140, 0.55) !important;
+  box-shadow:
+    0 0 0 3px var(--focus-ring),
+    0 0 0 5px rgba(255, 255, 255, 0.8);
+}
+
+.app-shell.theme-dark .drag-input-drop {
+  border-color: rgba(131, 216, 192, 0.55) !important;
+  box-shadow:
+    0 0 0 3px rgba(131, 216, 192, 0.24),
+    0 0 0 5px rgba(17, 24, 39, 0.88);
+}
+
+.upload-drop-zone {
+  border: 2px dashed var(--border-strong);
+  border-radius: 12px;
+  transition:
+    border-color 0.22s ease,
+    background 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.upload-drop-zone.drag-over {
+  border-color: var(--accent);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(15, 143, 140, 0.06),
+      rgba(226, 96, 79, 0.06)
+    );
+  box-shadow:
+    0 0 0 3px rgba(15, 143, 140, 0.12),
+    0 0 0 5px rgba(255, 255, 255, 0.92);
+}
+
+.app-shell.theme-dark .upload-drop-zone.drag-over {
+  box-shadow:
+    0 0 0 3px rgba(131, 216, 192, 0.24),
+    0 0 0 5px rgba(17, 24, 39, 0.88);
+}
+
 .pipeline,
 .flow-divider {
   color: #617083;
