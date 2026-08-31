@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from threading import Lock
 
@@ -6,6 +7,9 @@ from pydantic import BaseModel
 
 from app.models.content import ContentDNA, RawContent
 from app.models.transformation import Transformation, utc_now
+
+
+logger = logging.getLogger(__name__)
 
 
 class SourceRecord(BaseModel):
@@ -68,8 +72,28 @@ class LocalTransformationStorage:
             return {}
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            return {key: Transformation.model_validate(value) for key, value in data.items()}
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            if not isinstance(data, dict):
+                return {}
+            records: dict[str, Transformation] = {}
+            for key, value in data.items():
+                try:
+                    records[key] = Transformation.model_validate(value)
+                except Exception as val_exc:
+                    logger.warning("Error validating transformation %s: %s", key, val_exc)
+                    # Attempt lenient salvage for legacy claim statuses
+                    try:
+                        if isinstance(value, dict) and "source_integrity" in value and isinstance(value["source_integrity"], dict):
+                            for claim in value["source_integrity"].get("claims", []):
+                                if isinstance(claim, dict) and claim.get("status") not in {
+                                    "supported", "corroborated", "conflict", "uncertain",
+                                    "unresolved", "resolved", "superseded", "rejected"
+                                }:
+                                    claim["status"] = "supported"
+                        records[key] = Transformation.model_validate(value)
+                    except Exception:
+                        logger.error("Failed to salvage transformation %s, skipping record", key)
+            return records
+        except (OSError, json.JSONDecodeError) as exc:
             raise RuntimeError("Transformation storage could not be read") from exc
 
     def _write(self, records: dict[str, Transformation]) -> None:

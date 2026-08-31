@@ -59,6 +59,10 @@ export type ClaimStatus =
   | 'corroborated'
   | 'conflict'
   | 'uncertain'
+  | 'unresolved'
+  | 'resolved'
+  | 'superseded'
+  | 'rejected'
 
 export interface IntegrityClaim {
   claim_id: string

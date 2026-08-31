@@ -56,7 +56,10 @@ class _ClaimExtractionResponse(BaseModel):
 def _extract_json(text: str) -> str:
     if not text:
         return ""
-    cleaned = text.strip()
+    # Strip <think>...</think> reasoning tags if present
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    if not cleaned:
+        cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned
         cleaned = cleaned.lstrip("`").lstrip()
@@ -72,7 +75,7 @@ def _extract_json(text: str) -> str:
 
 
 def _safe_parse_claim_json(raw_content: str) -> list[_ExtractedClaim]:
-    """Resilient claim parser that handles valid, unclosed, or partially truncated JSON."""
+    """Resilient claim parser that handles valid, unclosed, alias-keyed, or partially truncated JSON."""
     if not raw_content or not raw_content.strip():
         return []
 
@@ -81,9 +84,14 @@ def _safe_parse_claim_json(raw_content: str) -> list[_ExtractedClaim]:
     # Attempt 1: Direct JSON parsing
     try:
         data = json.loads(raw_json)
-        if isinstance(data, dict) and "claims" in data and isinstance(data["claims"], list):
-            parsed = _ClaimExtractionResponse.model_validate(data)
-            return parsed.claims
+        if isinstance(data, dict):
+            for key in ("claims", "factual_claims", "facts", "extracted_claims", "data", "items"):
+                if key in data and isinstance(data[key], list):
+                    return [
+                        _ExtractedClaim.model_validate(c)
+                        for c in data[key]
+                        if isinstance(c, dict)
+                    ]
         elif isinstance(data, list):
             return [_ExtractedClaim.model_validate(c) for c in data if isinstance(c, dict)]
     except Exception:
@@ -99,14 +107,20 @@ def _safe_parse_claim_json(raw_content: str) -> list[_ExtractedClaim]:
         repaired += "}"
     try:
         data = json.loads(repaired)
-        if isinstance(data, dict) and "claims" in data and isinstance(data["claims"], list):
-            return _ClaimExtractionResponse.model_validate(data).claims
+        if isinstance(data, dict):
+            for key in ("claims", "factual_claims", "facts", "extracted_claims", "data", "items"):
+                if key in data and isinstance(data[key], list):
+                    return [
+                        _ExtractedClaim.model_validate(c)
+                        for c in data[key]
+                        if isinstance(c, dict)
+                    ]
     except Exception:
         pass
 
     # Attempt 3: Regex match individual claim objects {"claim_key": ...}
     claims: list[_ExtractedClaim] = []
-    blocks = re.findall(r'\{[^{}]*?"claim_key"[^{}]*?\}', raw_content, re.DOTALL)
+    blocks = re.findall(r'\{[^{}]*?"(?:claim_key|subject)"[^{}]*?\}', raw_content, re.DOTALL)
     for block in blocks:
         try:
             item = json.loads(block)
@@ -216,7 +230,15 @@ class SourceIntegrityService:
         all_claims: list[Claim] = []
 
         for source in expanded_sources:
-            extracted = self._extract_claims(source)
+            try:
+                extracted = self._extract_claims(source)
+            except Exception as exc:
+                logger.warning(
+                    "Claim extraction failed for chunk %s: %s; skipping chunk and continuing",
+                    source.source_id,
+                    exc,
+                )
+                extracted = []
 
             for index, item in enumerate(extracted):
                 claim = self._build_claim(
@@ -345,7 +367,11 @@ Extract all factual claims in valid JSON:
                 raise SourceIntegrityError(f"Claim extraction failed: {exc}") from exc
 
         if not isinstance(raw_content, str) or not raw_content.strip():
-            raise SourceIntegrityError("Claim extraction returned empty content")
+            logger.warning(
+                "Claim extraction returned empty content for source %s; continuing gracefully",
+                source.source_id,
+            )
+            return []
 
         return _safe_parse_claim_json(raw_content)
 

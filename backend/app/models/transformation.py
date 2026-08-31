@@ -51,6 +51,9 @@ class Claim(BaseModel):
         "conflict",
         "uncertain",
         "unresolved",
+        "resolved",
+        "superseded",
+        "rejected",
     ] = "supported"
 
 
