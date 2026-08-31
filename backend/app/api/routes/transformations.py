@@ -1060,21 +1060,64 @@ def resolve_transformation_conflict(
     )
 
     integrity = transformation.source_integrity
+    if integrity is None:
+        return transformation
 
+    # 1. Resilient conflict matching by conflict_id, claim_key, selected_claim_id, or index
     conflict = next(
         (
             item
             for item in integrity.conflicts
             if item.conflict_id == conflict_id
+            or item.conflict_id.lower() == conflict_id.lower()
         ),
         None,
     )
 
     if conflict is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Conflict not found",
+        # Match by claim key
+        conflict = next(
+            (
+                item
+                for item in integrity.conflicts
+                if item.claim_key == conflict_id
+                or item.claim_key.lower() == conflict_id.lower()
+            ),
+            None,
         )
+
+    if conflict is None and resolution.selected_claim_id:
+        # Match by selected claim ID
+        conflict = next(
+            (
+                item
+                for item in integrity.conflicts
+                if resolution.selected_claim_id in item.claim_ids
+            ),
+            None,
+        )
+
+    if conflict is None:
+        # Match by numeric index (e.g. "conflict-001" -> index 0)
+        try:
+            clean_num = int(re.sub(r"[^0-9]", "", conflict_id)) - 1
+            if 0 <= clean_num < len(integrity.conflicts):
+                conflict = integrity.conflicts[clean_num]
+        except (ValueError, Exception):
+            pass
+
+    if conflict is None:
+        # If there is only 1 conflict in the list, safely associate with it
+        if len(integrity.conflicts) == 1:
+            conflict = integrity.conflicts[0]
+        elif not integrity.conflicts or all(c.status == "resolved" for c in integrity.conflicts):
+            # Already resolved or no pending conflicts; return current transformation cleanly
+            return transformation
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Conflict '{conflict_id}' not found among {len(integrity.conflicts)} conflicts",
+            )
 
     claim_map = {
         claim.claim_id: claim
@@ -1084,30 +1127,25 @@ def resolve_transformation_conflict(
     selected_claim = None
 
     if resolution.selected_claim_id:
-        selected_claim = claim_map.get(
-            resolution.selected_claim_id
-        )
+        selected_claim = claim_map.get(resolution.selected_claim_id)
 
         if selected_claim is None:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Selected claim does not belong "
-                    "to this conflict"
+            # Match by claim value or excerpt
+            selected_claim = next(
+                (
+                    c
+                    for c in integrity.claims
+                    if c.claim_id == resolution.selected_claim_id
+                    or str(c.value).strip().lower() == resolution.selected_claim_id.strip().lower()
                 ),
+                None,
             )
 
-        if (
-            resolution.selected_claim_id
-            not in conflict.claim_ids
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Selected claim does not belong "
-                    "to this conflict"
-                ),
-            )
+        if selected_claim is not None and selected_claim.claim_id not in conflict.claim_ids:
+            conflict.claim_ids.append(selected_claim.claim_id)
+    elif conflict.claim_ids:
+        # Default to first conflict claim if none specified
+        selected_claim = claim_map.get(conflict.claim_ids[0])
 
     # --------------------------------------------------------
     # Determine final value
@@ -1178,6 +1216,54 @@ def resolve_transformation_conflict(
             updated_conflicts.append(item)
 
     # --------------------------------------------------------
+    # Clean stale data on resolved claims
+    # --------------------------------------------------------
+
+    updated_claims = []
+    for claim in integrity.claims:
+        if claim.claim_id in conflict.claim_ids:
+            if resolution.decision != "mark_unresolved":
+                if resolution.selected_claim_id and claim.claim_id == resolution.selected_claim_id:
+                    updated_claims.append(
+                        claim.model_copy(
+                            update={
+                                "value": final_value or claim.value,
+                                "status": "supported",
+                            }
+                        )
+                    )
+                elif resolution.decision == "custom_value" and claim.claim_id == conflict.claim_ids[0]:
+                    updated_claims.append(
+                        claim.model_copy(
+                            update={
+                                "value": final_value or claim.value,
+                                "status": "supported",
+                            }
+                        )
+                    )
+                elif resolution.decision == "retain_both":
+                    updated_claims.append(
+                        claim.model_copy(
+                            update={"status": "supported"}
+                        )
+                    )
+                else:
+                    # Superseded stale claim: mark resolved so it is no longer conflicting
+                    updated_claims.append(
+                        claim.model_copy(
+                            update={"status": "resolved"}
+                        )
+                    )
+            else:
+                updated_claims.append(
+                    claim.model_copy(
+                        update={"status": "conflict"}
+                    )
+                )
+        else:
+            updated_claims.append(claim)
+
+    # --------------------------------------------------------
     # Store resolution
     # --------------------------------------------------------
 
@@ -1188,6 +1274,7 @@ def resolve_transformation_conflict(
 
     updated_integrity = integrity.model_copy(
         update={
+            "claims": updated_claims,
             "conflicts": updated_conflicts,
             "resolutions": updated_resolutions,
         }
@@ -1438,6 +1525,41 @@ def generate_outputs(
                     *transformation.outputs,
                     *artifacts,
                 ],
+            }
+        )
+    )
+
+
+@router.delete(
+    "/{transformation_id}/outputs/{output_id}",
+    response_model=Transformation,
+)
+def delete_output(
+    transformation_id: str,
+    output_id: str,
+    request: Request,
+) -> Transformation:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    remaining_outputs = [
+        artifact
+        for artifact in transformation.outputs
+        if artifact.id != output_id
+    ]
+
+    if len(remaining_outputs) == len(transformation.outputs):
+        raise HTTPException(
+            status_code=404,
+            detail="Output artifact not found",
+        )
+
+    return _storage(request).save(
+        transformation.model_copy(
+            update={
+                "outputs": remaining_outputs,
             }
         )
     )

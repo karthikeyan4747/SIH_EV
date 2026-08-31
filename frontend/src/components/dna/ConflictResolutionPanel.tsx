@@ -324,324 +324,248 @@ export function ConflictResolutionPanel({
                 )}
               </div>
 
-              <div className="claim-options">
-                {conflictClaims.map(
-                  (claim) => (
+              {isResolved ? (
+                <div
+                  className="resolved-summary-box"
+                  style={{
+                    marginTop: '12px',
+                    padding: '14px 16px',
+                    background: 'rgba(34, 197, 94, 0.08)',
+                    border: '1px solid rgba(34, 197, 94, 0.25)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#86efac', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Authoritative Value Applied
+                      </span>
+                      <div style={{ fontSize: '15px', fontWeight: 600, color: '#f8fafc', marginTop: '3px' }}>
+                        {finalValue}
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      key={claim.claim_id}
+                      className="edit-resolution-button"
+                      style={{
+                        fontSize: '11px',
+                        color: '#94a3b8',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '4px',
+                        padding: '5px 10px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onClick={() => {
+                        setResolved((curr) => ({ ...curr, [conflict.conflict_id]: false }))
+                      }}
+                    >
+                      Change Selection
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#86efac', opacity: 0.9, marginTop: '8px' }}>
+                    ✓ Stale conflicting claims removed. Authoritative fact updated in Content DNA.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="claim-options">
+                    {conflictClaims.map((claim) => (
+                      <button
+                        type="button"
+                        key={claim.claim_id}
+                        disabled={isLoading}
+                        className={`claim-option ${
+                          selectedValue === claim.claim_id ? 'selected' : ''
+                        }`}
+                        onClick={() => {
+                          setSelected((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: claim.claim_id,
+                          }))
+                          setCustomValues((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: '',
+                          }))
+                          setResolved((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: false,
+                          }))
+                          setErrors((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: '',
+                          }))
+                        }}
+                      >
+                        <div className="claim-radio">
+                          {selectedValue === claim.claim_id && <span />}
+                        </div>
+
+                        <div className="claim-content">
+                          <div className="claim-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '14px', color: '#38bdf8' }}>
+                              {String(claim.value ?? 'No value')}{claim.unit ? ` ${claim.unit}` : ''}
+                            </strong>
+                            <span className="claim-source-badge" style={{ fontSize: '11px', background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: '4px', color: '#94a3b8' }}>
+                              {claim.evidence?.[0]?.source_reference || claim.source_ids?.[0] || 'Source'}
+                              {claim.evidence?.[0]?.page ? ` · Page ${claim.evidence[0].page}` : ''}
+                            </span>
+                          </div>
+
+                          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                            <strong>{claim.subject}</strong> {claim.predicate}
+                          </span>
+
+                          {claim.evidence?.[0]?.supporting_excerpt && (
+                            <blockquote style={{ margin: '6px 0 0', padding: '4px 8px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', background: 'rgba(0,0,0,0.2)', borderLeft: '2px solid #38bdf8', borderRadius: '2px' }}>
+                              "{claim.evidence[0].supporting_excerpt}"
+                            </blockquote>
+                          )}
+
+                          <div className="claim-meta-tags" style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '10px', color: '#64748b' }}>
+                            {claim.time && <span>Time: {claim.time}</span>}
+                            {claim.location && <span>Location: {claim.location}</span>}
+                            {claim.scope && <span>Scope: {claim.scope}</span>}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
                       disabled={isLoading}
                       className={`claim-option ${
-                        selectedValue ===
-                        claim.claim_id
-                          ? 'selected'
-                          : ''
+                        selectedValue === 'retain_both' ? 'selected' : ''
                       }`}
                       onClick={() => {
-                        setSelected(
-                          (current) => ({
-                            ...current,
-                            [conflict.conflict_id]:
-                              claim.claim_id,
-                          }),
-                        )
-
-                        setCustomValues(
-                          (current) => ({
-                            ...current,
-                            [conflict.conflict_id]:
-                              '',
-                          }),
-                        )
-
-                        setResolved(
-                          (current) => ({
-                            ...current,
-                            [conflict.conflict_id]:
-                              false,
-                          }),
-                        )
-
-                        setErrors(
-                          (current) => ({
-                            ...current,
-                            [conflict.conflict_id]:
-                              '',
-                          }),
-                        )
+                        setSelected((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: 'retain_both',
+                        }))
+                        setCustomValues((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: '',
+                        }))
+                        setResolved((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: false,
+                        }))
+                        setErrors((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: '',
+                        }))
                       }}
                     >
                       <div className="claim-radio">
-                        {selectedValue ===
-                          claim.claim_id && (
-                          <span />
-                        )}
+                        {selectedValue === 'retain_both' && <span />}
                       </div>
 
                       <div className="claim-content">
-                        <strong>
-                          {String(
-                            claim.value ??
-                              'No value',
-                          )}
-                        </strong>
-
-                        <span>
-                          {claim.subject}{' '}
-                          {claim.predicate}
-                        </span>
-
-                        {claim.time && (
-                          <small>
-                            Time: {claim.time}
-                          </small>
-                        )}
-
-                        {claim.location && (
-                          <small>
-                            Location:{' '}
-                            {claim.location}
-                          </small>
-                        )}
+                        <strong>Retain both values</strong>
+                        <span>Keep both source values</span>
                       </div>
                     </button>
-                  ),
-                )}
 
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  className={`claim-option ${
-                    selectedValue ===
-                    'retain_both'
-                      ? 'selected'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    setSelected(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          'retain_both',
-                      }),
-                    )
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      className={`claim-option ${
+                        selectedValue === 'mark_unresolved' ? 'selected' : ''
+                      }`}
+                      onClick={() => {
+                        setSelected((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: 'mark_unresolved',
+                        }))
+                        setCustomValues((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: '',
+                        }))
+                        setResolved((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: false,
+                        }))
+                        setErrors((current) => ({
+                          ...current,
+                          [conflict.conflict_id]: '',
+                        }))
+                      }}
+                    >
+                      <div className="claim-radio">
+                        {selectedValue === 'mark_unresolved' && <span />}
+                      </div>
 
-                    setCustomValues(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          '',
-                      }),
-                    )
-
-                    setResolved(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          false,
-                      }),
-                    )
-
-                    setErrors(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          '',
-                      }),
-                    )
-                  }}
-                >
-                  <div className="claim-radio">
-                    {selectedValue ===
-                      'retain_both' && (
-                      <span />
-                    )}
+                      <div className="claim-content">
+                        <strong>Keep unresolved</strong>
+                        <span>Do not choose an authoritative value</span>
+                      </div>
+                    </button>
                   </div>
 
-                  <div className="claim-content">
-                    <strong>
-                      Retain both values
-                    </strong>
+                  <div className="custom-resolution">
+                    <div className="custom-resolution-title">
+                      <UserRound size={14} />
+                      Or define your own value
+                    </div>
 
-                    <span>
-                      Keep both source values
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  className={`claim-option ${
-                    selectedValue ===
-                    'mark_unresolved'
-                      ? 'selected'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    setSelected(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          'mark_unresolved',
-                      }),
-                    )
-
-                    setCustomValues(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          '',
-                      }),
-                    )
-
-                    setResolved(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          false,
-                      }),
-                    )
-
-                    setErrors(
-                      (current) => ({
-                        ...current,
-                        [conflict.conflict_id]:
-                          '',
-                      }),
-                    )
-                  }}
-                >
-                  <div className="claim-radio">
-                    {selectedValue ===
-                      'mark_unresolved' && (
-                      <span />
-                    )}
+                    <DragInput
+                      as="input"
+                      input={{
+                        type: "text",
+                        value: customValue,
+                        disabled: isLoading,
+                        placeholder: "Enter the value you want to use...",
+                        onChange: (event) => {
+                          const value = event.target.value
+                          setCustomValues((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: value,
+                          }))
+                          setSelected((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: value.trim() ? 'custom_value' : '',
+                          }))
+                          setResolved((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: false,
+                          }))
+                          setErrors((current) => ({
+                            ...current,
+                            [conflict.conflict_id]: '',
+                          }))
+                        },
+                      }}
+                    />
                   </div>
 
-                  <div className="claim-content">
-                    <strong>
-                      Keep unresolved
-                    </strong>
+                  {error && (
+                    <div className="integrity-error" role="alert">
+                      {error}
+                    </div>
+                  )}
 
-                    <span>
-                      Do not choose an
-                      authoritative value
-                    </span>
+                  <div className="conflict-actions">
+                    <div className="resolution-preview">
+                      <span>FINAL VALUE</span>
+                      <strong>{finalValue}</strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="resolve-button"
+                      disabled={
+                        isLoading ||
+                        !selectedValue ||
+                        (selectedValue === 'custom_value' && !customValue.trim())
+                      }
+                      onClick={() => void resolveConflict(conflict)}
+                    >
+                      <Check size={15} />
+                      {isLoading ? 'Resolving...' : 'Resolve Conflict'}
+                    </button>
                   </div>
-                </button>
-              </div>
-
-              <div className="custom-resolution">
-                <div className="custom-resolution-title">
-                  <UserRound size={14} />
-                  Or define your own value
-                </div>
-
-<DragInput
-                   as="input"
-                   input={{
-                     type: "text",
-                     value: customValue,
-                     disabled: isLoading,
-                     placeholder:
-                       "Enter the value you want to use...",
-                     onChange: (event) => {
-                       const value =
-                         event.target.value
-
-                       setCustomValues(
-                         (current) => ({
-                           ...current,
-                           [conflict.conflict_id]:
-                             value,
-                         }),
-                       )
-
-                       setSelected(
-                         (current) => ({
-                           ...current,
-                           [conflict.conflict_id]:
-                             value.trim()
-                               ? 'custom_value'
-                               : '',
-                         }),
-                       )
-
-                       setResolved(
-                         (current) => ({
-                           ...current,
-                           [conflict.conflict_id]:
-                             false,
-                         }),
-                       )
-
-                       setErrors(
-                         (current) => ({
-                           ...current,
-                           [conflict.conflict_id]:
-                             '',
-                         }),
-                       )
-                     },
-                   }}
-                 />
-              </div>
-
-              {error && (
-                <div
-                  className="integrity-error"
-                  role="alert"
-                >
-                  {error}
-                </div>
-              )}
-
-              <div className="conflict-actions">
-                <div className="resolution-preview">
-                  <span>
-                    FINAL VALUE
-                  </span>
-
-                  <strong>
-                    {finalValue}
-                  </strong>
-                </div>
-
-                <button
-                  type="button"
-                  className="resolve-button"
-                  disabled={
-                    isLoading ||
-                    !selectedValue ||
-                    (
-                      selectedValue ===
-                        'custom_value' &&
-                      !customValue.trim()
-                    )
-                  }
-                  onClick={() =>
-                    void resolveConflict(
-                      conflict,
-                    )
-                  }
-                >
-                  <Check size={15} />
-
-                  {isLoading
-                    ? 'Resolving...'
-                    : 'Resolve Conflict'}
-                </button>
-              </div>
-
-              {isResolved && (
-                <div className="resolution-confirmation">
-                  <Check size={15} />
-
-                  This decision will be used
-                  as the authoritative value
-                  during future transformations.
-                </div>
+                </>
               )}
             </article>
           )

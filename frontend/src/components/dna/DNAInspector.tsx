@@ -122,32 +122,39 @@ function SectionEditor({
 
   return (
     <div className="inspector-fields">
-      {Object.entries(draft).map(([key, value]) =>
-        Array.isArray(value) ? (
-          <ArrayEditor
-            key={key}
-            label={key}
-            values={value}
-            onChange={(next) => update(key, next)}
-          />
-        ) : (
+      {Object.entries(draft).map(([key, value]) => {
+        if (Array.isArray(value)) {
+          return (
+            <ArrayEditor
+              key={key}
+              label={key}
+              values={value}
+              onChange={(next) => update(key, next)}
+            />
+          )
+        }
+
+        const strVal = String(value ?? '')
+        const needsMultiline = isMultiline(key) || strVal.length > 45 || strVal.includes('\n')
+        const calculatedRows = isMultiline(key)
+          ? (key === 'summary' || key === 'supporting_excerpt' ? 5 : 3)
+          : Math.min(8, Math.max(2, Math.ceil(strVal.length / 45)))
+
+        return (
           <div className="inspector-field" key={key}>
             <label htmlFor={`${section}-${key}`}>
               {key.replaceAll('_', ' ')}
             </label>
-            {isMultiline(key) ? (
+            {needsMultiline ? (
               <DragInput
                 as="textarea"
                 textarea={{
                   id: `${section}-${key}`,
-                  value: value,
+                  value: strVal,
+                  rows: calculatedRows,
+                  style: { width: '100%', resize: 'vertical', lineHeight: 1.5 },
                   onChange: (event) =>
                     update(key, event.target.value),
-                  rows:
-                    key === 'summary' ||
-                    key === 'supporting_excerpt'
-                      ? 5
-                      : 3,
                 }}
               />
             ) : (
@@ -155,15 +162,15 @@ function SectionEditor({
                 as="input"
                 input={{
                   id: `${section}-${key}`,
-                  value: value,
+                  value: strVal,
                   onChange: (event) =>
                     update(key, event.target.value),
                 }}
               />
             )}
           </div>
-        ),
-      )}
+        )
+      })}
 
       <div className="inspector-savebar">
         <span
@@ -233,40 +240,68 @@ function ArrayEditor({
       <label>{label.replaceAll('_', ' ')}</label>
       {values.length ? (
         <div className="array-items">
-          {values.map((value, index) => (
-            <div
-              className="array-item"
-              key={`${value}-${index}`}
-            >
-              <DragInput
-                as="input"
-                input={{
-                  value: value,
-                  'aria-label': `${label} item ${index + 1}`,
-                  onChange: (event) =>
-                    onChange(
-                      values.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? event.target.value
-                          : item,
-                      ),
-                    ),
-                }}
-              />
-              <button
-                aria-label={`Delete ${label} item ${index + 1}`}
-                onClick={() =>
-                  onChange(
-                    values.filter(
-                      (_, itemIndex) => itemIndex !== index,
-                    ),
-                  )
-                }
+          {values.map((value, index) => {
+            const isLong = typeof value === 'string' && (value.length > 40 || value.includes('\n'))
+            const calculatedRows = typeof value === 'string'
+              ? Math.min(8, Math.max(2, Math.ceil(value.length / 45)))
+              : 2
+
+            return (
+              <div
+                className={`array-item ${isLong ? 'array-item-multiline' : ''}`}
+                key={`${value}-${index}`}
               >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+                {isLong ? (
+                  <DragInput
+                    as="textarea"
+                    textarea={{
+                      value: value,
+                      'aria-label': `${label} item ${index + 1}`,
+                      rows: calculatedRows,
+                      style: { width: '100%', resize: 'vertical', lineHeight: 1.5 },
+                      onChange: (event) =>
+                        onChange(
+                          values.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? event.target.value
+                              : item,
+                          ),
+                        ),
+                    }}
+                  />
+                ) : (
+                  <DragInput
+                    as="input"
+                    input={{
+                      value: value,
+                      'aria-label': `${label} item ${index + 1}`,
+                      onChange: (event) =>
+                        onChange(
+                          values.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? event.target.value
+                              : item,
+                          ),
+                        ),
+                    }}
+                  />
+                )}
+                <button
+                  type="button"
+                  aria-label={`Delete ${label} item ${index + 1}`}
+                  onClick={() =>
+                    onChange(
+                      values.filter(
+                        (_, itemIndex) => itemIndex !== index,
+                      ),
+                    )
+                  }
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       ) : (
         <p className="inspector-empty">

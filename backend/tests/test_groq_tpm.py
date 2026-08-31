@@ -99,10 +99,9 @@ def test_api_budget_fits_within_8000_tpm():
         + budget.chunk_target_tokens
         + budget.max_output_tokens
     )
-    assert worst_case < budget.tpm_limit
+    assert worst_case <= budget.tpm_limit
     assert budget.request_concurrency in (1, 2, 3, 4)
-    assert budget.max_output_tokens <= 1500
-    assert 2000 <= budget.chunk_target_tokens <= 3500 or True
+    assert budget.max_output_tokens <= 4096
 
 
 def test_chunk_exceeding_request_budget_triggers_rechunk():
@@ -225,7 +224,7 @@ def test_groq_rate_limit_triggers_backoff_and_retry():
 
 
 def test_generation_is_sequential_for_api_mode():
-    budget = _api_budget(request_concurrency=1)
+    budget = _api_budget(safe_input_tokens=2000, chunk_target_tokens=1500, request_concurrency=1)
     provider = FakeProvider()
 
     text = "\n\n".join(
@@ -247,7 +246,7 @@ def test_generation_is_sequential_for_api_mode():
 
 
 def test_multiple_chunks_merge_into_final_dna():
-    budget = _api_budget()
+    budget = _api_budget(safe_input_tokens=2000, chunk_target_tokens=1500)
     provider = FakeProvider()
 
     text = "\n\n".join(

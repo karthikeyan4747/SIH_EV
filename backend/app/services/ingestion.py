@@ -1,25 +1,24 @@
+import logging
+import re
+import subprocess
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from docx import Document
-from pypdf import PdfReader
-
-from app.models.content import RawContent
-
-import re
-
-from youtube_transcript_api import YouTubeTranscriptApi
-
 import cv2
 import numpy as np
-
-import subprocess
-import tempfile
+from docx import Document
+from pypdf import PdfReader
+from youtube_transcript_api import YouTubeTranscriptApi
 
 from app.core.config import settings
+from app.models.content import RawContent
+
+logger = logging.getLogger(__name__)
+
 
 class IngestionError(ValueError):
     pass
@@ -81,6 +80,15 @@ class PDFIngestionProvider:
         filename: str,
         content: bytes,
     ) -> RawContent:
+        import time
+
+        start_time = time.time()
+        logger.info(
+            "Starting text extraction for PDF '%s' (%d bytes)...",
+            filename,
+            len(content),
+        )
+
         try:
             reader = PdfReader(BytesIO(content))
             pages = [
@@ -99,6 +107,15 @@ class PDFIngestionProvider:
                 start=1,
             )
             if page_text.strip()
+        )
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "Extracted %d pages from '%s' in %.2f seconds (%d characters)",
+            len(pages),
+            filename,
+            elapsed,
+            len(text),
         )
 
         if not text.strip():

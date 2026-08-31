@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     groq_api_key: str = ""
     groq_api_keys: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "qwen/qwen3.8-27b"
 
     def get_groq_api_keys(self) -> list[str]:
         raw_keys: list[str] = []
@@ -32,36 +32,34 @@ class Settings(BaseSettings):
 
     ollama_model: str = "qwen3:8b"
 
-    max_source_chars: int = 50_000
+    max_source_chars: int = 1_500_000
 
     # ---- Large-document chunking ----
     # Conservative character:token ratio (English ~4 chars/token).
     token_estimate_ratio: float = 0.25
-    # Target tokens per chunk (well under the model context window).
-    chunk_target_tokens_api: int = 1800
-    chunk_target_tokens_local: int = 2500
-    chunk_overlap_tokens: int = 150
+    # Target tokens per chunk sized for maximum speed (9-10 pages per request).
+    chunk_target_tokens_api: int = 3800
+    chunk_target_tokens_local: int = 4000
+    chunk_overlap_tokens: int = 100
     # How many partial ContentDNA objects are merged per synthesis call.
-    merge_group_size: int = 4
+    merge_group_size: int = 8
     # Bounded retries for transient LLM failures on a chunk/synthesis.
     max_chunk_retries: int = 3
     # Controlled concurrency for chunk processing (API mode only).
-    # Local/Ollama mode is always sequential to respect hardware limits.
     chunk_workers: int = 1
     # Reserved token budgets used by the centralized context calculator.
-    # The Content DNA extraction system prompt is ~250 tokens.
     llm_system_prompt_tokens: int = 300
-    api_reserved_output_tokens: int = 1200
+    api_reserved_output_tokens: int = 800
     ollama_reserved_output_tokens: int = 1200
 
     # ---- Groq / API mode TPM budgeting ----
-    # Conservative defaults sized for the free Groq plan (8k TPM).
-    groq_tpm_limit: int = 8000
-    groq_chunk_input_tokens: int = 1800
-    groq_max_output_tokens: int = 1200
+    # 6000 TPM is Groq's free-tier per-minute limit.
+    groq_tpm_limit: int = 6000
+    groq_chunk_input_tokens: int = 3800
+    groq_max_output_tokens: int = 800
     groq_request_concurrency: int = 1
-    groq_generation_max_output_tokens: int = 2500
-    groq_max_retries: int = 4
+    groq_generation_max_output_tokens: int = 2000
+    groq_max_retries: int = 5
     groq_backoff_base_seconds: int = 2
 
     max_upload_size_bytes: int = 256 * 1024 * 1024

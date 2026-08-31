@@ -313,3 +313,157 @@ def test_empty_conflicts_on_consistent_dataset() -> None:
     conflicts = service._compare_claims(claims)
     assert len(conflicts) == 0
     assert claims[0].status == "corroborated"
+
+
+def test_semantic_competition_conflict() -> None:
+    """
+    Test 13: Semantic competition conflict
+    Source A: Pathenova won SIH 2026.
+    Source B: Pathenova was shortlisted for SIH 2026.
+    Expected: 1 conflict
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "competition_outcome", "Pathenova", "won", "winner", time="SIH 2026"),
+        make_claim("c2", "competition_outcome", "Pathenova", "was shortlisted for", "shortlisted", time="SIH 2026"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 1
+    assert set(conflicts[0].claim_ids) == {"c1", "c2"}
+    assert claims[0].status == "conflict"
+    assert claims[1].status == "conflict"
+
+
+def test_completion_date_conflict() -> None:
+    """
+    Test 14: Completion date conflict
+    Source A: Project completed in 2024.
+    Source B: Project completed in 2025.
+    Expected: 1 conflict
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "completion_date", "Project Alpha", "was completed in", "2024"),
+        make_claim("c2", "completion_date", "Project Alpha", "finished in", "2025"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 1
+    assert set(conflicts[0].claim_ids) == {"c1", "c2"}
+
+
+def test_numeric_conflict_50_vs_55() -> None:
+    """
+    Test 15: Numeric discrepancy 50 vs 55 employees
+    Source A: Organization has 50 employees.
+    Source B: Organization employs approximately 55 people.
+    Expected: 1 conflict
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "employee_count", "The Organization", "has", "50", "employees"),
+        make_claim("c2", "employee_count", "The Organization", "employs", "55", "people"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 1
+    assert set(conflicts[0].claim_ids) == {"c1", "c2"}
+
+
+def test_numeric_corroboration_1000() -> None:
+    """
+    Test 16: Formatted vs unformatted number corroboration (1,000 == 1000)
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "employee_count", "Company X", "employees", "1,000", "employees"),
+        make_claim("c2", "employee_count", "Company X", "workforce", "1000", "people"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 0
+    assert claims[0].status == "corroborated"
+    assert claims[1].status == "corroborated"
+
+
+def test_budget_crore_conflict() -> None:
+    """
+    Test 17: Financial budget conflict in crores (10 crore vs 12 crore)
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "budget", "Project Horizon", "budget was", "₹10 crore", "INR"),
+        make_claim("c2", "budget", "Project Horizon", "total cost", "₹12 crore", "INR"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 1
+    assert set(conflicts[0].claim_ids) == {"c1", "c2"}
+
+
+def test_entity_alias_usa_united_states() -> None:
+    """
+    Test 18: Entity alias matching (USA vs United States)
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "headquarters", "USA", "location", "Washington"),
+        make_claim("c2", "headquarters", "United States", "location", "Washington"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 0
+    assert claims[0].status == "corroborated"
+
+
+def test_calendar_date_day_conflict() -> None:
+    """
+    Test 19: Incident date conflict (14 March vs 16 March)
+    """
+    service = SourceIntegrityService(api_key="", model="")
+    claims = [
+        make_claim("c1", "incident_date", "The incident", "occurred on", "14 March"),
+        make_claim("c2", "incident_date", "The incident", "took place on", "16 March"),
+    ]
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 1
+    assert set(conflicts[0].claim_ids) == {"c1", "c2"}
+
+
+def test_conflict_resolution_endpoint() -> None:
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+
+    # 1. Create a transformation
+    t_res = client.post("/api/v1/transformations", json={"title": "Conflict Test Workspace"})
+    assert t_res.status_code == 201
+    tid = t_res.json()["id"]
+
+    # 2. Add two conflicting sources
+    client.post(
+        f"/api/v1/transformations/{tid}/sources/text",
+        json={"title": "Source A", "text": "The project was launched in 2024."},
+    )
+    client.post(
+        f"/api/v1/transformations/{tid}/sources/text",
+        json={"title": "Source B", "text": "The project was launched in 2025."},
+    )
+
+    t_data = client.get(f"/api/v1/transformations/{tid}").json()
+    integrity = t_data.get("source_integrity", {})
+    conflicts = integrity.get("conflicts", [])
+
+    if conflicts:
+        conflict_id = conflicts[0]["conflict_id"]
+        # Resolve by selecting first claim
+        resolve_res = client.post(
+            f"/api/v1/transformations/{tid}/integrity/conflicts/{conflict_id}/resolve",
+            json={"decision": "accept_source_a", "selected_claim_id": conflicts[0]["claim_ids"][0]},
+        )
+        assert resolve_res.status_code == 200
+
+        # Resolving already-resolved conflict or by claim_key should not 404
+        retry_res = client.post(
+            f"/api/v1/transformations/{tid}/integrity/conflicts/{conflict_id}/resolve",
+            json={"decision": "accept_source_a", "selected_claim_id": conflicts[0]["claim_ids"][0]},
+        )
+        assert retry_res.status_code == 200
+
+

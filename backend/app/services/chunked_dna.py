@@ -127,6 +127,14 @@ def _resplit_and_merge(
     content: RawContent,
     budget: ContextBudget,
 ) -> ContentDNA:
+    if len(content.text.strip()) < 300:
+        logger.warning(
+            "Text snippet for source_id=%s is too small to split further (%d chars)",
+            content.source_id,
+            len(content.text),
+        )
+        return ContentDNA()
+
     half = max(1, len(content.text) // 2)
     left = content.model_copy(update={"text": content.text[:half]})
     right = content.model_copy(update={"text": content.text[half:]})
@@ -387,6 +395,12 @@ def _synthesize_group(
     budget: ContextBudget,
     title: str,
 ) -> _MergeItem:
+    if not group:
+        return _MergeItem(dna=ContentDNA(), page_start=None, page_end=None)
+
+    if len(group) == 1:
+        return group[0]
+
     payload = _compact_partials(group)
     payload_tokens = estimate_tokens(payload)
 
@@ -399,30 +413,27 @@ def _synthesize_group(
         budget.tpm_limit,
     )
 
-    # safe_input_tokens already excludes the system prompt and the
-    # reserved completion, so compare the payload directly against it.
+    page_start, page_end = _aggregate_pages(group)
     available = budget.safe_input_tokens - 300
 
-    # If the grouped payload is still too large, recursively halve it so
-    # the synthesis request never exceeds the safe context budget.
-    if (
-        payload_tokens > available
-        and len(group) > 1
-    ):
-        mid = len(group) // 2
-        left = _synthesize_group(provider, group[:mid], budget, title)
-        right = _synthesize_group(provider, group[mid:], budget, title)
-
-        return _synthesize_group(
-            provider,
-            [left, right],
-            budget,
-            title,
+    if payload_tokens <= available:
+        try:
+            dna = provider.generate_content_dna_synthesis(payload, title)
+            dna = _union_dna(dna, group)
+        except Exception as exc:
+            logger.warning(
+                "LLM synthesis call failed (%s); using deterministic union merge",
+                exc,
+            )
+            dna = _union_dna(group[0].dna, group)
+    else:
+        # Deterministic union merge directly from extracted partials when payload exceeds request budget
+        logger.info(
+            "Synthesis payload (%d tokens) exceeds budget (%d tokens); using deterministic union merge",
+            payload_tokens,
+            available,
         )
-
-    dna = provider.generate_content_dna_synthesis(payload, title)
-    dna = _union_dna(dna, group)
-    page_start, page_end = _aggregate_pages(group)
+        dna = _union_dna(group[0].dna, group)
 
     return _MergeItem(
         dna=dna,

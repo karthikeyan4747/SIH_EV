@@ -1,3 +1,5 @@
+import pytest
+
 from app.models.content import RawContent
 from app.services.source_integrity import (
     SourceIntegrityService,
@@ -31,7 +33,28 @@ def test_large_source_is_chunked_and_conflicts_keep_pages():
         text=text,
     )
 
-    service = SourceIntegrityService(api_key="dummy", model="x")
+    service = SourceIntegrityService(api_key="dummy", model="x", mode="local", ollama_host="http://localhost:11434")
+    # Force small budget to test chunking specifically
+    import app.services.source_integrity as si
+    from app.services.context_budget import ContextBudget
+    orig_budget = si.get_context_budget
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        si,
+        "get_context_budget",
+        lambda mode=None: ContextBudget(
+            mode="api",
+            max_context_tokens=4000,
+            tpm_limit=4000,
+            reserved_output_tokens=1000,
+            system_prompt_tokens=300,
+            safe_input_tokens=2000,
+            chunk_target_tokens=1500,
+            chunk_overlap_tokens=150,
+            max_output_tokens=1000,
+            request_concurrency=1,
+        ),
+    )
 
     def fake_extract_claims(src: RawContent) -> list[_ExtractedClaim]:
         if "2022" in src.text:

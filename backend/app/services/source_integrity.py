@@ -222,7 +222,7 @@ class SourceIntegrityService:
                 claim = self._build_claim(
                     source=source,
                     extracted=item,
-                    index=index,
+                    index=len(all_claims),
                 )
 
                 all_claims.append(claim)
@@ -383,9 +383,10 @@ Extract all factual claims in valid JSON:
 
         # If claim_key was empty, infer from predicate or subject
         claim_key = self._clean(extracted.claim_key) or self._clean(extracted.predicate) or "fact"
+        clean_sid = re.sub(r"[^a-zA-Z0-9_-]+", "_", source.source_id)
 
         return Claim(
-            claim_id=f"claim-{source.source_id[:8]}-{index + 1:03d}",
+            claim_id=f"claim-{clean_sid}-{index + 1:03d}",
             claim_key=claim_key,
             subject=self._clean(extracted.subject),
             predicate=self._clean(extracted.predicate),
@@ -403,6 +404,10 @@ Extract all factual claims in valid JSON:
     # DETERMINISTIC CANONICAL KEY GENERATION
     # ============================================================
 
+    # ============================================================
+    # DETERMINISTIC CANONICAL KEY & DOMAIN TAXONOMY
+    # ============================================================
+
     def _canonical_predicate(
         self,
         predicate: str,
@@ -410,20 +415,28 @@ Extract all factual claims in valid JSON:
     ) -> str:
         text = f"{self._normalize_text(claim_key)} {self._normalize_text(predicate)}".strip()
 
+        # Competition outcome / ranking / victory
+        if any(w in text for w in ("win", "won", "winner", "victory", "shortlist", "shortlisted", "finalist", "place", "ranked", "award", "awarded", "champion", "hackathon", "sih")):
+            return "competition_outcome"
+
         # Workforce & Employees
-        if any(w in text for w in ("employee", "workforce", "staff", "headcount", "personnel", "workers", "employ")):
+        if any(w in text for w in ("employee", "workforce", "staff", "headcount", "personnel", "workers", "employ", "team size")):
             return "employee_count"
 
+        # Completion / Ending Dates
+        if any(w in text for w in ("complete", "completed", "finish", "finished", "conclude", "concluded", "ended")):
+            return "completion_date"
+
         # Launch & Release Dates
-        if any(w in text for w in ("launch", "released", "release date", "debut")):
+        if any(w in text for w in ("launch", "launched", "released", "release date", "debut", "started in", "kickoff")):
             return "launch_date"
 
         # Founding & Establishment
-        if any(w in text for w in ("founded", "founding", "established", "started in", "created in")):
+        if any(w in text for w in ("founded", "founding", "established", "created in", "started in", "incorporated")):
             return "founding_date"
 
         # Headquarters & Office Location
-        if any(w in text for w in ("headquarter", "headquarters", "based in", "main office", "hq")):
+        if any(w in text for w in ("headquarter", "headquarters", "based in", "main office", "hq", "located in")):
             return "headquarters"
 
         # Occurrence & Incident Location
@@ -431,32 +444,32 @@ Extract all factual claims in valid JSON:
             return "incident_location"
 
         # Revenue & Financial Turnover
-        if any(w in text for w in ("revenue", "turnover", "annual sales", "total sales")):
+        if any(w in text for w in ("revenue", "turnover", "annual sales", "total sales", "income", "earnings")):
             return "revenue"
 
+        # Budget & Cost
+        if any(w in text for w in ("budget", "project cost", "total cost", "allocated cost", "funding", "investment", "cost")):
+            return "budget"
+
         # Loss & Financial Damage
-        if any(w in text for w in ("loss", "damage", "losses", "financial loss")):
+        if any(w in text for w in ("loss", "losses", "damage", "damages", "financial loss")):
             return "reported_losses"
 
         # Security Incidents & Breaches
-        if any(w in text for w in ("security incident", "breach", "cyber attack", "outage", "incidents reported")):
+        if any(w in text for w in ("security incident", "breach", "cyber attack", "outage", "attack", "incidents reported")):
             return "reported_security_incidents"
 
-        # Organizations Affected
+        # Impacted / Affected Systems or Entities
         if any(w in text for w in ("affected", "impacted", "disrupted", "hit")):
-            if not any(w in text for w in ("loss", "financial", "revenue")):
+            if not any(w in text for w in ("loss", "financial", "revenue", "budget")):
                 return "affected_organizations"
 
-        # Hackathon / SIH Victory
-        if any(w in text for w in ("hackathon", "sih", "problem statement", "won victory", "won")):
-            return "hackathon_win"
-
         # Status & State
-        if any(w in text for w in ("status", "condition", "state", "active status")):
+        if any(w in text for w in ("status", "condition", "state", "active status", "approval", "approved", "rejected")):
             return "status"
 
         # Feature Enabled
-        if any(w in text for w in ("feature", "enabled", "capability", "functionality")):
+        if any(w in text for w in ("feature", "enabled", "capability", "functionality", "supports")):
             return "feature_enabled"
 
         # Fallback to normalized predicate
@@ -473,6 +486,16 @@ Extract all factual claims in valid JSON:
         clean = re.sub(r"^(?:the|a|an)\s+", "", clean).strip()
         # Canonical entity aliases
         aliases = {
+            "usa": "united states",
+            "u s": "united states",
+            "u s a": "united states",
+            "united states": "united states",
+            "united states of america": "united states",
+            "uk": "united kingdom",
+            "u k": "united kingdom",
+            "united kingdom": "united kingdom",
+            "britain": "united kingdom",
+            "great britain": "united kingdom",
             "entity": "organization",
             "entities": "organization",
             "org": "organization",
@@ -497,7 +520,55 @@ Extract all factual claims in valid JSON:
             "event": "incident",
             "the incident": "incident",
         }
-        return aliases.get(clean, clean)
+        if clean in aliases:
+            return aliases[clean]
+
+        # Strip common trailing corporate/project qualifiers to find root entity identity
+        root = re.sub(
+            r"\b(?:inc|corp|corporation|llc|ltd|limited|co|company|platform|team|project|system|organization|agency|initiative|tool)\b",
+            "",
+            clean,
+        ).strip()
+        return root or clean
+
+    def _normalize_subject(
+        self,
+        value: str,
+    ) -> str:
+        return self._canonical_subject(value)
+
+    def _subjects_match(
+        self,
+        sub_a: str,
+        sub_b: str,
+    ) -> bool:
+        norm_a = self._canonical_subject(sub_a)
+        norm_b = self._canonical_subject(sub_b)
+
+        if not norm_a or not norm_b:
+            return True
+
+        if norm_a == norm_b:
+            return True
+
+        generic = {"organization", "person", "entity", "incident", "event", "unknown", "system"}
+        if norm_a in generic and norm_b in generic:
+            return True
+
+        tokens_a = set(norm_a.split())
+        tokens_b = set(norm_b.split())
+        if tokens_a and tokens_b:
+            overlap = tokens_a & tokens_b
+            if overlap and any(len(t) > 3 for t in overlap):
+                return True
+            jaccard = len(overlap) / len(tokens_a | tokens_b)
+            if jaccard >= 0.5:
+                return True
+
+        if (norm_a in norm_b or norm_b in norm_a) and min(len(norm_a), len(norm_b)) >= 4:
+            return True
+
+        return False
 
     def _canonical_claim_key(
         self,
@@ -520,7 +591,7 @@ Extract all factual claims in valid JSON:
         # Include geographic qualification if explicitly part of context and not the value itself
         loc_part = ""
         norm_loc = self._normalize_text(claim.location)
-        if norm_loc and norm_loc != norm_val and norm_loc not in norm_val and predicate != "incident_location" and predicate != "headquarters":
+        if norm_loc and norm_loc != norm_val and norm_loc not in norm_val and predicate not in ("incident_location", "headquarters"):
             loc_part = f"|{norm_loc}"
 
         return f"{subject}|{predicate}{time_part}{loc_part}"
@@ -538,24 +609,34 @@ Extract all factual claims in valid JSON:
         Returns: (type_tag, normalized_canonical_value)
         """
         val_str = claim.value.strip().lower()
+        pred_canon = self._canonical_predicate(claim.predicate, claim.claim_key)
 
-        # 1. Booleans
-        bool_map_true = {"true", "yes", "enabled", "active", "passed", "success", "1"}
-        bool_map_false = {"false", "no", "disabled", "inactive", "failed", "failure", "0"}
+        # 1. Competition Outcomes / Rankings
+        if pred_canon == "competition_outcome" or any(w in val_str for w in ("winner", "won", "first place", "1st place", "shortlist", "shortlisted", "finalist", "top team", "champion")):
+            if any(w in val_str for w in ("winner", "won", "overall winner", "1st place", "first place", "champion", "grand prize")):
+                return ("competition_outcome", "winner")
+            elif any(w in val_str for w in ("shortlist", "shortlisted", "finalist", "top team", "top 5", "top 10", "runner up", "nominee")):
+                return ("competition_outcome", "shortlisted")
+            elif any(w in val_str for w in ("participant", "eliminated", "rejected", "disqualified")):
+                return ("competition_outcome", "participant")
+
+        # 2. Booleans & Operational Status
+        bool_map_true = {"true", "yes", "enabled", "active", "passed", "success", "1", "approved", "completed"}
+        bool_map_false = {"false", "no", "disabled", "inactive", "failed", "failure", "0", "rejected", "ongoing", "in progress", "pending"}
         if val_str in bool_map_true:
             return ("boolean", True)
         if val_str in bool_map_false:
             return ("boolean", False)
 
-        # 2. Locations / Geographic entities
+        # 3. Locations / Geographic entities
         location_aliases = {
             "usa": "united states",
-            "u.s.": "united states",
-            "u.s.a.": "united states",
+            "u s": "united states",
+            "u s a": "united states",
             "united states": "united states",
             "united states of america": "united states",
             "uk": "united kingdom",
-            "u.k.": "united kingdom",
+            "u k": "united kingdom",
             "united kingdom": "united kingdom",
             "britain": "united kingdom",
             "great britain": "united kingdom",
@@ -574,15 +655,31 @@ Extract all factual claims in valid JSON:
         if clean_loc in location_aliases:
             return ("location", location_aliases[clean_loc])
 
-        # 3. Percentages
+        # 4. Percentages
         pct_match = re.search(r"[-+]?\d+(?:\.\d+)?\s*(?:%|percent|pct)", val_str)
         if pct_match or "%" in val_str or "%" in claim.unit:
             num = re.search(r"[-+]?\d+(?:\.\d+)?", val_str)
             if num:
                 return ("percentage", float(num.group(0)))
 
-        # 4. Numbers & Quantities
-        # Convert word numbers
+        # 5. Dates (Years and Calendar Dates)
+        if pred_canon in ("completion_date", "launch_date", "founding_date") or re.fullmatch(r"(?:19|20)\d{2}", val_str):
+            year_match = re.search(r"\b((?:19|20)\d{2})\b", val_str)
+            if year_match:
+                return ("year", int(year_match.group(1)))
+
+        months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+        month_pattern = r"\b(" + "|".join(months) + r")\b"
+        if re.search(month_pattern, val_str):
+            day_match = re.search(r"\b(\d{1,2})\b", val_str)
+            month_match = re.search(month_pattern, val_str)
+            day_val = day_match.group(1) if day_match else ""
+            month_val = month_match.group(1) if month_match else ""
+            month_map = {"jan": "january", "feb": "february", "mar": "march", "apr": "april", "jun": "june", "jul": "july", "aug": "august", "sep": "september", "oct": "october", "nov": "november", "dec": "december"}
+            month_canon = month_map.get(month_val, month_val)
+            return ("calendar_date", f"{day_val} {month_canon}".strip())
+
+        # 6. Numbers & Currency Quantities
         number_words = {
             "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
             "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
@@ -592,43 +689,42 @@ Extract all factual claims in valid JSON:
             "forty": "40", "fifty": "50", "sixty": "60", "seventy": "70",
             "eighty": "80", "ninety": "90", "hundred": "100",
         }
+        val_converted = val_str
         for word, number in number_words.items():
-            val_str = re.sub(rf"\b{word}\b", number, val_str)
+            val_converted = re.sub(rf"\b{word}\b", number, val_converted)
 
-        val_str = val_str.replace(",", "")
+        val_converted = val_converted.replace(",", "")
 
-        # Detect currency
         currency = ""
-        if "$" in val_str or "usd" in val_str or "dollar" in val_str or "$" in claim.unit:
+        if "$" in val_converted or "usd" in val_converted or "dollar" in val_converted or "$" in claim.unit:
             currency = "USD"
-        elif "₹" in val_str or "inr" in val_str or "rupee" in val_str or "rs" in val_str or "₹" in claim.unit:
+        elif "₹" in val_converted or "inr" in val_converted or "rupee" in val_converted or "rs" in val_converted or "₹" in claim.unit:
             currency = "INR"
-        elif "€" in val_str or "eur" in val_str or "euro" in val_str:
+        elif "€" in val_converted or "eur" in val_converted or "euro" in val_converted:
             currency = "EUR"
-        elif "£" in val_str or "gbp" in val_str or "pound" in val_str:
+        elif "£" in val_converted or "gbp" in val_converted or "pound" in val_converted:
             currency = "GBP"
 
-        # Standardize attached scale suffixes: e.g. 10m -> 10 million, 10k -> 10 thousand
-        val_str = re.sub(r"(?<=\d)\s*m\b", " million", val_str)
-        val_str = re.sub(r"(?<=\d)\s*b\b", " billion", val_str)
-        val_str = re.sub(r"(?<=\d)\s*k\b", " thousand", val_str)
-        val_str = re.sub(r"(?<=\d)\s*cr\b", " crore", val_str)
-        val_str = re.sub(r"(?<=\d)\s*l\b", " lakh", val_str)
+        # Scale suffixes
+        val_converted = re.sub(r"(?<=\d)\s*m\b", " million", val_converted)
+        val_converted = re.sub(r"(?<=\d)\s*b\b", " billion", val_converted)
+        val_converted = re.sub(r"(?<=\d)\s*k\b", " thousand", val_converted)
+        val_converted = re.sub(r"(?<=\d)\s*cr\b", " crore", val_converted)
+        val_converted = re.sub(r"(?<=\d)\s*l\b", " lakh", val_converted)
 
-        # Check numeric scales
         scale = 1.0
-        if re.search(r"\b(?:billion|b)\b", val_str):
+        if re.search(r"\b(?:billion|b)\b", val_converted):
             scale = 1_000_000_000.0
-        elif re.search(r"\b(?:million|m)\b", val_str):
+        elif re.search(r"\b(?:million|m)\b", val_converted):
             scale = 1_000_000.0
-        elif re.search(r"\b(?:crore|crores)\b", val_str):
+        elif re.search(r"\b(?:crore|crores)\b", val_converted):
             scale = 10_000_000.0
-        elif re.search(r"\b(?:lakh|lakhs)\b", val_str):
+        elif re.search(r"\b(?:lakh|lakhs)\b", val_converted):
             scale = 100_000.0
-        elif re.search(r"\b(?:thousand|k)\b", val_str):
+        elif re.search(r"\b(?:thousand|k)\b", val_converted):
             scale = 1_000.0
 
-        num_match = re.search(r"[-+]?\d+(?:\.\d+)?", val_str)
+        num_match = re.search(r"[-+]?\d+(?:\.\d+)?", val_converted)
         if num_match:
             try:
                 base_num = float(num_match.group(0))
@@ -638,7 +734,7 @@ Extract all factual claims in valid JSON:
             except ValueError:
                 pass
 
-        # 5. Default Clean Text String
+        # 7. Default Clean Text String
         return ("string", self._normalize_text(claim.value))
 
     def _values_are_incompatible(
@@ -653,6 +749,10 @@ Extract all factual claims in valid JSON:
         type_a, val_a = self._normalize_value_for_comparison(claim_a)
         type_b, val_b = self._normalize_value_for_comparison(claim_b)
 
+        # Both competition outcomes (e.g. winner vs shortlisted)
+        if type_a == "competition_outcome" and type_b == "competition_outcome":
+            return val_a != val_b
+
         # Both numbers / currencies / quantities
         if type_a == "number" and type_b == "number":
             num_a, unit_a = val_a
@@ -662,23 +762,22 @@ Extract all factual claims in valid JSON:
                 if not self._units_compatible(unit_a, unit_b):
                     return False  # Different measurement domains
 
-            # Check exact equality or minor rounding tolerance if approximate
-            is_approx = any(
-                term in (claim_a.value + " " + claim_b.value).lower()
-                for term in ("approx", "around", "about", "nearly", "roughly")
-            )
-            if is_approx and num_a > 0 and num_b > 0:
-                diff_pct = abs(num_a - num_b) / max(num_a, num_b)
-                if diff_pct <= 0.05:  # Within 5% tolerance for approximate figures
-                    return False
-
+            # Numbers must match exactly to corroborate; any difference is a conflict
             return num_a != num_b
+
+        # Both years
+        if type_a == "year" and type_b == "year":
+            return val_a != val_b
+
+        # Both calendar dates ("14 march" vs "16 march", or "march" vs "june")
+        if type_a == "calendar_date" and type_b == "calendar_date":
+            return val_a != val_b
 
         # Both percentages
         if type_a == "percentage" and type_b == "percentage":
-            return abs(val_a - val_b) > 0.01
+            return abs(val_a - val_b) > 0.001
 
-        # Both booleans
+        # Both booleans / status
         if type_a == "boolean" and type_b == "boolean":
             return val_a != val_b
 
@@ -686,18 +785,24 @@ Extract all factual claims in valid JSON:
         if type_a == "location" and type_b == "location":
             return val_a != val_b
 
+        # Cross-type string comparison
+        if type_a == "competition_outcome" or type_b == "competition_outcome":
+            norm_a = self._normalize_text(claim_a.value)
+            norm_b = self._normalize_text(claim_b.value)
+            return norm_a != norm_b
+
         # Text strings
         if type_a == "string" and type_b == "string":
             if val_a == val_b:
                 return False
-            if val_a in val_b or val_b in val_a:
+            if (val_a in val_b or val_b in val_a) and len(min(val_a, val_b, key=len)) > 3:
                 return False
             return True
 
         return str(val_a) != str(val_b)
 
     # ============================================================
-    # DETERMINISTIC MULTI-SOURCE CONFLICT DETECTION
+    # DETERMINISTIC MULTI-SOURCE CONFLICT CLUSTERING
     # ============================================================
 
     def _compare_claims(
@@ -705,50 +810,63 @@ Extract all factual claims in valid JSON:
         claims: list[Claim],
     ) -> list[Conflict]:
         """
-        Deterministic, robust multi-source conflict detection.
-        Groups claims by canonical key, compares values across sources,
-        and generates deduplicated IntegrityConflict objects.
+        High-recall, clustered multi-source conflict detection.
+        Groups claims into semantic fact clusters, compares values across sources,
+        and generates deduplicated, human-readable Conflict objects.
         """
-        groups: dict[str, list[Claim]] = defaultdict(list)
+        if len(claims) < 2:
+            return []
 
-        for claim in claims:
-            key = self._canonical_claim_key(claim)
-            groups[key].append(claim)
+        # Build clusters using connected components across comparable claims
+        clusters: list[list[Claim]] = []
+        visited: set[int] = set()
+
+        for i, claim_i in enumerate(claims):
+            if i in visited:
+                continue
+
+            current_cluster = [claim_i]
+            visited.add(i)
+
+            for j in range(i + 1, len(claims)):
+                if j in visited:
+                    continue
+
+                claim_j = claims[j]
+                if self._claims_are_comparable(claim_i, claim_j):
+                    current_cluster.append(claim_j)
+                    visited.add(j)
+
+            clusters.append(current_cluster)
 
         conflicts: list[Conflict] = []
-        handled_claim_ids: set[str] = set()
 
-        # Pass 1: Canonical Key Groups
-        for canonical_key, group_claims in groups.items():
-            if len(group_claims) < 2:
+        for cluster in clusters:
+            if len(cluster) < 2:
+                for c in cluster:
+                    if c.status not in ("conflict", "uncertain"):
+                        c.status = "supported"
                 continue
 
-            # Identify distinct sources
-            source_map: dict[str, list[Claim]] = defaultdict(list)
-            for c in group_claims:
-                for sid in c.source_ids:
-                    source_map[sid].append(c)
-
-            # Group claims by normalized value
-            value_groups: dict[Any, list[Claim]] = defaultdict(list)
-            for c in group_claims:
+            # Group claims in this cluster by normalized value
+            val_groups: dict[Any, list[Claim]] = defaultdict(list)
+            for c in cluster:
                 typed_val = self._normalize_value_for_comparison(c)
-                value_groups[typed_val].append(c)
+                val_groups[typed_val].append(c)
 
-            # If all values are identical
-            if len(value_groups) == 1:
-                for c in group_claims:
-                    if c.status != "conflict":
-                        c.status = "corroborated"
+            # If all claims in cluster have equivalent normalized values
+            if len(val_groups) == 1:
+                for c in cluster:
+                    c.status = "corroborated"
                 continue
 
-            # Check if any pairs of value groups are truly incompatible
-            distinct_vals = list(value_groups.keys())
+            # Check if there is genuine incompatibility between any value groups
+            distinct_vals = list(val_groups.keys())
             has_contradiction = False
-            for i in range(len(distinct_vals)):
-                for j in range(i + 1, len(distinct_vals)):
-                    sample_a = value_groups[distinct_vals[i]][0]
-                    sample_b = value_groups[distinct_vals[j]][0]
+            for idx_a in range(len(distinct_vals)):
+                for idx_b in range(idx_a + 1, len(distinct_vals)):
+                    sample_a = val_groups[distinct_vals[idx_a]][0]
+                    sample_b = val_groups[distinct_vals[idx_b]][0]
                     if self._values_are_incompatible(sample_a, sample_b):
                         has_contradiction = True
                         break
@@ -756,74 +874,35 @@ Extract all factual claims in valid JSON:
                     break
 
             if not has_contradiction:
-                for c in group_claims:
-                    if c.status != "conflict":
-                        c.status = "corroborated"
+                for c in cluster:
+                    c.status = "corroborated"
                 continue
 
-            # A multi-source contradiction exists!
-            competing_claims = group_claims
+            # Genuine conflict detected! Cluster all competing claims into 1 Conflict object
             conflict_id = f"conflict-{len(conflicts) + 1:03d}"
+            canonical_key = self._canonical_claim_key(cluster[0])
+            description = self._build_conflict_description(cluster)
+            reason = self._build_conflict_reason(cluster)
 
-            description = self._build_conflict_description(competing_claims)
-            reason = self._build_conflict_reason(competing_claims)
+            for c in cluster:
+                c.status = "conflict"
 
             logger.debug(
                 "CONFLICT DETECTED: key=%s, claims=%s",
                 canonical_key,
-                [c.claim_id for c in competing_claims],
+                [c.claim_id for c in cluster],
             )
 
             conflicts.append(
                 Conflict(
                     conflict_id=conflict_id,
                     claim_key=canonical_key,
-                    claim_ids=[c.claim_id for c in competing_claims],
+                    claim_ids=[c.claim_id for c in cluster],
                     description=description,
                     reason=reason,
                     status="unresolved",
                 )
             )
-
-            for c in competing_claims:
-                c.status = "conflict"
-                handled_claim_ids.add(c.claim_id)
-
-        # Pass 2: Cross-group comparison for unaligned keys across DIFFERENT sources
-        unhandled_claims = [c for c in claims if c.claim_id not in handled_claim_ids]
-        for i in range(len(unhandled_claims)):
-            for j in range(i + 1, len(unhandled_claims)):
-                c_a = unhandled_claims[i]
-                c_b = unhandled_claims[j]
-
-                # Only compare across different sources
-                if set(c_a.source_ids) == set(c_b.source_ids) and len(c_a.source_ids) == 1:
-                    continue
-
-                if self._claims_are_comparable(c_a, c_b):
-                    if self._values_are_incompatible(c_a, c_b):
-                        conflict_id = f"conflict-{len(conflicts) + 1:03d}"
-                        canonical_key = self._canonical_claim_key(c_a)
-                        competing = [c_a, c_b]
-                        conflicts.append(
-                            Conflict(
-                                conflict_id=conflict_id,
-                                claim_key=canonical_key,
-                                claim_ids=[c_a.claim_id, c_b.claim_id],
-                                description=self._build_conflict_description(competing),
-                                reason=self._build_conflict_reason(competing),
-                                status="unresolved",
-                            )
-                        )
-                        c_a.status = "conflict"
-                        c_b.status = "conflict"
-                        handled_claim_ids.add(c_a.claim_id)
-                        handled_claim_ids.add(c_b.claim_id)
-                    else:
-                        if c_a.status != "conflict":
-                            c_a.status = "corroborated"
-                        if c_b.status != "conflict":
-                            c_b.status = "corroborated"
 
         return conflicts
 
@@ -839,28 +918,39 @@ Extract all factual claims in valid JSON:
         if not self._units_compatible(claim_a.unit, claim_b.unit):
             return False
 
-        # Check subject compatibility FIRST
-        sub_a = self._canonical_subject(claim_a.subject)
-        sub_b = self._canonical_subject(claim_b.subject)
-        if sub_a != sub_b:
-            generic = {"organization", "person", "entity", "incident", "unknown", ""}
-            if not (sub_a in generic and sub_b in generic):
-                return False
+        # Subject compatibility
+        if not self._subjects_match(claim_a.subject, claim_b.subject):
+            return False
 
-        # Direct claim key match
+        # Predicate compatibility
+        if not self._predicates_compatible(claim_a, claim_b):
+            return False
+
+        return True
+
+    def _predicates_compatible(
+        self,
+        claim_a: Claim,
+        claim_b: Claim,
+    ) -> bool:
+        """Check if predicates represent the same attribute domain."""
+        pred_a = self._canonical_predicate(claim_a.predicate, claim_a.claim_key)
+        pred_b = self._canonical_predicate(claim_b.predicate, claim_b.claim_key)
+
+        if pred_a == pred_b and pred_a != "fact":
+            return True
+
         if claim_a.claim_key and claim_a.claim_key == claim_b.claim_key:
             return True
 
-        # Canonical key match
-        canonical_a = self._canonical_claim_key(claim_a)
-        canonical_b = self._canonical_claim_key(claim_b)
-        if canonical_a and canonical_a == canonical_b:
-            return True
-
-        pred_a = self._canonical_predicate(claim_a.predicate, claim_a.claim_key)
-        pred_b = self._canonical_predicate(claim_b.predicate, claim_b.claim_key)
-        if pred_a == pred_b or self._predicates_related(claim_a.predicate, claim_b.predicate):
-            return True
+        # Lexical word overlap
+        norm_a = self._normalize_text(claim_a.predicate)
+        norm_b = self._normalize_text(claim_b.predicate)
+        if norm_a and norm_b:
+            words_a = set(norm_a.split())
+            words_b = set(norm_b.split())
+            if words_a & words_b and len(words_a & words_b) >= max(1, min(len(words_a), len(words_b)) // 2):
+                return True
 
         return False
 
@@ -895,12 +985,6 @@ Extract all factual claims in valid JSON:
         value = value.strip().lower()
         value = re.sub(r"[^a-z0-9]+", " ", value)
         return re.sub(r"\s+", " ", value).strip()
-
-    def _normalize_subject(
-        self,
-        value: str,
-    ) -> str:
-        return self._canonical_subject(value)
 
     def _normalize_predicate(
         self,
@@ -951,10 +1035,12 @@ Extract all factual claims in valid JSON:
         if time_a in ("hour", "minute", "second", "day", "month", "year") or time_b in ("hour", "minute", "second", "day", "month", "year"):
             return time_a == time_b
 
-        people_map = {"employee": "person", "employees": "person", "people": "person", "workers": "person", "users": "person", "members": "person"}
+        people_map = {"employee": "person", "employees": "person", "people": "person", "workers": "person", "users": "person", "members": "person", "entities": "entity", "organizations": "entity"}
         p_a = people_map.get(norm_a, norm_a)
         p_b = people_map.get(norm_b, norm_b)
         if p_a == "person" and p_b == "person":
+            return True
+        if p_a == "entity" and p_b == "entity":
             return True
 
         return norm_a == norm_b
@@ -1058,15 +1144,53 @@ Extract all factual claims in valid JSON:
         claims: list[Claim],
     ) -> str:
         subject = claims[0].subject.strip() or "Entity"
-        pred = self._canonical_predicate(claims[0].predicate, claims[0].claim_key).replace("_", " ")
+        pred_domain = self._canonical_predicate(claims[0].predicate, claims[0].claim_key)
 
-        parts: list[str] = []
+        val_map: dict[str, list[str]] = defaultdict(list)
         for c in claims:
             label = self._claim_source_label(c)
-            parts.append(f"{label} reports '{c.value}'")
+            val_map[c.value].append(label)
+
+        if pred_domain == "competition_outcome":
+            items = []
+            for val, src_list in val_map.items():
+                src_str = " & ".join(sorted(set(src_list)))
+                items.append(f"{src_str} reports '{val}'")
+            return f"Conflicting competition outcomes for {subject}: {', while '.join(items)}."
+
+        elif pred_domain == "completion_date":
+            items = []
+            for val, src_list in val_map.items():
+                src_str = " & ".join(sorted(set(src_list)))
+                items.append(f"{src_str} states {val}")
+            return f"Conflicting completion dates: {', while '.join(items)}."
+
+        elif pred_domain == "employee_count":
+            vals = list(val_map.keys())
+            return f"Conflicting reported employee counts: {' versus '.join(vals)}."
+
+        elif pred_domain in ("revenue", "budget", "reported_losses"):
+            items = []
+            for val, src_list in val_map.items():
+                src_str = " & ".join(sorted(set(src_list)))
+                items.append(f"{src_str} reports {val}")
+            return f"Conflicting {pred_domain.replace('_', ' ')}: {', while '.join(items)}."
+
+        elif pred_domain in ("headquarters", "incident_location"):
+            items = []
+            for val, src_list in val_map.items():
+                src_str = " & ".join(sorted(set(src_list)))
+                items.append(f"{src_str} reports '{val}'")
+            return f"Conflicting locations for {subject}: {', while '.join(items)}."
+
+        parts: list[str] = []
+        for val, src_list in val_map.items():
+            src_str = " & ".join(sorted(set(src_list)))
+            parts.append(f"{src_str} reports '{val}'")
 
         joined = ", while ".join(parts)
-        return f"{subject} {pred} differs: {joined}."
+        pred_human = claims[0].predicate.replace("_", " ").strip()
+        return f"{subject} {pred_human} differs: {joined}."
 
     def _build_conflict_reason(
         self,

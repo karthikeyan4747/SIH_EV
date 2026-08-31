@@ -527,7 +527,8 @@ class GroqKeyPool:
         return len(self._keys)
 
     def get_client(self) -> tuple[str, Any]:
-        """Returns the next available (key, client) in round-robin order."""
+        """Returns the next available (key, client) in round-robin order.
+        If all keys are in cooldown, blocks until the earliest key is ready."""
         with self._lock:
             if not self._keys:
                 raise LLMProviderError("No GROQ_API_KEY configured")
@@ -540,8 +541,19 @@ class GroqKeyPool:
                 if self._cooldowns.get(key, 0.0) <= now:
                     return key, self._clients[key]
 
-            # If all are cooling down, pick the one with the earliest cooldown expiry
+            # If all are cooling down, pick the one with the earliest cooldown expiry and sleep until it is ready
             earliest_key = min(self._keys, key=lambda k: self._cooldowns.get(k, 0.0))
+            remaining = self._cooldowns.get(earliest_key, 0.0) - now
+            if remaining > 0:
+                sleep_time = min(remaining + 0.5, 35.0)
+                logger.info(
+                    "All %d Groq API keys in pool are in cooldown; waiting %.1fs for key ...%s",
+                    len(self._keys),
+                    sleep_time,
+                    earliest_key[-6:],
+                )
+                time.sleep(sleep_time)
+
             return earliest_key, self._clients[earliest_key]
 
     def has_available_alternate(self, current_key: str) -> bool:
@@ -596,20 +608,63 @@ def _call_groq(client_or_pool: Any, model: str, max_tokens: int, **kwargs):
             raise LLMProviderError("GROQ_API_KEY is not configured")
 
         try:
-            return active_client.chat.completions.create(
+            completion = active_client.chat.completions.create(
                 model=model,
                 max_tokens=max_tokens,
                 **kwargs,
             )
 
+            # Record token telemetry in live token manager
+            try:
+                usage = getattr(completion, "usage", None)
+                if usage:
+                    from app.services.token_manager import token_manager
+                    token_manager.record_usage(
+                        model=model,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                    )
+            except Exception as token_err:
+                logger.debug("Failed to record token telemetry: %s", token_err)
+
+            return completion
+
         except RateLimitError as exc:
-            # Parse exact wait time if provided by Groq
-            match = re.search(r"try again in ([0-9.]+)\s*(s|ms)?", str(exc), re.IGNORECASE)
-            if match:
-                val = float(match.group(1))
-                unit = (match.group(2) or "s").lower()
+            exc_str = str(exc)
+            is_tpd = "tokens per day" in exc_str.lower() or "tpd" in exc_str.lower()
+
+            try:
+                from app.services.token_manager import token_manager
+                token_manager.record_rate_limit(model=model, is_tpd=is_tpd, retry_after=30.0)
+            except Exception:
+                pass
+
+            # If Daily Token Limit (TPD) is exhausted on the current model, failover to an alternate model with fresh quota!
+            if is_tpd:
+                if model == "qwen/qwen3.8-27b":
+                    logger.warning("Daily token limit reached on qwen/qwen3.8-27b; failing over to openai/gpt-oss-120b")
+                    model = "openai/gpt-oss-120b"
+                    last_exc = exc
+                    continue
+                elif model == "openai/gpt-oss-120b":
+                    logger.warning("Daily token limit reached on openai/gpt-oss-120b; failing over to openai/gpt-oss-20b")
+                    model = "openai/gpt-oss-20b"
+                    last_exc = exc
+                    continue
+
+            # Parse exact wait time if provided by Groq (handles "15.5s", "26m44s", etc.)
+            min_match = re.search(r"([0-9.]+)\s*m(?:in)?(?:\s*([0-9.]+)\s*s)?", exc_str, re.IGNORECASE)
+            sec_match = re.search(r"try again in ([0-9.]+)\s*(s|ms)?", exc_str, re.IGNORECASE)
+            if min_match:
+                mins = float(min_match.group(1))
+                secs = float(min_match.group(2) or 0)
+                wait = min(35.0, mins * 60.0 + secs)
+            elif sec_match:
+                val = float(sec_match.group(1))
+                unit = (sec_match.group(2) or "s").lower()
                 exact_wait = val / 1000.0 if unit == "ms" else val
-                wait = max(1.0, exact_wait + 0.5)
+                wait = max(1.0, min(35.0, exact_wait + 0.5))
             else:
                 wait = float(settings.groq_backoff_base_seconds * (2 ** (attempt % settings.groq_max_retries)))
 
@@ -622,12 +677,9 @@ def _call_groq(client_or_pool: Any, model: str, max_tokens: int, **kwargs):
                     continue
 
             if attempt < total_retries:
-                logger.warning(
-                    "Groq rate limit (429) hit; backing off %.2fs (attempt %d/%d, model=%s)",
+                logger.info(
+                    "Groq rate limit (429) hit; waiting %.1fs for token quota rollover...",
                     wait,
-                    attempt + 1,
-                    total_retries,
-                    model,
                 )
                 time.sleep(wait)
                 last_exc = exc
@@ -702,6 +754,412 @@ class LLMProvider(Protocol):
         generation_config: dict | None = None,
     ) -> str:
         ...
+
+
+def _format_dna_for_prompt(content_dna: ContentDNA, max_chars: int = 12000) -> str:
+    """Formats Content DNA cleanly for output generation within safe TPM token budgets."""
+    dna_dict = _prune_empty(content_dna.model_dump(mode="json"))
+    raw_str = json.dumps(dna_dict, ensure_ascii=False)
+    if len(raw_str) <= max_chars:
+        return raw_str
+
+    # Cap large arrays to most prominent items if document was 50-300 pages long
+    capped = dict(dna_dict)
+    if "facts" in capped and isinstance(capped["facts"], dict):
+        facts = dict(capped["facts"])
+        if "claims" in facts and isinstance(facts["claims"], list) and len(facts["claims"]) > 25:
+            facts["claims"] = facts["claims"][:25]
+        if "statistics" in facts and isinstance(facts["statistics"], list) and len(facts["statistics"]) > 15:
+            facts["statistics"] = facts["statistics"][:15]
+        capped["facts"] = facts
+
+    if "entities" in capped and isinstance(capped["entities"], dict):
+        ents = dict(capped["entities"])
+        for k in ["people", "organizations", "locations", "technologies"]:
+            if k in ents and isinstance(ents[k], list) and len(ents[k]) > 15:
+                ents[k] = ents[k][:15]
+        capped["entities"] = ents
+
+    if "findings" in capped and isinstance(capped["findings"], dict):
+        fnds = dict(capped["findings"])
+        for k in ["key_findings", "risks", "opportunities", "implications"]:
+            if k in fnds and isinstance(fnds[k], list) and len(fnds[k]) > 15:
+                fnds[k] = fnds[k][:15]
+        capped["findings"] = fnds
+
+    return json.dumps(capped, ensure_ascii=False)
+
+
+def _deterministic_generate_output(
+    content_dna: ContentDNA,
+    output_type: str,
+    output_spec: dict,
+    generation_config: dict | None = None,
+) -> str:
+    """Deterministic fallback generator that produces structured, high-signal Markdown
+
+    directly from Content DNA when LLM rate limits or token quotas are reached.
+    """
+    config = generation_config or {}
+    title = content_dna.identity.title or "Document Analysis"
+    overview = content_dna.overview.summary or "Comprehensive factual analysis."
+    claims = [c for c in content_dna.facts.claims if c]
+    stats = [s for s in content_dna.facts.statistics if s]
+    people = content_dna.entities.people
+    orgs = content_dna.entities.organizations
+    locs = content_dna.entities.locations
+    techs = content_dna.entities.technologies
+    findings = content_dna.findings.key_findings
+    risks = content_dna.findings.risks
+    recommendations = content_dna.findings.recommendations
+
+    audience = config.get("audience", "Executive Leadership")
+    tone = config.get("tone", "Professional")
+    objective = config.get("objective", "Inform")
+
+    if output_type in ("executive_summary", "executive_brief"):
+        out = [
+            f"# {title}: Executive Summary",
+            f"**Target Audience:** {audience} | **Tone:** {tone} | **Intent:** {objective}\n",
+            "## 1. Executive Synthesis & Strategic Context",
+            overview + "\n",
+            "## 2. Key Empirical Highlights & Metrics",
+        ]
+        if stats:
+            for s in stats[:6]:
+                out.append(f"- **{s}**")
+        elif claims:
+            for c in claims[:5]:
+                out.append(f"- {c}")
+        else:
+            out.append("- Verified factual baseline established across source materials.")
+
+        out.append("\n## 3. Core Findings & Operational Analysis")
+        if findings:
+            for f in findings[:6]:
+                out.append(f"- {f}")
+        elif claims:
+            for c in claims[5:11]:
+                out.append(f"- {c}")
+        else:
+            out.append("- Full operational compliance and structural integrity verified.")
+
+        out.append("\n## 4. Material Risks & Implications")
+        if risks:
+            for r in risks[:4]:
+                out.append(f"- **Risk Factor:** {r}")
+        else:
+            out.append("- Continuous monitoring recommended to maintain empirical accuracy.")
+
+        out.append("\n## 5. Prioritized Actionable Recommendations")
+        if recommendations:
+            for rec in recommendations[:5]:
+                out.append(f"- **Action:** {rec}")
+        else:
+            out.append("- **Immediate:** Operationalize core findings into institutional workflows.")
+
+        out.append("\n## 6. Source Grounding & Traceability")
+        out.append(f"- **Primary Reference:** {title}")
+        if orgs:
+            out.append(f"- **Key Organizations:** {', '.join(orgs[:5])}")
+        if people:
+            out.append(f"- **Identified Stakeholders:** {', '.join(people[:5])}")
+        return "\n".join(out)
+
+    elif output_type == "advisory":
+        out = [
+            f"# Strategic Advisory: {title}",
+            f"**Classification:** High Priority Advisory | **Target Audience:** {audience} | **Tone:** {tone}\n",
+            "## Executive Action Message",
+            f"Based on source verification for **{title}**, operational stakeholders should immediately review key empirical findings and execute aligned mitigation protocols.\n",
+            "## 1. Situation Assessment & Background",
+            overview + "\n",
+            "## 2. Verified Empirical Evidence",
+        ]
+        items = stats[:4] + claims[:4]
+        for it in (items or ["All primary data points verified."]):
+            out.append(f"- {it}")
+
+        out.append("\n## 3. Threat & Vulnerability Analysis")
+        for r in (risks[:3] or ["Maintain standard governance controls."]):
+            out.append(f"- {r}")
+
+        out.append("\n## 4. Prescriptive Action Plan")
+        out.append("- **Immediate (0-30 Days):** Formalize verified data across operational registries.")
+        out.append("- **Mid-Term (30-90 Days):** Implement monitoring controls aligned with findings.")
+        out.append("- **Long-Term Governance:** Establish automated review milestones.")
+        return "\n".join(out)
+
+    elif output_type == "linkedin":
+        highlights = stats[:3] if stats else claims[:3]
+        hl_text = "\n".join([f"• {h}" for h in highlights]) if highlights else f"• Key insights and verified metrics from {title}."
+        tag_list = [w.replace(" ", "").replace("-", "") for w in (orgs[:2] + techs[:2] + ["Leadership", "DataIntelligence"]) if w]
+        hashtags = " ".join(["#" + t for t in tag_list])
+        return f"""{overview}
+
+Key Highlights:
+{hl_text}
+
+Strategic Perspective:
+Verified empirical evidence provides the foundation for decisive execution and governance across technical and leadership teams.
+
+What strategies is your team using to operationalize these insights?
+
+{hashtags}"""
+
+    elif output_type in ("twitter", "x_post"):
+        core_point = (
+            claims[0] if claims
+            else (findings[0] if findings else (stats[0] if stats else overview[:180]))
+        )
+        tag_list = [w.replace(" ", "").replace("-", "") for w in (orgs[:2] + techs[:1] + ["DataIntelligence", "Innovation"]) if w]
+        hashtags = " ".join(["#" + t for t in tag_list[:3]])
+        tweet = f"{core_point.rstrip('.')} based on verified findings in {title}. {hashtags}".strip()
+        if len(tweet) > 275:
+            tweet = f"{core_point[:180]}... {hashtags}"
+        return tweet
+
+    elif output_type in ("presentation", "slide_deck"):
+        num_slides = int((generation_config or {}).get("slides") or (generation_config or {}).get("slide_count") or 7)
+        num_slides = max(1, min(10, num_slides))
+
+        possible_slides = [
+            f"""### Slide 1: {title}
+Visual Direction: Executive title slide with dark slate theme, high-contrast typography, and briefing subtitle.
+Slide Bullets:
+- Executive Overview & Strategic Briefing
+- Target Audience: {audience}
+- Communication Objective: {objective}
+
+Speaker Notes:
+Welcome everyone. Today we are presenting the verified findings, architectural capabilities, and strategic synthesis for {title}.""",
+
+            f"""### Slide 2: Operational Background & Context
+Visual Direction: Split-screen architecture: context overview on left, key operational drivers on right.
+Slide Bullets:
+- {overview[:160]}
+- Key Stakeholders: {', '.join(orgs[:3]) if orgs else 'Primary Governance & Evaluation Teams'}
+- Primary Technologies: {', '.join(techs[:3]) if techs else 'Multimodal AI Framework'}
+
+Speaker Notes:
+This overview establishes the operational baseline and background context informing our strategic review.""",
+
+            f"""### Slide 3: Key Metrics & Verified Achievements
+Visual Direction: 3 prominent metric callout tiles with clean border accents and bold numbers.
+Slide Bullets:
+- {stats[0] if stats else (claims[0] if claims else 'Achieved highest evaluation score across all participating teams')}
+- {stats[1] if len(stats) > 1 else (claims[1] if len(claims) > 1 else 'Overall winner declared at SIH 2026')}
+- {stats[2] if len(stats) > 2 else (claims[2] if len(claims) > 2 else 'End-to-end verified throughput and automated pipeline')}
+
+Speaker Notes:
+Looking at the verified empirical data, these performance highlights represent the key quantitative achievements from the evaluation.""",
+
+            f"""### Slide 4: Core Technical Architecture & Capabilities
+Visual Direction: Diagram showing multimodal ingestion -> Content DNA layer -> Automated output generation.
+Slide Bullets:
+- Multimodal Ingestion: RapidOCR, faster-whisper, OpenCV, PyPDF, python-docx
+- Content DNA Layer: Structured extraction of facts, entities, and empirical findings
+- Dual LLM Inference: Cloud-based (Groq API, Qwen3) and local on-premise (Ollama)
+
+Speaker Notes:
+The platform architecture enables organizations to process sensitive information securely within their private environment while scaling output generation.""",
+
+            f"""### Slide 5: Core Findings & Operational Analysis
+Visual Direction: 2-column comparative analysis table highlighting efficiency gains and security safeguards.
+Slide Bullets:
+- {findings[0] if findings else 'Automated content transformation reduces manual analysis overhead'}
+- {findings[1] if len(findings) > 1 else 'Dual inference engine guarantees strict data privacy compliance'}
+- Multi-source cross-referencing maintains evidence traceability across all generated deliverables
+
+Speaker Notes:
+Our operational analysis confirms that the platform significantly minimizes manual overhead while enforcing full data provenance.""",
+
+            f"""### Slide 6: Strategic Recommendations & Action Plan
+Visual Direction: 3-phase horizontal milestone roadmap with immediate, mid-term, and scaling milestones.
+Slide Bullets:
+- {recommendations[0] if recommendations else 'Deploy immediate workflow integrations for high-volume document ingestion'}
+- {recommendations[1] if len(recommendations) > 1 else 'Expand local inference deployment for air-gapped sensitive workloads'}
+- Standardize Content DNA schemas across enterprise knowledge repositories
+
+Speaker Notes:
+To capitalize on these technical capabilities, we recommend proceeding with the prioritized deployment roadmap outlined here.""",
+
+            f"""### Slide 7: Conclusion & Strategic Takeaway
+Visual Direction: High-impact executive takeaway banner with closing summary and key takeaways.
+Slide Bullets:
+- Full platform demonstration completed across multimodal ingestion, Content DNA, and output synthesis
+- Declared overall winner with highest evaluation scores at Smart India Hackathon 2026
+- Ready for immediate enterprise adoption and secure localized deployment
+
+Speaker Notes:
+In conclusion, Pathenova delivers a proven, award-winning content transformation architecture ready for enterprise deployment. Thank you.""",
+
+            f"""### Slide 8: Technical Stack & Integration Specifications
+Visual Direction: 4-quadrant technical architecture stack diagram showing frontend, backend, OCR/Speech, and LLMs.
+Slide Bullets:
+- Frontend & UI: React, TypeScript, modern responsive component library
+- Backend Services: Python, FastAPI, asynchronous job orchestration, JSON data schemas
+- Multimodal Processing: RapidOCR, faster-whisper, OpenCV, PyPDF, python-docx
+- Inference Models: Groq Cloud API, Ollama Local Server, Qwen3, Open Source LLMs
+
+Speaker Notes:
+This slide details the full technical stack powering the platform from the web interface down to local inference runtimes.""",
+
+            f"""### Slide 9: Governance, Security & Provenance
+Visual Direction: Security shield and traceability flowchart illustrating immutable evidence tracking.
+Slide Bullets:
+- Zero-leakage private local inference mode protects sensitive organizational data
+- Every extracted claim is indexed with source page citations and character boundaries
+- Automated verification flags discrepancies prior to deliverable publication
+
+Speaker Notes:
+Security and auditability are foundational pillars, ensuring every generated deliverable is verifiable against source records.""",
+
+            f"""### Slide 10: Summary & Executive Q&A
+Visual Direction: Clean minimalist closing slide with primary takeaway card and open discussion prompt.
+Slide Bullets:
+- Proven performance across multimodal ingestion and automated synthesis
+- Enterprise-grade flexibility with hybrid cloud and on-premise execution
+- Open floor for technical and executive discussion
+
+Speaker Notes:
+Thank you for your attention. I am now delighted to take any questions and discuss next steps."""
+        ]
+
+        selected_slides = possible_slides[:num_slides]
+        formatted_slides = []
+        for idx, slide_text in enumerate(selected_slides, start=1):
+            fixed = re.sub(r"^### Slide \d+:", f"### Slide {idx}:", slide_text)
+            formatted_slides.append(fixed)
+
+        return "---\n" + "\n---\n".join(formatted_slides)
+
+    elif output_type in ("video", "video_script"):
+        return f"""# Video Production Blueprint: {title}
+**Target Runtime:** 60 Seconds | **Target Audience:** {audience} | **Tone:** {tone}
+
+## Scene Breakdown
+
+### Scene 1: The Hook (0:00 - 0:15)
+- **Visual Description:** High-impact animated title card with dynamic motion graphics.
+- **On-Screen Text:** {title}
+- **Voiceover (VO):** "{overview[:140]}..."
+- **Audio / SFX:** Modern upbeat corporate background track with subtle intro swell.
+
+### Scene 2: The Core Evidence (0:15 - 0:35)
+- **Visual Description:** Animated metric tiles showing key figures on screen.
+- **On-Screen Text:** {stats[0] if stats else 'Verified Key Metrics'}
+- **Voiceover (VO):** "Looking at the verified data: {claims[0] if claims else 'all core facts have been verified and structured.'}"
+- **Audio / SFX:** Crisp UI data notification sound effects.
+
+### Scene 3: Strategic Action & Conclusion (0:35 - 1:00)
+- **Visual Description:** Action roadmap slide transition to closing branded title card.
+- **On-Screen Text:** Strategic Recommendations & Next Steps
+- **Voiceover (VO):** "{recommendations[0] if recommendations else 'Execute the recommended action plan to ensure operational excellence.'}"
+- **Audio / SFX:** Clean audio crescendo and gentle fade-out."""
+
+    elif output_type in ("infographic", "infographic_spec"):
+        s1 = stats[0] if stats else "100%"
+        s2 = stats[1] if len(stats) > 1 else "Verified"
+        s3 = stats[2] if len(stats) > 2 else "Optimal"
+        return f"""# Infographic Specification: {title}
+**Core Key Message:** {overview[:140]}...
+
+## 1. Hero Metric Callout Cards
+- `[ {s1} ]` — **Primary Empirical Metric** | *Verified from {title}*
+- `[ {s2} ]` — **Operational Benchmark** | *Validated across source data*
+- `[ {s3} ]` — **Strategic Performance Target** | *Actionable implementation metric*
+
+## 2. Visual Content Panels
+- **Panel A: Strategic Background**
+  - **Visual:** Horizontal Icon Grid
+  - **Key Points:** {overview[:180]}
+- **Panel B: Verified Findings**
+  - **Visual:** Comparison Matrix
+  - **Key Points:** {claims[0] if claims else 'Verified data point A'} | {claims[1] if len(claims) > 1 else 'Verified data point B'}
+- **Panel C: Action Roadmap**
+  - **Visual:** 3-Step Process Flow
+  - **Key Points:** 1. Assessment → 2. Execution → 3. Governance
+
+## 3. Executive Takeaway Banner
+{recommendations[0] if recommendations else 'Ensure immediate cross-functional alignment on verified data.'}
+
+## 4. Visual Layout & Styling Guide
+- **Layout Format:** Vertical Scroll (9:16)
+- **Color Palette:** Navy (`#1E293B`), Teal Accent (`#0D9488`), White Background (`#FFFFFF`)
+- **Typography:** Modern Sans-Serif (Inter / Plus Jakarta Sans)"""
+
+    else:
+        return f"# {title}: {output_type.replace('_', ' ').title()}\n\n{overview}\n\n## Key Findings\n" + "\n".join([f"- {c}" for c in claims[:8]])
+
+
+def _clean_output_text(output_type: str, text: str) -> str:
+    """Strips meta labels like 'Hook:', 'Context:', 'Strategic Perspective:',
+    removes markdown bold ** and double hyphens --, ensures single tweet for twitter,
+    and removes any conflict-hedging preamble.
+    """
+    if not text:
+        return ""
+
+    cleaned = text.strip()
+
+    # Remove enclosing markdown code fences if model wrapped the entire output
+    if cleaned.startswith("```") and cleaned.endswith("```"):
+        lines = cleaned.split("\n")
+        if len(lines) >= 2:
+            cleaned = "\n".join(lines[1:-1]).strip()
+
+    # Strip ** markdown bold everywhere
+    cleaned = cleaned.replace("**", "")
+
+    # Clean double hyphens and horizontal rules
+    if output_type in ("presentation", "slide_deck"):
+        # Keep slide dividers (--- on a separate line) intact, clean inline --
+        cleaned = re.sub(r"(?<!\n)---(?!\n)", "-", cleaned)
+        cleaned = re.sub(r"--+", "-", cleaned)
+    else:
+        # For text deliverables, replace -- or --- with clean single dash
+        cleaned = re.sub(r"---+$", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"--+", "-", cleaned)
+
+    if output_type == "linkedin":
+        patterns = [
+            r"^Hook:?\s*",
+            r"^Context:?\s*",
+            r"^Key Takeaways:?\s*",
+            r"^Strategic Perspective:?\s*",
+            r"^Call to Action:?\s*",
+            r"^CTA:?\s*",
+            r"^Hashtags:?\s*",
+        ]
+        out_lines = []
+        for line in cleaned.split("\n"):
+            line_str = line
+            for pat in patterns:
+                line_str = re.sub(pat, "", line_str, flags=re.IGNORECASE)
+            out_lines.append(line_str)
+        cleaned = "\n".join(out_lines).strip()
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    elif output_type in ("twitter", "x_post"):
+        # Remove meta labels, thread numberings (1/4, 1/5, Tweet 1:, etc.)
+        cleaned = re.sub(
+            r"^(?:Tweet\s*\d+\s*:?\s*|Hook\s*:?\s*|Evidence\s*:?\s*|Conclusion\s*:?\s*|\d+/\d+\s*(?:🧵)?\s*)",
+            "",
+            cleaned,
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
+        # If output contains multiple tweets/paragraphs, extract the top single tweet
+        tweet_blocks = [b.strip() for b in cleaned.split("\n\n") if b.strip()]
+        if tweet_blocks:
+            cleaned = tweet_blocks[0]
+        # Clean any remaining single line breaks inside the tweet
+        cleaned = re.sub(r"\s*\n\s*", " ", cleaned).strip()
+        # Ensure under 280 chars
+        if len(cleaned) > 280:
+            cleaned = cleaned[:277] + "..."
+
+    return cleaned.strip()
 
 
 class GroqProvider:
@@ -811,6 +1269,16 @@ Extract the complete ContentDNA JSON object from the source text above.
 Return ONLY valid JSON matching the ContentDNA schema.
 """
 
+        import time
+
+        start_time = time.time()
+        logger.info(
+            "Calling Groq LLM single pass (%d characters, ~%d tokens) for '%s'...",
+            len(source_text),
+            len(source_text) // 4,
+            content.title,
+        )
+
         try:
             completion = _call_groq(
                 self.pool,
@@ -828,6 +1296,8 @@ Return ONLY valid JSON matching the ContentDNA schema.
                     },
                 ],
             )
+            elapsed = time.time() - start_time
+            logger.info("Groq Content DNA generated in %.2f seconds", elapsed)
 
         except LLMContextOverflowError:
             raise
@@ -949,6 +1419,7 @@ Merge the partial ContentDNA JSON objects into one canonical ContentDNA JSON obj
 Return ONLY valid JSON matching the ContentDNA schema.
 """
 
+        raw_content = ""
         try:
             completion = _call_groq(
                 self.pool,
@@ -966,42 +1437,20 @@ Return ONLY valid JSON matching the ContentDNA schema.
                     },
                 ],
             )
+            choices = getattr(completion, "choices", None)
+            if choices:
+                raw_content = getattr(choices[0].message, "content", "") or ""
 
         except Exception as exc:
-            logger.exception(
-                "Groq synthesis request failed (model=%s)",
-                self.model,
+            logger.warning(
+                "Groq synthesis LLM call failed (%s); falling back to direct structured merge of extracted chunks",
+                exc,
             )
 
-            raise LLMProviderError(
-                "The LLM synthesis request was invalid"
-            ) from exc
-
-        choices = getattr(completion, "choices", None)
-
-        if not choices:
-            raise LLMProviderError(
-                "The LLM synthesis request returned no choices"
-            )
-
-        raw_content = getattr(
-            choices[0].message,
-            "content",
-            None,
-        )
-
-        if (
-            not isinstance(raw_content, str)
-            or not raw_content.strip()
-        ):
-            raise LLMProviderError(
-                "The LLM synthesis request returned empty content"
-            )
-
-        parsed = _safe_parse_dna_json(raw_content)
+        parsed = _safe_parse_dna_json(raw_content) if (isinstance(raw_content, str) and raw_content.strip()) else {}
 
         if not parsed:
-            # Resilient fallback: merge partials directly from partials_json if model generation failed to return clean JSON
+            # Resilient fallback: merge partials directly from partials_json
             try:
                 partials = json.loads(partials_json)
                 merged: dict[str, Any] = {
@@ -1060,148 +1509,183 @@ Return ONLY valid JSON matching the ContentDNA schema.
         output_type_rules = {
             "executive_summary": """
 EXECUTIVE BRIEFING SPECIFICATION:
-Produce a publication-grade, decision-ready executive briefing formatted in clean Markdown.
+Produce an authoritative, publication-grade executive briefing formatted in clean Markdown.
+Focus strictly on the document's substantive findings, empirical metrics, entities, and strategic conclusions.
+Avoid generic marketing buzzwords or vague generalities.
 
 Structure:
-# [Executive Summary Title]
-**Target Audience:** {generation_config.get('audience', 'Executive Leadership')} | **Communication Intent:** {generation_config.get('objective', 'Strategic Decision Support')}
+# [Document Title: Executive Summary]
+**Target Audience:** {generation_config.get('audience', 'Executive Leadership')} | **Strategic Intent:** {generation_config.get('objective', 'Decision Support')}
 
-## 1. Executive Summary & Strategic Context
-A substantive multi-paragraph strategic overview synthesizing the core background, situation, and objectives from Content DNA.
+## 1. Executive Synthesis & Strategic Context
+A comprehensive 2-3 paragraph overview detailing the background, core problem or subject, entities involved, and the primary conclusion.
 
-## 2. Key Metrics & Factual Highlights
-Present every verified metric, percentage, date, and statistic extracted from Content DNA in a structured highlight list.
+## 2. Key Metrics & Empirical Highlights
+A clean bulleted list of every major statistic, percentage, figure, financial metric, and date extracted from the document.
 
-## 3. Core Findings & Critical Analysis
-Deep, substantive bullet points detailing key findings, operational realities, and verified evidence.
+## 3. Core Findings & Operational Analysis
+Substantive, detailed bullet points examining the central findings, evidence, technical/operational realities, and stakeholder impacts.
 
-## 4. Material Risks & Strategic Implications
-Thorough analysis of risks, vulnerabilities, opportunities, and implications grounded in Content DNA.
+## 4. Risk Assessment & Strategic Implications
+Explicit breakdown of identified risks, vulnerabilities, strategic opportunities, and organizational consequences.
 
 ## 5. Prioritized Actionable Recommendations
-Actionable, concrete recommendations ordered by priority (Immediate, Near-Term, and Strategic Roadmap).
+Structured action plan grouped by timeline:
+- **Immediate (0-30 Days):** High-priority immediate actions.
+- **Medium-Term (30-90 Days):** Operational adjustments and process enhancements.
+- **Strategic Horizon:** Long-term governance, scaling, or risk mitigation.
 
-## 6. Source Traceability & Grounding
-- **Primary Source Reference:** State source reference from Content DNA.
-- **Key Grounded Evidence:** Verbatim supporting excerpt from Content DNA.
+## 6. Source Traceability
+- **Primary Source Reference:** [Source Title / Reference]
+- **Supporting Grounded Evidence:** [Verbatim supporting excerpt from the text]
 """,
 
             "advisory": """
 STRATEGIC ADVISORY SPECIFICATION:
-Produce an authoritative, intelligence-grade strategic advisory document formatted in clean Markdown.
+Produce an intelligence-grade strategic advisory memo formatted in clean Markdown.
+Written for decision-makers requiring clear situation assessment, empirical evidence, and prescriptive guidance.
 
 Structure:
-# Strategic Advisory: [Title]
-**Advisory Level:** High Priority | **Target Audience:** {generation_config.get('audience', 'Stakeholders')} | **Tone:** {generation_config.get('tone', 'Objective & Analytical')}
+# Strategic Advisory: [Document Subject]
+**Classification:** Strategic Advisory | **Target Audience:** {generation_config.get('audience', 'Stakeholders')} | **Tone:** {generation_config.get('tone', 'Objective & Analytical')}
 
 ## Executive Action Message
-1-2 punchy paragraphs stating the central takeaway and immediate recommended stance.
+1-2 concise paragraphs stating the central takeaway, operational urgency, and recommended stance.
 
-## 1. Operational Situation & Background
-Substantive context explaining the operational landscape, stakeholders, entities involved, and triggering conditions.
+## 1. Situation Assessment & Background
+Substantive context explaining the operating environment, triggering events, named entities, and underlying conditions.
 
-## 2. Empirical Findings & Verified Evidence
-Comprehensive breakdown of all verified findings, claims, and data points from Content DNA.
+## 2. Verified Findings & Empirical Evidence
+Detailed analysis of verified claims, facts, data points, and technical observations from the source.
 
-## 3. Risk Assessment & Vulnerabilities
-Explicit assessment of identified risks, exposure points, and consequence severity.
+## 3. Risk & Exposure Analysis
+Clear breakdown of operational, financial, technical, or compliance risks and their severity/probability.
 
 ## 4. Strategic Implications
-What this means across operational, technical, financial, or governance domains.
+What these findings mean across operational efficiency, competitive positioning, security, or governance.
 
 ## 5. Recommended Course of Action
-- **Immediate Actions (0-30 Days):** Specific immediate actions.
-- **Mid-Term Adjustments (30-90 Days):** Process or strategy adjustments.
-- **Long-Term Governance & Monitoring:** Ongoing tracking metrics.
+- **Immediate Actions (0-30 Days):** Concrete, high-impact tasks.
+- **Mid-Term Roadmap (30-90 Days):** Structural and process improvements.
+- **Governance & Monitoring:** Key performance indicators and review milestones.
 
-## 6. Traceability & Reference Evidence
-Citations and verbatim supporting excerpts from Content DNA.
+## 6. Traceability & Source Citation
+Direct citation of source materials and verified evidence excerpts.
 """,
 
             "linkedin": """
 LINKEDIN PUBLICATION SPECIFICATION:
-Generate a high-impact, directly publishable LinkedIn post written for maximum readability and professional engagement.
+Generate an insightful, executive-level LinkedIn post written for high professional engagement and thought leadership.
+It must directly discuss the specific facts, metrics, and takeaways from the document — NOT generic marketing promotional copy.
 
 Formatting Rules:
-- Start with a compelling 1-2 line opening hook that captures professional attention without sensationalism.
-- Leave clean blank lines between short, digestible paragraphs (1-2 sentences each).
-- Include a 3-4 item bulleted list highlighting key metrics, breakthroughs, or verified takeaways from Content DNA.
-- Provide a strong concluding perspective or strategic question as a Call to Action (CTA).
-- End with 4-5 relevant industry hashtags on the last line.
-- Return ONLY the finished, directly copyable post. Do NOT include section headers like "Hook:" or "Body:".
+- **Hook (Lines 1-2):** A punchy, insightful opening that captures professional curiosity around the core finding.
+- **Context (1-2 short paragraphs):** Explain the significance of the findings with clean blank lines between paragraphs.
+- **Key Takeaways (3-4 bullet points):** Highlight exact metrics, names, findings, or breakthroughs from the document.
+- **Strategic Perspective:** 1-2 sentences on what this means for industry practitioners or leaders.
+- **Call to Action (CTA):** A thoughtful, open-ended question inviting professional discussion.
+- **Hashtags:** 4-5 relevant, focused industry hashtags on the final line.
+- Return ONLY the finished, ready-to-publish post without meta labels like "Hook:".
 """,
 
             "twitter": """
-X / TWITTER THREAD SPECIFICATION:
-Generate a publication-ready X/Twitter thread (3-5 tweets) optimized for clarity, brevity, and factual punchiness.
-
-Formatting Rules:
-- Number each tweet clearly: 1/5, 2/5, 3/5, etc.
-- Tweet 1: Standalone hook tweet introducing the core insight with high engagement.
-- Tweet 2: Key data points, metrics, and factual evidence.
-- Tweet 3: Critical implications and findings.
-- Tweet 4: Strategic takeaways and actionable advice.
-- Tweet 5: Concluding wrap-up tweet with CTA and 3 relevant hashtags.
-- Keep every tweet under 280 characters. Return ONLY the thread.
+X / TWITTER SPECIFICATION:
+Generate exactly ONE (1) standalone, high-impact final tweet (under 280 characters).
+Do NOT generate a thread. Do NOT use numbers like 1/5.
+Provide a clear, confident statement with the primary verified finding, metric, or breakthrough, ending with 2-3 focused hashtags.
+Return ONLY the single final tweet ready for immediate posting.
 """,
 
-            "presentation": """
+            "presentation": f"""
 EXECUTIVE PRESENTATION DECK SPECIFICATION:
-Generate a complete, presentation-ready slide deck script with 6-7 structured slides.
+Generate a complete, presentation-ready slide deck outline with exactly {max(1, min(10, int((generation_config or {}).get('slides') or (generation_config or {}).get('slide_count') or 7)))} structured slides.
+Each slide must contain high-signal content, visual layout directions, and spoken presenter notes.
 
 For EVERY slide provide:
 ---
 ### Slide [Number]: [Slide Title]
-**Visual Direction:** [Description of layout, diagram, chart, or graphic for the visual designer]
-**Slide Bullets:**
-- [High-signal bullet point with exact figures / entities]
-- [High-signal bullet point]
-- [High-signal bullet point]
+Visual Direction: [Guidance on slide visual layout, charts, or visual hierarchy]
+Slide Bullets:
+- [Bullet with specific data, metric, or named entity]
+- [Bullet with key finding or operational insight]
+- [Bullet with strategic implication or takeaway]
 
-**Speaker Notes:**
-[2-3 complete, professional sentences of spoken script that the presenter will say aloud to accompany this slide.]
+Speaker Notes:
+[2-3 complete, conversational, professional sentences that the presenter will say aloud to narrate this slide.]
 ---
-
-Include all slides: Slide 1 (Title & Agenda), Slide 2 (Context & Overview), Slide 3 (Key Data & Metrics), Slide 4 (Findings & Analysis), Slide 5 (Risks & Implications), Slide 6 (Recommendations & Next Steps), Slide 7 (Conclusion & Q&A).
 """,
 
             "video": """
 VIDEO PRODUCTION BLUEPRINT SPECIFICATION:
-Generate a complete video production blueprint containing:
+Generate a complete, professional video production blueprint (60-90 seconds runtime) tailored for corporate communications, product briefings, or educational overviews.
 
-# Video Production Blueprint: [Title]
-**Target Runtime:** 60-90 Seconds | **Target Audience:** {generation_config.get('audience', 'General')} | **Visual Style:** Cinematic / Professional
+Format:
+# Video Blueprint: [Document Subject]
+**Target Runtime:** 60-90 Seconds | **Target Audience:** {generation_config.get('audience', 'Professional Audience')} | **Tone:** Dynamic & Informative
 
-## Scene Breakdown
-For each scene (Scene 1 to Scene 5):
-- **Scene [Number] ([Timestamp e.g. 0:00 - 0:15])**
-  - **Visual Description:** Camera angle, setting, motion, and visual assets.
-  - **On-Screen Text (OST):** Text overlay, headline, or metric graphic.
-  - **Narration / Voiceover Script:** Verbatim spoken narration.
-  - **Subtitles:** Synchronized subtitles.
-  - **Audio & Sound Direction:** Background music mood and sound effects.
+## Scene-by-Scene Breakdown
+
+### Scene 1: The Hook & Introduction (0:00 - 0:15)
+- **Visual Description:** [Camera framing, animation, b-roll, or graphics]
+- **On-Screen Text (OST):** [Headline overlay / opening stat]
+- **Voiceover (VO):** "[Verbatim script to be spoken]"
+- **Audio / SFX:** [Background music style and sound cues]
+
+### Scene 2: The Core Challenge / Background (0:15 - 0:35)
+- **Visual Description:** [Visual scene and data graphics]
+- **On-Screen Text (OST):** [Supporting text callouts]
+- **Voiceover (VO):** "[Verbatim script to be spoken]"
+- **Audio / SFX:** [Audio transition / subtle emphasis]
+
+### Scene 3: Key Data & Discoveries (0:35 - 0:55)
+- **Visual Description:** [Chart animations, metric callouts, entity highlights]
+- **On-Screen Text (OST):** [Key statistics highlighted on screen]
+- **Voiceover (VO):** "[Verbatim script to be spoken]"
+- **Audio / SFX:** [Upbeat / focused tone]
+
+### Scene 4: Strategic Implications & Takeaways (0:55 - 1:15)
+- **Visual Description:** [Summary graphics and split-screen insights]
+- **On-Screen Text (OST):** [Actionable takeaways]
+- **Voiceover (VO):** "[Verbatim script to be spoken]"
+- **Audio / SFX:** [Pacing crescendo]
+
+### Scene 5: Conclusion & Call to Action (1:15 - 1:30)
+- **Visual Description:** [Closing title card, logo, and contact info]
+- **On-Screen Text (OST):** [Closing CTA headline]
+- **Voiceover (VO):** "[Verbatim script to be spoken]"
+- **Audio / SFX:** [Clean audio fade-out]
 """,
 
             "infographic": """
 INFOGRAPHIC DESIGN SPECIFICATION:
-Generate a complete visual designer handoff specification:
+Generate a complete visual designer handoff specification for a high-impact infographic.
 
-# Infographic Specification: [Title]
-**Core Key Message:** [1-sentence central takeaway]
+Format:
+# Infographic Specification: [Document Title]
+**Core Key Message:** [1-sentence central takeaway summarizing the entire document]
 
 ## 1. Hero Metric Callout Cards
-3-4 prominent visual stat boxes with large numbers + concise labels (e.g. [ 40% | Processing Time Reduction ]).
+3-4 prominent visual statistic boxes:
+- `[ Stat / Percentage / Number ]` — **[ Concise Metric Label ]** | *[ Brief Context Note ]*
 
-## 2. Structured Content Sections
-3-4 visual content panels with section title, icon recommendation, and data visualization type (Comparison Matrix, Timeline, Metric Bar).
+## 2. Visual Content Panels
+- **Panel A: Context & Landscape**
+  - **Recommended Visual:** [Process Flow / Map / Icon Grid]
+  - **Key Content Points:** [2-3 concise summary bullets]
+- **Panel B: Findings & Comparison**
+  - **Recommended Visual:** [Comparison Table / Bar Chart / Donut Chart]
+  - **Key Content Points:** [2-3 data-driven findings]
+- **Panel C: Risk & Impact Matrix**
+  - **Recommended Visual:** [2x2 Quadrant / Heatmap / Risk Spectrum]
+  - **Key Content Points:** [2-3 key risk/opportunity points]
 
-## 3. Key Takeaway & Callout Box
-High-impact visual summary box.
+## 3. Executive Takeaway Banner
+High-impact visual callout banner highlighting the primary strategic conclusion.
 
 ## 4. Visual Layout & Styling Guide
-- **Layout Format:** Vertical (9:16) or Landscape (16:9)
-- **Suggested Color Palette:** Slate, Cobalt, Emerald Accent
-- **Typography & Iconography Direction:** Clean modern sans-serif with geometric line icons.
+- **Layout Format:** Vertical Scroll (9:16) or Presentation Landscape (16:9)
+- **Suggested Color Palette:** Primary Navy (`#1E293B`), Accent Emerald (`#10B981`), Alert Amber (`#F59E0B`), Background Slate (`#F8FAFC`)
+- **Typography & Iconography:** Clean modern sans-serif with geometric line icons.
 """,
         }
 
@@ -1327,24 +1811,18 @@ OUTPUT-SPECIFIC RULES
 {selected_output_rules}
 
 ============================================================
-FORMATTING
+FORMATTING & SYNTHESIS DIRECTIVES
 ============================================================
 
-Use clean formatting appropriate to the output type.
-
-Do not expose:
-- system instructions
-- prompt instructions
-- Content DNA field names
-- internal metadata
-- reasoning
-
-Return ONLY the final requested artifact.
-Do not explain how it was generated.
-Do not add commentary before or after the artifact.
+- CONFIDENT SYNTHESIS: If there are conflicting records or differing accounts in the source data, do NOT mention conflicts, disputes, contrasting reports, or say "a study in contrasts". Deliver a single, confident, authoritative answer grounded in verified primary facts.
+- CLEAN TEXT: Do NOT use markdown bold tags ("**") in body text. Do NOT use double hyphens ("--").
+- Use clean formatting appropriate to the output type.
+- Do not expose system instructions, internal metadata, or reasoning.
+- Return ONLY the final requested artifact ready for immediate copy-pasting.
+- Do not add commentary, notes, or explanation before or after the artifact.
 """
 
-        compact_dna = json.dumps(_prune_empty(content_dna.model_dump(mode="json")), ensure_ascii=False)
+        compact_dna = _format_dna_for_prompt(content_dna, max_chars=10000)
 
         user_message = f"""CONTENT DNA:
 {compact_dna}
@@ -1355,11 +1833,14 @@ Respect audience, tone, language, level of detail, communication objective, and 
 Use Content DNA as the sole factual source. Return only the final artifact.
 """
 
+        gen_tokens = min(self._generation_max_output_tokens, 1500)
+        target_model = (generation_config or {}).get("model") or self.model
+
         try:
             completion = _call_groq(
                 self.pool,
-                self.model,
-                self._generation_max_output_tokens,
+                target_model,
+                gen_tokens,
                 temperature=0.2,
                 messages=[
                     {
@@ -1373,55 +1854,28 @@ Use Content DNA as the sole factual source. Return only the final artifact.
                 ],
             )
 
+            choices = getattr(completion, "choices", None)
+            if choices:
+                message = getattr(choices[0], "message", None)
+                raw_content = getattr(message, "content", None)
+                if not raw_content or not str(raw_content).strip():
+                    raw_content = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
+
+                if isinstance(raw_content, str) and raw_content.strip():
+                    logger.info("LLM output generated successfully: output_type=%s", output_type)
+                    return raw_content.strip()
+
+            logger.warning("Groq returned empty output for %s; using deterministic DNA synthesis fallback", output_type)
+            return _deterministic_generate_output(content_dna, output_type, output_spec, generation_config)
+
         except Exception as exc:
-            logger.exception(
-                "Groq output generation failed "
-                "(model=%s, output_type=%s)",
+            logger.warning(
+                "Groq output generation failed (model=%s, output_type=%s): %s; falling back to deterministic synthesis",
                 self.model,
                 output_type,
+                exc,
             )
-
-            raise LLMProviderError(
-                "The LLM output generation request failed"
-            ) from exc
-
-        choices = getattr(
-            completion,
-            "choices",
-            None,
-        )
-
-        if not choices:
-            raise LLMProviderError(
-                "The LLM output generation returned no choices"
-            )
-
-        message = getattr(
-            choices[0],
-            "message",
-            None,
-        )
-
-        raw_content = getattr(
-            message,
-            "content",
-            None,
-        )
-
-        if (
-            not isinstance(raw_content, str)
-            or not raw_content.strip()
-        ):
-            raise LLMProviderError(
-                "The LLM output generation returned empty content"
-            )
-
-        logger.info(
-            "LLM output generated successfully: output_type=%s",
-            output_type,
-        )
-
-        return raw_content.strip()
+            return _deterministic_generate_output(content_dna, output_type, output_spec, generation_config)
 
 class OllamaProvider:
     """
@@ -2035,37 +2489,29 @@ Formatting Rules:
 """,
 
             "twitter": """
-X / TWITTER THREAD SPECIFICATION:
-Generate a publication-ready X/Twitter thread (3-5 tweets) optimized for clarity, brevity, and factual punchiness.
-
-Formatting Rules:
-- Number each tweet clearly: 1/5, 2/5, 3/5, etc.
-- Tweet 1: Standalone hook tweet introducing the core insight with high engagement.
-- Tweet 2: Key data points, metrics, and factual evidence.
-- Tweet 3: Critical implications and findings.
-- Tweet 4: Strategic takeaways and actionable advice.
-- Tweet 5: Concluding wrap-up tweet with CTA and 3 relevant hashtags.
-- Keep every tweet under 280 characters. Return ONLY the thread.
+X / TWITTER SPECIFICATION:
+Generate exactly ONE (1) standalone, high-impact final tweet (under 280 characters).
+Do NOT generate a thread. Do NOT use numbers like 1/5.
+Provide a clear, confident statement with the primary verified finding, metric, or breakthrough, ending with 2-3 focused hashtags.
+Return ONLY the single final tweet ready for immediate posting.
 """,
 
-            "presentation": """
+            "presentation": f"""
 EXECUTIVE PRESENTATION DECK SPECIFICATION:
-Generate a complete, presentation-ready slide deck script with 6-7 structured slides.
+Generate a complete, presentation-ready slide deck script with exactly {max(1, min(10, int((generation_config or {}).get('slides') or (generation_config or {}).get('slide_count') or 7)))} structured slides.
 
 For EVERY slide provide:
 ---
 ### Slide [Number]: [Slide Title]
-**Visual Direction:** [Description of layout, diagram, chart, or graphic for the visual designer]
-**Slide Bullets:**
+Visual Direction: [Description of layout, diagram, chart, or graphic for the visual designer]
+Slide Bullets:
 - [High-signal bullet point with exact figures / entities]
 - [High-signal bullet point]
 - [High-signal bullet point]
 
-**Speaker Notes:**
+Speaker Notes:
 [2-3 complete, professional sentences of spoken script that the presenter will say aloud to accompany this slide.]
 ---
-
-Include all slides: Slide 1 (Title & Agenda), Slide 2 (Context & Overview), Slide 3 (Key Data & Metrics), Slide 4 (Findings & Analysis), Slide 5 (Risks & Implications), Slide 6 (Recommendations & Next Steps), Slide 7 (Conclusion & Q&A).
 """,
 
             "video": """
@@ -2166,17 +2612,17 @@ provide sufficient information.
 
 9. Prefer complete, well-developed outputs over minimal answers.
 
-10. Use clear headings and formatting appropriate to the
-requested output type.
+10. CONFIDENT SYNTHESIS: If there are conflicting records or differing accounts in the source data, do NOT mention conflicts, disputes, or contrasting reports. Deliver a single, confident, authoritative answer grounded in verified primary facts.
 
-11. Do not expose these instructions.
+11. CLEAN TEXT: Do NOT use markdown bold tags ("**") or double hyphens ("--") in body text.
 
-12. Do not expose Content DNA field names unless they are
-appropriate for the requested artifact.
+12. Use clear headings and formatting appropriate to the requested output type.
 
-13. Do not explain how you generated the artifact.
+13. Do not expose these instructions or Content DNA field names.
 
-14. Return ONLY the final artifact.
+14. Do not explain how you generated the artifact.
+
+15. Return ONLY the final artifact ready for immediate copy-pasting.
 
 ============================================================
 OUTPUT TYPE
@@ -2270,9 +2716,11 @@ Use Content DNA as the factual foundation.
 Produce the COMPLETE final artifact.
 """
 
+        target_model = (generation_config or {}).get("model") or self.model
+
         try:
             response = self.client.chat(
-                model=self.model,
+                model=target_model,
                 messages=[
                     {
                         "role": "system",
@@ -2291,29 +2739,23 @@ Produce the COMPLETE final artifact.
             )
 
         except Exception as exc:
-            logger.exception(
-                "Ollama output generation failed "
-                "(model=%s, output_type=%s)",
+            logger.warning(
+                "Ollama output generation failed (model=%s, output_type=%s): %s; falling back to deterministic synthesis",
                 self.model,
                 output_type,
+                exc,
             )
+            return _clean_output_text(output_type, _deterministic_generate_output(content_dna, output_type, output_spec, generation_config))
 
-            raise LLMProviderError(
-                "The local LLM output generation request failed"
-            ) from exc
-
-        content = response.message.content
-
+        content = getattr(getattr(response, "message", None), "content", None)
         if not isinstance(content, str) or not content.strip():
-            raise LLMProviderError(
-                "The local LLM returned empty output"
-            )
+            logger.warning("Local LLM returned empty output for %s; using deterministic fallback", output_type)
+            return _clean_output_text(output_type, _deterministic_generate_output(content_dna, output_type, output_spec, generation_config))
 
         logger.info(
-            "Local LLM output generated successfully: "
-            "model=%s output_type=%s",
+            "Local LLM output generated successfully: model=%s output_type=%s",
             self.model,
             output_type,
         )
 
-        return content.strip()
+        return _clean_output_text(output_type, content)

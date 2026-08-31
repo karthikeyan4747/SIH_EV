@@ -14,8 +14,11 @@ import {
   PictureInPicture,
   RotateCcw,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react'
+
+import { exportArtifact, type ExportFormat } from '../../lib/export/documentExport'
 
 import { NewSourceBatch } from '../ev/NewSourceBatch'
 import { ContentDNAStructure } from '../dna/ContentDNAStructure'
@@ -34,9 +37,10 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
-import { analyzeSourceIntegrity, listWorkflows, saveWorkflow } from '../../lib/api/client'
-import type { WorkflowTemplate } from '../../lib/api/client'
+import { analyzeSourceIntegrity, listWorkflows, saveWorkflow, getAvailableModels } from '../../lib/api/client'
+import type { WorkflowTemplate, ModelListResponse } from '../../lib/api/client'
 import { ConflictResolutionPanel } from '../dna/ConflictResolutionPanel'
+import { DNASkeleton, IntegritySkeleton, OutputsSkeleton } from '../ui/Skeleton'
 
 import type {
   IntegrityClaim,
@@ -76,6 +80,8 @@ export type GenerationConfig = {
   detail: string
   objective: string
   style: string
+  slides?: number
+  model?: string
 }
 
 interface TransformationWorkspaceProps {
@@ -99,6 +105,7 @@ interface TransformationWorkspaceProps {
   ) => void
   onRestoreVersion: (version: number) => void
   onConflictResolved: (transformation: Transformation) => void
+  onDeleteOutput?: (outputId: string) => void
 }
 
 
@@ -117,6 +124,7 @@ export function TransformationWorkspace({
   onGenerateOutputs,
   onRestoreVersion,
   onConflictResolved,
+  onDeleteOutput,
 }: TransformationWorkspaceProps) {
   const [dnaOpen, setDnaOpen] = useState(
     Boolean(transformation.content_dna),
@@ -133,6 +141,9 @@ export function TransformationWorkspace({
 
   const [expandedClaim, setExpandedClaim] =
     useState<string | null>(null)
+
+  const [showRawClaims, setShowRawClaims] =
+    useState(false)
 
   const [selectedNode, setSelectedNode] =
     useState<DNASectionKey | null>(null)
@@ -332,6 +343,13 @@ export function TransformationWorkspace({
             </div>
           )}
         </Card>
+      ) : busy ? (
+        <Card className="embedded-dna">
+          <div className="workspace-panel-heading compact-heading" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <span className="panel-kicker"><Sparkles size={14} /> EXTRACTING CONTENT DNA...</span>
+          </div>
+          <DNASkeleton />
+        </Card>
       ) : (
         <Card className="dna-empty">
           <div className="dna-mini-mark">*</div>
@@ -356,14 +374,13 @@ export function TransformationWorkspace({
               <ShieldCheck size={14} /> SOURCE INTEGRITY
             </span>
             <p>
-              Compare claims across sources, detect genuine conflicts, and inspect
-              the evidence behind each claim.
+              Cross-source semantic verification, discrepancy detection, and grounded fact provenance.
             </p>
           </div>
 
           <Badge>
             {integrity
-              ? `${integrity.claims.length} claims`
+              ? `${integrity.conflicts.length} ${integrity.conflicts.length === 1 ? 'conflict' : 'conflicts'}`
               : 'Not analyzed'}
           </Badge>
         </div>
@@ -372,7 +389,7 @@ export function TransformationWorkspace({
           <div className="source-verification-heading">
             <strong>Source verification</strong>
             <span>
-              Same facts are corroborated while differences in time or location are kept separate.
+              Semantically compares facts across all sources to surface contradictions while corroborating verified claims.
             </span>
           </div>
 
@@ -393,40 +410,63 @@ export function TransformationWorkspace({
           </div>
         )}
 
-        {integrity && (
+        {integrityLoading ? (
           <div className="integrity-results">
-            <div className="integrity-summary">
-              <span>
-                <strong>{integrity.claims.length}</strong> claims
-              </span>
-              <span>
-                <strong>{integrity.conflicts.length}</strong> conflicts
-              </span>
-            </div>
-
-            {integrity.claims.length ? (
-              <div className="integrity-claim-list">
-                {integrity.claims.map((claim) => (
-                  <IntegrityClaimCard
-                    key={claim.claim_id}
-                    claim={claim}
-                    expanded={expandedClaim === claim.claim_id}
-                    onToggle={() =>
-                      setExpandedClaim((current) =>
-                        current === claim.claim_id
-                          ? null
-                          : claim.claim_id,
-                      )
-                    }
-                  />
-                ))}
+            <IntegritySkeleton />
+          </div>
+        ) : integrity ? (
+          <div className="integrity-results">
+            {/* 1. Overall Integrity Status Banner */}
+            {integrity.conflicts.length > 0 ? (
+              <div className="integrity-status-banner conflict-banner">
+                <AlertTriangle size={20} className="banner-icon-alert" />
+                <div className="banner-text">
+                  <strong>{integrity.conflicts.length} Source {integrity.conflicts.length === 1 ? 'Conflict' : 'Conflicts'} Detected</strong>
+                  <p>Disagreements were identified across sources. Review the conflict cards below to select the authoritative values.</p>
+                </div>
               </div>
             ) : (
-              <p className="panel-empty-copy">
-                No claims were extracted from the current sources.
-              </p>
+              <div className="integrity-status-banner verified-banner">
+                <CheckCircle2 size={20} className="banner-icon-success" />
+                <div className="banner-text">
+                  <strong>Source Integrity Fully Verified</strong>
+                  <p>All extracted claims corroborate consistently across sources with zero conflicting assertions.</p>
+                </div>
+              </div>
             )}
 
+            {/* 2. Structured Metric Summary Cards */}
+            <div className="integrity-metrics-grid">
+              <div className={`metric-stat-card ${integrity.conflicts.length > 0 ? 'stat-conflict' : ''}`}>
+                <span className="stat-label">Conflicts</span>
+                <strong className="stat-number">{integrity.conflicts.length}</strong>
+                <small>{integrity.conflicts.length > 0 ? 'Requires resolution' : 'Zero disputes'}</small>
+              </div>
+
+              <div className="metric-stat-card stat-corroborated">
+                <span className="stat-label">Corroborated Facts</span>
+                <strong className="stat-number">
+                  {integrity.claims.filter((c) => c.status === 'corroborated').length}
+                </strong>
+                <small>Cross-source verified</small>
+              </div>
+
+              <div className="metric-stat-card stat-supported">
+                <span className="stat-label">Supported Facts</span>
+                <strong className="stat-number">
+                  {integrity.claims.filter((c) => c.status === 'supported').length}
+                </strong>
+                <small>Evidence-backed</small>
+              </div>
+
+              <div className="metric-stat-card stat-total">
+                <span className="stat-label">Total Claims</span>
+                <strong className="stat-number">{integrity.claims.length}</strong>
+                <small>Analyzed internally</small>
+              </div>
+            </div>
+
+            {/* 3. Conflict Resolution Cards */}
             {integrity.conflicts.length > 0 && (
               <ConflictResolutionPanel
                 transformationId={transformation.id}
@@ -438,8 +478,46 @@ export function TransformationWorkspace({
                 }}
               />
             )}
+
+            {/* 4. Collapsible Raw Claims Inspector */}
+            {integrity.claims.length > 0 && (
+              <div className="raw-claims-drawer">
+                <button
+                  type="button"
+                  className="raw-claims-toggle"
+                  onClick={() => setShowRawClaims((prev) => !prev)}
+                >
+                  <span>
+                    <strong>Inspect Full Claims Database</strong>
+                    <small style={{ marginLeft: '6px', opacity: 0.7 }}>
+                      ({integrity.claims.length} total extracted claims with citation metadata)
+                    </small>
+                  </span>
+                  {showRawClaims ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+
+                {showRawClaims && (
+                  <div className="integrity-claim-list">
+                    {integrity.claims.map((claim) => (
+                      <IntegrityClaimCard
+                        key={claim.claim_id}
+                        claim={claim}
+                        expanded={expandedClaim === claim.claim_id}
+                        onToggle={() =>
+                          setExpandedClaim((current) =>
+                            current === claim.claim_id
+                              ? null
+                              : claim.claim_id,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
       </Card>
 
       <WorkspaceOutputs
@@ -447,6 +525,7 @@ export function TransformationWorkspace({
         busy={busy}
         onGenerateOutputs={onGenerateOutputs}
         onRestoreVersion={onRestoreVersion}
+        onDeleteOutput={onDeleteOutput}
       />
     </section>
   )
@@ -513,11 +592,120 @@ function SourceRow({
   )
 }
 
+function ArtifactDownloadDropdown({
+  artifactType,
+  artifactContent,
+  docTitle,
+}: {
+  artifactType: string
+  artifactContent: string
+  docTitle: string
+}) {
+  const [open, setOpen] = useState(false)
+  const isPresentation =
+    artifactType.toLowerCase().includes('presentation') ||
+    artifactType.toLowerCase().includes('slide')
+
+  const handleExport = (format: ExportFormat) => {
+    exportArtifact(artifactType, artifactContent, docTitle, format)
+    setOpen(false)
+  }
+
+  return (
+    <div className="download-dropdown-wrapper">
+      <button
+        type="button"
+        className="btn-download-primary"
+        title="Download as PDF (Default format)"
+        onClick={() => handleExport('pdf')}
+      >
+        <Download size={14} />
+        Download PDF
+      </button>
+      <button
+        type="button"
+        className="btn-download-toggle"
+        title="Choose format (PDF, DOCX, TXT, MD, PPT)"
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <ChevronDown size={12} />
+      </button>
+
+      {open && (
+        <div className="download-menu-dropdown">
+          <button
+            type="button"
+            className="download-option default-option"
+            onClick={() => handleExport('pdf')}
+          >
+            <span className="option-icon">📄</span>
+            <div className="option-text">
+              <strong>PDF Document (.pdf)</strong>
+              <small>Default · Styled print-ready document</small>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className="download-option"
+            onClick={() => handleExport('docx')}
+          >
+            <span className="option-icon">📝</span>
+            <div className="option-text">
+              <strong>Word Document (.docx)</strong>
+              <small>Formatted for MS Word & Google Docs</small>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className="download-option"
+            onClick={() => handleExport('txt')}
+          >
+            <span className="option-icon">📋</span>
+            <div className="option-text">
+              <strong>Plain Text (.txt)</strong>
+              <small>Clean unformatted plain text</small>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className="download-option"
+            onClick={() => handleExport('md')}
+          >
+            <span className="option-icon">📑</span>
+            <div className="option-text">
+              <strong>Markdown (.md)</strong>
+              <small>Raw structured Markdown file</small>
+            </div>
+          </button>
+
+          {isPresentation && (
+            <button
+              type="button"
+              className="download-option"
+              onClick={() => handleExport('ppt')}
+            >
+              <span className="option-icon">📊</span>
+              <div className="option-text">
+                <strong>PowerPoint (.pptx)</strong>
+                <small>Widescreen slides with speaker notes</small>
+              </div>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function WorkspaceOutputs({
   transformation,
   busy,
   onGenerateOutputs,
   onRestoreVersion,
+  onDeleteOutput,
 }: {
   transformation: Transformation
   busy: boolean
@@ -526,6 +714,7 @@ function WorkspaceOutputs({
     generationConfig: GenerationConfig,
   ) => void
   onRestoreVersion: (version: number) => void
+  onDeleteOutput?: (outputId: string) => void
 }) {
   const [selected, setSelected] = useState([
     'executive_summary',
@@ -540,6 +729,7 @@ function WorkspaceOutputs({
       detail: 'Balanced',
       objective: 'Inform',
       style: 'Corporate',
+      slides: 7,
     })
 
   const [workflows, setWorkflows] = useState<
@@ -578,7 +768,7 @@ function WorkspaceOutputs({
 
   function updateGenerationConfig(
     key: keyof GenerationConfig,
-    value: string,
+    value: string | number,
   ) {
     setGenerationConfig((current) => ({
       ...current,
@@ -606,6 +796,8 @@ function WorkspaceOutputs({
     URL.revokeObjectURL(url)
   }
 
+  const [modelData, setModelData] = useState<ModelListResponse | null>(null)
+
   useEffect(() => {
     let isMounted = true
     listWorkflows()
@@ -618,6 +810,18 @@ function WorkspaceOutputs({
       .finally(() => {
         if (isMounted) setWorkflowLoading(false)
       })
+
+    getAvailableModels()
+      .then((data) => {
+        if (isMounted) {
+          setModelData(data)
+          if (!generationConfig.model && data.active_model) {
+            setGenerationConfig((curr) => ({ ...curr, model: data.active_model }))
+          }
+        }
+      })
+      .catch((err) => console.debug('Failed to load models in workspace:', err))
+
     return () => {
       isMounted = false
     }
@@ -838,6 +1042,33 @@ function WorkspaceOutputs({
 
         <div className="generation-grid">
           <InlineGenerationSelect
+            label="AI Engine & Tokens"
+            value={generationConfig.model || modelData?.active_model || ''}
+            options={
+              (modelData?.models || []).length > 0
+                ? (modelData?.models || []).map((m) => {
+                    const tokenStr =
+                      m.provider === 'local'
+                        ? '∞ Local'
+                        : m.remaining_daily_tokens != null
+                        ? `${(m.remaining_daily_tokens / 1000).toFixed(0)}k left`
+                        : 'Active'
+                    return {
+                      value: m.id,
+                      label: `${m.name} (${tokenStr})`,
+                    }
+                  })
+                : [{ label: 'Default Engine', value: '' }]
+            }
+            onChange={(value) =>
+              updateGenerationConfig(
+                'model',
+                value,
+              )
+            }
+          />
+
+          <InlineGenerationSelect
             label="Target Audience"
             value={generationConfig.audience}
             options={[
@@ -1024,6 +1255,54 @@ function WorkspaceOutputs({
           </Button>
         </div>
 
+        {selected.includes('presentation') && (
+          <div className="slide-count-slider-panel">
+            <div className="slide-slider-header">
+              <div>
+                <strong>Presentation Slides</strong>
+                <p>Select number of slides to generate (1–10)</p>
+              </div>
+              <span className="slide-count-indicator">
+                {generationConfig.slides || 7} {((generationConfig.slides || 7) === 1) ? 'Slide' : 'Slides'}
+              </span>
+            </div>
+            <div className="slide-slider-container">
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={generationConfig.slides || 7}
+                onChange={(e) =>
+                  updateGenerationConfig('slides', parseInt(e.target.value, 10))
+                }
+                className="slide-slider-input"
+              />
+              <div className="slide-slider-marks">
+                <span>1</span>
+                <span>2</span>
+                <span>3</span>
+                <span>4</span>
+                <span>5</span>
+                <span>6</span>
+                <span>7</span>
+                <span>8</span>
+                <span>9</span>
+                <span>10</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {busy && (
+          <div style={{ marginBottom: '18px' }}>
+            <div className="workspace-panel-heading compact-heading" style={{ marginBottom: '10px' }}>
+              <span className="panel-kicker"><Sparkles size={14} /> GENERATING OUTPUTS...</span>
+            </div>
+            <OutputsSkeleton />
+          </div>
+        )}
+
         {transformation.outputs.length ? (
           <div className="artifact-list">
             {transformation.outputs.map(
@@ -1059,6 +1338,7 @@ function WorkspaceOutputs({
                           artifact.content,
                         )
                       }
+                      title="Copy content to clipboard"
                     >
                       <Clipboard
                         size={14}
@@ -1066,20 +1346,24 @@ function WorkspaceOutputs({
                       Copy
                     </button>
 
-                    <button
-                      onClick={() =>
-                        download(
-                          `${artifact.type}-dna-v${artifact.dna_version}.md`,
-                          artifact.content,
-                          'text/markdown',
-                        )
-                      }
-                    >
-                      <Download
-                        size={14}
-                      />
-                      Download
-                    </button>
+                    <ArtifactDownloadDropdown
+                      artifactType={artifact.type}
+                      artifactContent={artifact.content}
+                      docTitle={transformation.title}
+                    />
+
+                    {onDeleteOutput && (
+                      <button
+                        className="btn-delete-artifact"
+                        title="Delete this output"
+                        onClick={() => onDeleteOutput(artifact.id)}
+                      >
+                        <Trash2
+                          size={14}
+                        />
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </article>
               ),
@@ -1263,7 +1547,7 @@ function InlineGenerationSelect({
 }: {
   label: string
   value: string
-  options: string[]
+  options: (string | { label: string; value: string })[]
   onChange: (value: string) => void
 }) {
   return (
@@ -1317,31 +1601,34 @@ function InlineGenerationSelect({
             boxSizing: 'border-box',
           }}
         >
-          {options.map((option) => (
-            <option
-              key={option}
-              value={option}
-              style={{
-                backgroundColor:
-                  '#10161a',
-                color: '#d7dde1',
-              }}
-            >
-              {option}
-            </option>
-          ))}
+          {options.map((option) => {
+            const optVal = typeof option === 'string' ? option : option.value
+            const optLbl = typeof option === 'string' ? option : option.label
+            return (
+              <option
+                key={optVal}
+                value={optVal}
+                style={{
+                  backgroundColor:
+                    '#10161a',
+                  color: '#d7dde1',
+                }}
+              >
+                {optLbl}
+              </option>
+            )
+          })}
         </select>
 
         <ChevronDown
-          size={13}
+          size={14}
           style={{
             position: 'absolute',
-            right: '10px',
+            right: '11px',
             top: '50%',
-            transform:
-              'translateY(-50%)',
-            pointerEvents: 'none',
+            transform: 'translateY(-50%)',
             color: '#737d86',
+            pointerEvents: 'none',
           }}
         />
       </div>

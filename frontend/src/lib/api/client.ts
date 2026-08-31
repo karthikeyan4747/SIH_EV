@@ -335,6 +335,18 @@ export function generateTransformationOutputs(
   )
 }
 
+export function deleteTransformationOutput(
+  transformationId: string,
+  outputId: string,
+) {
+  return request<Transformation>(
+    `/api/v1/transformations/${transformationId}/outputs/${outputId}`,
+    {
+      method: 'DELETE',
+    },
+  )
+}
+
 export function restoreTransformationVersion(
   transformationId: string,
   version: number,
@@ -383,7 +395,7 @@ export type WorkflowTemplate = {
   name: string
   description: string
   output_types: string[]
-  generation_config: Record<string, string>
+  generation_config: Record<string, any>
 }
 
 export function listWorkflows() {
@@ -398,7 +410,7 @@ export function saveWorkflow(
     name: string
     description?: string
     output_types: string[]
-    generation_config: Record<string, string>
+    generation_config: Record<string, any>
   },
 ) {
   return request<WorkflowTemplate>(
@@ -410,10 +422,50 @@ export function saveWorkflow(
   )
 }
 
+export type ModelStatus =
+  | 'available'
+  | 'near_limit'
+  | 'cooling_down'
+  | 'exhausted'
+  | 'unlimited'
+  | 'offline'
+
+export interface ModelInfo {
+  id: string
+  name: string
+  provider: ModelMode
+  provider_name: string
+  description: string
+  context_window: number
+  max_output_tokens: number
+  tpm_limit?: number | null
+  tpd_limit?: number | null
+  used_tpm_tokens: number
+  remaining_tpm_tokens?: number | null
+  used_today_tokens: number
+  remaining_daily_tokens?: number | null
+  percentage_remaining: number
+  status: ModelStatus
+  status_message: string
+  is_active: boolean
+  speed_rating: string
+  section?: string
+  section_name?: string
+  recommended_for: string[]
+}
+
+export interface ModelListResponse {
+  active_model: string
+  active_provider: ModelMode
+  models: ModelInfo[]
+  total_tokens_used_today: number
+}
+
 export function getModelMode() {
   return request<{
     mode: ModelMode
     label: string
+    active_model?: string
   }>('/api/v1/model-mode/')
 }
 
@@ -421,7 +473,19 @@ export function toggleModelMode() {
   return request<{
     mode: ModelMode
     label: string
+    active_model?: string
   }>('/api/v1/model-mode/toggle', {
     method: 'POST',
+  })
+}
+
+export function getAvailableModels() {
+  return request<ModelListResponse>('/api/v1/model-mode/models')
+}
+
+export function selectActiveModel(modelId: string, provider: ModelMode = 'api') {
+  return request<ModelListResponse>('/api/v1/model-mode/select', {
+    method: 'POST',
+    body: JSON.stringify({ model_id: modelId, provider }),
   })
 }

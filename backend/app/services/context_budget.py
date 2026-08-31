@@ -88,7 +88,7 @@ def get_context_budget(mode: str | None = None) -> ContextBudget:
         safe_input_tokens=safe_input,
         chunk_target_tokens=max(
             500,
-            min(settings.groq_chunk_input_tokens, safe_input - 300),
+            min(settings.chunk_target_tokens_api, safe_input),
         ),
         chunk_overlap_tokens=settings.chunk_overlap_tokens,
         max_output_tokens=output,
