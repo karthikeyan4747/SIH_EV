@@ -409,7 +409,12 @@ export function ConflictResolutionPanel({
                             </strong>
                             <span className="claim-source-badge" style={{ fontSize: '11px', background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: '4px', color: '#94a3b8' }}>
                               {claim.evidence?.[0]?.source_reference || claim.source_ids?.[0] || 'Source'}
-                              {claim.evidence?.[0]?.page ? ` · Page ${claim.evidence[0].page}` : ''}
+                              {(() => {
+                                const pages = Array.from(new Set((claim.evidence || []).map((e) => e.page).filter((p): p is number => p !== null && p !== undefined))).sort((a, b) => a - b);
+                                const pageStr = pages.length > 0 ? ` · ${pages.length === 1 ? `Page ${pages[0]}` : `Pages ${pages.slice(0, 3).join(', ')}${pages.length > 3 ? '...' : ''}`}` : '';
+                                const mentions = (claim.evidence || []).length > 1 ? ` · ${(claim.evidence || []).length} mentions` : '';
+                                return `${pageStr}${mentions}`;
+                              })()}
                             </span>
                           </div>
 

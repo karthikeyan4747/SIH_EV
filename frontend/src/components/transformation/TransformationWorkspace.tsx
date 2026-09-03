@@ -12,6 +12,7 @@ import {
   Mic,
   MonitorPlay,
   PictureInPicture,
+  RefreshCw,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -130,17 +131,38 @@ export function TransformationWorkspace({
     Boolean(transformation.content_dna),
   )
 
-  const [integrity, setIntegrity] =
-  useState<SourceIntegrity | null>(null)
+  const [integrity, setIntegrity] = useState<SourceIntegrity | null>(
+    transformation.source_integrity ?? null,
+  )
 
-  const [integrityLoading, setIntegrityLoading] =
-    useState(false)
+  const [integrityLoading, setIntegrityLoading] = useState(false)
+  const [integrityError, setIntegrityError] = useState('')
+  const [expandedClaim, setExpandedClaim] = useState<string | null>(null)
 
-  const [integrityError, setIntegrityError] =
-    useState('')
+  useEffect(() => {
+    if (transformation.source_integrity) {
+      setIntegrity(transformation.source_integrity)
+    } else {
+      setIntegrity(null)
+    }
+  }, [transformation.id, transformation.source_integrity])
 
-  const [expandedClaim, setExpandedClaim] =
-    useState<string | null>(null)
+  useEffect(() => {
+    // Auto-run source integrity when multiple sources exist and not yet analyzed
+    if (
+      transformation.sources.length >= 2 &&
+      !transformation.source_integrity &&
+      !integrity &&
+      !integrityLoading
+    ) {
+      void runSourceIntegrity()
+    }
+  }, [transformation.id, transformation.sources.length])
+
+  const [dnaChangedPrompt, setDnaChangedPrompt] = useState<{
+    open: boolean
+    reason: string
+  } | null>(null)
 
   const [showRawClaims, setShowRawClaims] =
     useState(false)
@@ -167,6 +189,16 @@ export function TransformationWorkspace({
   function selectNode(key: DNASectionKey) {
     setSelectedNode(key)
     setDnaOpen(true)
+  }
+
+  async function handlePatch(changes: any) {
+    await onPatch(changes)
+    if (transformation.outputs && transformation.outputs.length > 0) {
+      setDnaChangedPrompt({
+        open: true,
+        reason: 'Content DNA was modified in the DNA Inspector',
+      })
+    }
   }
 
   async function runSourceIntegrity() {
@@ -338,7 +370,7 @@ export function TransformationWorkspace({
                 dna={dna}
                 selectedNode={selectedNode}
                 saveState={saveState}
-                onPatch={onPatch}
+                onPatch={handlePatch}
               />
             </div>
           )}
@@ -475,6 +507,12 @@ export function TransformationWorkspace({
                 onResolved={(updated) => {
                   setIntegrity(updated.source_integrity ?? null)
                   onConflictResolved(updated)
+                  if (updated.outputs && updated.outputs.length > 0) {
+                    setDnaChangedPrompt({
+                      open: true,
+                      reason: 'Conflicted wrong data resolved and purged from Content DNA',
+                    })
+                  }
                 }}
               />
             )}
@@ -526,6 +564,8 @@ export function TransformationWorkspace({
         onGenerateOutputs={onGenerateOutputs}
         onRestoreVersion={onRestoreVersion}
         onDeleteOutput={onDeleteOutput}
+        dnaChangedPrompt={dnaChangedPrompt}
+        onDismissDnaChangedPrompt={() => setDnaChangedPrompt(null)}
       />
     </section>
   )
@@ -706,6 +746,8 @@ function WorkspaceOutputs({
   onGenerateOutputs,
   onRestoreVersion,
   onDeleteOutput,
+  dnaChangedPrompt,
+  onDismissDnaChangedPrompt,
 }: {
   transformation: Transformation
   busy: boolean
@@ -715,7 +757,10 @@ function WorkspaceOutputs({
   ) => void
   onRestoreVersion: (version: number) => void
   onDeleteOutput?: (outputId: string) => void
+  dnaChangedPrompt?: { open: boolean; reason: string } | null
+  onDismissDnaChangedPrompt?: () => void
 }) {
+  const [isUpdatingOutputs, setIsUpdatingOutputs] = useState(false)
   const [selected, setSelected] = useState([
     'executive_summary',
     'linkedin',
@@ -934,6 +979,22 @@ function WorkspaceOutputs({
     )
   }
 
+  async function handleRegenerateOutputsWithUpdatedDNA() {
+    if (!transformation.outputs.length) return
+    setIsUpdatingOutputs(true)
+    try {
+      const types = transformation.outputs
+        .filter((o) => !o.structure_id)
+        .map((o) => o.type)
+      const uniqueTypes = Array.from(new Set(types))
+      if (uniqueTypes.length > 0) {
+        onGenerateOutputs(uniqueTypes, generationConfig)
+      }
+      onDismissDnaChangedPrompt?.()
+    } finally {
+      setIsUpdatingOutputs(false)
+    }
+  }
 
   return (
     <div className="workspace-lower-grid">
@@ -954,6 +1015,77 @@ function WorkspaceOutputs({
             {transformation.outputs.length} artifacts
           </Badge>
         </div>
+
+        {dnaChangedPrompt?.open && transformation.outputs.length > 0 && (
+          <div
+            className="dna-changed-banner"
+            role="alert"
+            style={{
+              margin: '16px 0',
+              padding: '16px 18px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98))',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35), 0 0 16px rgba(56, 189, 248, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  color: '#38bdf8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <RefreshCw size={18} className={isUpdatingOutputs ? 'spin' : ''} />
+              </div>
+              <div>
+                <strong style={{ display: 'block', fontSize: '13px', color: '#f8fafc', marginBottom: '2px' }}>
+                  Content DNA Updated — Synchronize Outputs?
+                </strong>
+                <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8', lineHeight: '1.4' }}>
+                  {dnaChangedPrompt.reason}. You have <strong>{transformation.outputs.length}</strong> generated output{transformation.outputs.length === 1 ? '' : 's'}. Would you like to update your outputs with the resolved facts?
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Button
+                variant="secondary"
+                onClick={() => onDismissDnaChangedPrompt?.()}
+                disabled={isUpdatingOutputs}
+                style={{ fontSize: '11px', padding: '6px 12px' }}
+              >
+                Keep Existing
+              </Button>
+              <Button
+                variant="primary"
+                disabled={isUpdatingOutputs}
+                onClick={() => void handleRegenerateOutputsWithUpdatedDNA()}
+                style={{
+                  fontSize: '11px',
+                  padding: '6px 14px',
+                  background: 'linear-gradient(135deg, #0284c7, #0ea5e9)',
+                  borderColor: '#38bdf8',
+                }}
+              >
+                <Sparkles size={12} style={{ marginRight: '6px' }} />
+                {isUpdatingOutputs ? 'Regenerating Outputs...' : 'Update All Outputs'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div
           style={{

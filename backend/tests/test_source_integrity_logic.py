@@ -236,11 +236,11 @@ def test_equivalent_wording_no_conflict() -> None:
 
 def test_three_sources_deduplicated_conflict() -> None:
     """
-    Test 8: Three sources with 1 logical conflict
+    Test 8: Three sources with 1 logical binary conflict between 2 distinct values (500 vs 750)
     A -> 500
     B -> 750
     C -> 750
-    Expected: 1 logical conflict involving all 3 claims
+    Expected: 1 conflict with strictly 2 competing values (c1: 500 vs c2: 750)
     """
     service = SourceIntegrityService(api_key="", model="")
     claims = [
@@ -250,7 +250,12 @@ def test_three_sources_deduplicated_conflict() -> None:
     ]
     conflicts = service._compare_claims(claims)
     assert len(conflicts) == 1
-    assert set(conflicts[0].claim_ids) == {"c1", "c2", "c3"}
+    # Exactly 2 competing claims representing the 2 distinct conflicting values
+    assert len(conflicts[0].claim_ids) == 2
+    assert conflicts[0].claim_ids == ["c1", "c2"]
+    assert claims[0].status == "conflict"
+    assert claims[1].status == "conflict"
+    assert claims[2].status == "conflict"
 
 
 def test_launch_year_conflict() -> None:
@@ -465,5 +470,136 @@ def test_conflict_resolution_endpoint() -> None:
             json={"decision": "accept_source_a", "selected_claim_id": conflicts[0]["claim_ids"][0]},
         )
         assert retry_res.status_code == 200
+
+
+def test_large_document_many_pages_conflict_has_only_two_options() -> None:
+    """
+    Test 21: When 30 pages/chunks extract repetitive claims with 2 competing values
+    (e.g., 20 chunks say 'overall winner' and 10 chunks say 'shortlisted'),
+    the conflict detector consolidates repetitive mentions and produces
+    STRICTLY 1 conflict with EXACTLY 2 options (Option A vs Option B).
+    """
+    service = SourceIntegrityService(api_key="", model="")
+
+    # Simulate 30 claims extracted across 30 pages
+    claims = []
+    # 20 mentions of "overall winner" across pages 1..20
+    for page in range(1, 21):
+        claims.append(
+            make_claim(
+                claim_id=f"chunk-{page}",
+                claim_key="hackathon_award_status",
+                subject="Pathenova",
+                predicate="was awarded",
+                value="overall winner",
+                unit="",
+                time="2026",
+            )
+        )
+    # 10 mentions of "shortlisted among top teams" across pages 21..30
+    for page in range(21, 31):
+        claims.append(
+            make_claim(
+                claim_id=f"chunk-{page}",
+                claim_key="hackathon_award_status",
+                subject="Pathenova",
+                predicate="was awarded",
+                value="shortlisted among top teams",
+                unit="",
+                time="2026",
+            )
+        )
+
+    # 1. Consolidate repetitive claims across 30 pages
+    consolidated = service._consolidate_equivalent_claims(claims)
+    # 30 raw claims should be consolidated into exactly 2 unique factual assertions
+    assert len(consolidated) == 2
+
+    # 2. Compare claims
+    conflicts = service._compare_claims(consolidated)
+
+    # Must produce strictly 1 conflict record
+    assert len(conflicts) == 1
+
+    # That conflict must contain STRICTLY 2 competing claim IDs (Option A vs Option B)
+    assert len(conflicts[0].claim_ids) == 2
+    assert set(conflicts[0].claim_ids) == {consolidated[0].claim_id, consolidated[1].claim_id}
+
+
+def test_conflict_resolution_removes_wrong_data_from_content_dna() -> None:
+    """
+    Test 22: When a conflict is resolved (e.g. accepting Option A 'overall winner' over Option B 'shortlisted'),
+    the rejected wrong data ('shortlisted') is thoroughly excised from Content DNA
+    (facts, findings, overview, entities) and replaced with the authoritative value.
+    """
+    from app.api.routes.transformations import apply_resolution_to_dna
+    from app.models.content import ContentDNA, Facts, Findings, Entities, Overview
+
+    initial_dna = ContentDNA(
+        facts=Facts(
+            claims=[
+                "Pathenova was shortlisted among top teams in SIH 2026.",
+                "Team developed an automated synthesis platform.",
+            ],
+            statistics=["8 Lakh INR initial funding"],
+            dates=["Slated for December 2026"],
+        ),
+        findings=Findings(
+            key_findings=[
+                "Pathenova was shortlisted but not declared overall winner.",
+            ],
+            risks=["Grant of 8 Lakh INR may not suffice."],
+        ),
+        overview=Overview(
+            summary="Pathenova was shortlisted in SIH 2026 with 8 Lakh INR funding.",
+            purpose="Content synthesis tool.",
+        ),
+        entities=Entities(
+            locations=["Chennai"],
+            organizations=["Pathenova"],
+        ),
+    )
+
+    selected_claim = make_claim(
+        claim_id="c1",
+        claim_key="hackathon_award_status",
+        subject="Pathenova",
+        predicate="was declared",
+        value="Overall Winner",
+        unit="",
+    )
+    rejected_claim = make_claim(
+        claim_id="c2",
+        claim_key="hackathon_award_status",
+        subject="Pathenova",
+        predicate="was declared",
+        value="shortlisted among top teams",
+        unit="",
+    )
+
+    # 1. Resolve award status
+    updated_dna = apply_resolution_to_dna(
+        dna=initial_dna,
+        claim_key="hackathon_award_status",
+        final_value="Overall Winner",
+        selected_claim=selected_claim,
+        rejected_claims=[rejected_claim],
+    )
+
+    # Assert that "shortlisted" has been completely removed from facts & findings
+    for claim in updated_dna.facts.claims:
+        assert "shortlisted" not in claim.lower()
+    for finding in updated_dna.findings.key_findings:
+        assert "shortlisted" not in finding.lower()
+
+    # Assert that "Overall Winner" is present in facts and findings
+    assert any("overall winner" in c.lower() for c in updated_dna.facts.claims)
+    assert any("overall winner" in f.lower() for f in updated_dna.findings.key_findings)
+
+    # Assert summary was updated
+    assert "shortlisted" not in updated_dna.overview.summary.lower()
+    assert "overall winner" in updated_dna.overview.summary.lower()
+
+
 
 

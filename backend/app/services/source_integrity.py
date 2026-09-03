@@ -252,13 +252,70 @@ class SourceIntegrityService:
         if not all_claims:
             return SourceIntegrity()
 
-        conflicts = self._compare_claims(all_claims)
+        # Consolidate repetitive claims across multi-page chunks into unique facts with rich citations
+        consolidated_claims = self._consolidate_equivalent_claims(all_claims)
+
+        conflicts = self._compare_claims(consolidated_claims)
 
         return SourceIntegrity(
-            claims=all_claims,
+            claims=consolidated_claims,
             conflicts=conflicts,
             resolutions=[],
         )
+
+    def _consolidate_equivalent_claims(
+        self,
+        claims: list[Claim],
+    ) -> list[Claim]:
+        """
+        Consolidates repetitive/equivalent factual claims extracted across multi-page chunks.
+        Aggregates evidence, citations, and source IDs into unique representative facts.
+        """
+        if not claims:
+            return []
+
+        grouped: dict[tuple, list[Claim]] = defaultdict(list)
+        for c in claims:
+            canonical_subj = self._canonical_subject(c.subject)
+            canonical_pred = self._canonical_predicate(c.predicate, c.claim_key)
+            typed_val = self._normalize_value_for_comparison(c)
+            norm_unit = self._normalize_text(c.unit)
+            norm_time = self._normalize_text(c.time)
+            norm_loc = self._normalize_text(c.location)
+
+            sig = (canonical_subj, canonical_pred, typed_val, norm_unit, norm_time, norm_loc)
+            grouped[sig].append(c)
+
+        consolidated: list[Claim] = []
+        for sig, group in grouped.items():
+            # Pick representative claim: longest excerpt or most detailed
+            best = max(
+                group,
+                key=lambda item: len(item.evidence[0].supporting_excerpt) if item.evidence else 0,
+            )
+
+            # Aggregate all unique source_ids
+            all_source_ids = list(dict.fromkeys(s for item in group for s in item.source_ids))
+
+            # Aggregate and deduplicate all evidence records
+            all_evidence: list[ClaimEvidence] = []
+            seen_ev = set()
+            for item in group:
+                for ev in item.evidence:
+                    ev_key = (ev.source_reference, ev.page, ev.supporting_excerpt[:60])
+                    if ev_key not in seen_ev:
+                        seen_ev.add(ev_key)
+                        all_evidence.append(ev)
+
+            merged_claim = best.model_copy(
+                update={
+                    "source_ids": all_source_ids,
+                    "evidence": all_evidence or best.evidence,
+                }
+            )
+            consolidated.append(merged_claim)
+
+        return consolidated
 
     # ============================================================
     # CLAIM EXTRACTION
@@ -272,22 +329,27 @@ class SourceIntegrityService:
 You are the claim extraction engine of EV's Source Integrity Engine.
 
 Extract key factual claims from the source. The source is the only authority.
-Do not invent facts. Do not combine unrelated statements.
+Do not invent facts.
+
+CRITICAL INSTRUCTIONS:
+1. Extract ALL stated facts, claims, metrics, numbers, dates, locations, status, and competition outcomes.
+2. If the text mentions differing accounts, alternative reports, contrasting figures, or competing claims (e.g. "One report declared X winner, however another summary stated shortlisted"), YOU MUST EXTRACT BOTH AS SEPARATE INDEPENDENT CLAIMS.
+3. Keep the exact values, numbers, and dates as stated in the text.
 
 For each claim, output:
-- claim_key: A normalized semantic property name (e.g. "employee_count", "launch_year", "headquarters", "revenue", "loss", "incident_location", "status", "battery_capacity").
-- subject: The specific entity, project, person, or incident the claim is about (e.g. "Project X", "Company Y", "NASA", "Artemis I", "The incident").
-- predicate: The property or action relationship (e.g. "launched_in", "employs", "headquartered_in", "occurred_in", "reported_revenue", "has_status").
-- value: The exact extracted value or measurement (e.g. "2022", "500", "Chennai", "active", "true", "$10M", "14").
+- claim_key: A normalized semantic property name (e.g. "award_status", "employee_count", "launch_year", "headquarters", "revenue", "loss", "incident_location", "status", "battery_capacity").
+- subject: The specific entity, project, person, or incident the claim is about (e.g. "Project X", "Company Y", "NASA", "Pathenova").
+- predicate: The property or action relationship (e.g. "launched_in", "employs", "headquartered_in", "awarded", "reported_revenue", "has_status").
+- value: The exact extracted value or measurement (e.g. "2022", "500", "Chennai", "overall winner", "shortlisted among top teams", "active", "true", "$10M", "14").
 - unit: The unit of measurement if applicable (e.g. "employees", "people", "USD", "INR", "kWh", "%").
-- time: Specific year or timeframe if explicitly part of context (e.g. "2022", "2024").
+- time: Specific year or timeframe if explicitly part of context (e.g. "2022", "2024", "2026").
 - location: Specific city, state, or country if explicitly part of context (e.g. "Chennai", "Bengaluru").
 - scope: Specific scope if applicable.
 - supporting_excerpt: Direct verbatim quote from the text supporting this claim.
 - source_reference: Source title or document name.
 
 Rules:
-1. Normalize claim_key to snake_case (e.g. "employee_count", "launch_year").
+1. Normalize claim_key to snake_case (e.g. "employee_count", "launch_year", "award_status").
 2. Extract specific, verifiable factual statements (numbers, dates, locations, status, outcomes).
 3. Do not include the value itself in the claim_key or predicate.
 4. Keep exact numbers, dates, and locations.
@@ -886,49 +948,52 @@ Extract all factual claims in valid JSON:
                     c.status = "corroborated"
                 continue
 
-            # Check if there is genuine incompatibility between any value groups
-            distinct_vals = list(val_groups.keys())
-            has_contradiction = False
-            for idx_a in range(len(distinct_vals)):
-                for idx_b in range(idx_a + 1, len(distinct_vals)):
-                    sample_a = val_groups[distinct_vals[idx_a]][0]
-                    sample_b = val_groups[distinct_vals[idx_b]][0]
-                    if self._values_are_incompatible(sample_a, sample_b):
-                        has_contradiction = True
-                        break
-                if has_contradiction:
-                    break
+            # Identify all contradictory pairs between distinct value groups
+            distinct_keys = list(val_groups.keys())
+            incompatible_pairs: list[tuple[Any, Any]] = []
 
-            if not has_contradiction:
+            for idx_a in range(len(distinct_keys)):
+                for idx_b in range(idx_a + 1, len(distinct_keys)):
+                    sample_a = val_groups[distinct_keys[idx_a]][0]
+                    sample_b = val_groups[distinct_keys[idx_b]][0]
+                    if self._values_are_incompatible(sample_a, sample_b):
+                        incompatible_pairs.append((distinct_keys[idx_a], distinct_keys[idx_b]))
+
+            if not incompatible_pairs:
                 for c in cluster:
                     c.status = "corroborated"
                 continue
 
-            # Genuine conflict detected! Cluster all competing claims into 1 Conflict object
-            conflict_id = f"conflict-{len(conflicts) + 1:03d}"
-            canonical_key = self._canonical_claim_key(cluster[0])
-            description = self._build_conflict_description(cluster)
-            reason = self._build_conflict_reason(cluster)
+            # Generate strictly binary (2-value) conflicts for each incompatible pair
+            for key_a, key_b in incompatible_pairs:
+                rep_a = val_groups[key_a][0]
+                rep_b = val_groups[key_b][0]
 
-            for c in cluster:
-                c.status = "conflict"
+                # Mark representative and member claims as conflict
+                for c in val_groups[key_a] + val_groups[key_b]:
+                    c.status = "conflict"
 
-            logger.debug(
-                "CONFLICT DETECTED: key=%s, claims=%s",
-                canonical_key,
-                [c.claim_id for c in cluster],
-            )
+                conflict_id = f"conflict-{len(conflicts) + 1:03d}"
+                canonical_key = self._canonical_claim_key(rep_a)
+                description = self._build_conflict_description([rep_a, rep_b])
+                reason = self._build_conflict_reason([rep_a, rep_b])
 
-            conflicts.append(
-                Conflict(
-                    conflict_id=conflict_id,
-                    claim_key=canonical_key,
-                    claim_ids=[c.claim_id for c in cluster],
-                    description=description,
-                    reason=reason,
-                    status="unresolved",
+                logger.debug(
+                    "BINARY CONFLICT DETECTED: key=%s, claims=%s",
+                    canonical_key,
+                    [rep_a.claim_id, rep_b.claim_id],
                 )
-            )
+
+                conflicts.append(
+                    Conflict(
+                        conflict_id=conflict_id,
+                        claim_key=canonical_key,
+                        claim_ids=[rep_a.claim_id, rep_b.claim_id],  # STRICTLY 2 COMPETING CLAIMS
+                        description=description,
+                        reason=reason,
+                        status="unresolved",
+                    )
+                )
 
         return conflicts
 
@@ -985,21 +1050,40 @@ Extract all factual claims in valid JSON:
         claim_a: Claim,
         claim_b: Claim,
     ) -> bool:
-        context_pairs = [
-            (claim_a.time, claim_b.time),
-            (claim_a.location, claim_b.location),
-            (claim_a.scope, claim_b.scope),
-        ]
+        pred_a = self._canonical_predicate(claim_a.predicate, claim_a.claim_key)
+        pred_b = self._canonical_predicate(claim_b.predicate, claim_b.claim_key)
 
-        for value_a, value_b in context_pairs:
-            normalized_a = self._normalize_text(value_a)
-            normalized_b = self._normalize_text(value_b)
+        # 1. If predicate is temporal, time difference is the potential conflict itself
+        if pred_a in ("completion_date", "launch_date", "founding_date", "incident_date", "calendar_date", "year") or pred_b in ("completion_date", "launch_date", "founding_date", "incident_date", "calendar_date", "year"):
+            return True
 
-            if not normalized_a and not normalized_b:
-                continue
-            if not normalized_a or not normalized_b:
-                continue
-            if normalized_a != normalized_b:
+        # 2. If predicate is geographic, location difference is the potential conflict itself
+        if pred_a in ("headquarters", "incident_location", "location") or pred_b in ("headquarters", "incident_location", "location"):
+            return True
+
+        # 3. For outcomes, competition outcomes, status, or features, do not block on context
+        if pred_a in ("competition_outcome", "status", "feature_enabled") or pred_b in ("competition_outcome", "status", "feature_enabled"):
+            return True
+
+        # 4. Check time and location for longitudinal metrics (e.g. annual financial results)
+        norm_time_a = self._normalize_text(claim_a.time)
+        norm_time_b = self._normalize_text(claim_b.time)
+        norm_val_a = self._normalize_text(claim_a.value)
+        norm_val_b = self._normalize_text(claim_b.value)
+
+        # If time is embedded in the value itself, it's not a background context filter
+        if (norm_time_a and norm_time_a in norm_val_a) or (norm_time_b and norm_time_b in norm_val_b):
+            pass
+        elif norm_time_a and norm_time_b and norm_time_a != norm_time_b:
+            year_a = re.search(r"\b((?:19|20)\d{2})\b", norm_time_a)
+            year_b = re.search(r"\b((?:19|20)\d{2})\b", norm_time_b)
+            if year_a and year_b and year_a.group(1) != year_b.group(1) and pred_a in ("revenue", "reported_losses", "budget", "employee_count", "staff", "users", "workforce"):
+                return False
+
+        norm_loc_a = self._normalize_text(claim_a.location)
+        norm_loc_b = self._normalize_text(claim_b.location)
+        if norm_loc_a and norm_loc_b and norm_loc_a != norm_loc_b:
+            if pred_a not in ("headquarters", "incident_location", "location"):
                 return False
 
         return True

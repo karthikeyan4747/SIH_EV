@@ -1,7 +1,11 @@
+import logging
+import re
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import settings
 from app.models.content import ContentDNA, RawContent
@@ -168,6 +172,29 @@ def _recompute_dna(
         ) from exc
 
 
+def _recompute_integrity(
+    transformation: Transformation,
+    request: Request,
+) -> SourceIntegrity:
+    supported_sources = [
+        source
+        for source in transformation.sources
+        if source.metadata.get("status") != "unsupported"
+        and source.text.strip()
+    ]
+
+    if not supported_sources:
+        return SourceIntegrity()
+
+    try:
+        mode = getattr(request.app.state, "llm_provider_mode", "api")
+        service = SourceIntegrityService(mode=mode)
+        return service.analyze(supported_sources)
+    except Exception as exc:
+        logger.warning("Automatic source integrity computation failed: %s", exc)
+        return transformation.source_integrity or SourceIntegrity()
+
+
 def _save_dna_version(
     transformation: Transformation,
     note: str,
@@ -200,256 +227,122 @@ def apply_resolution_to_dna(
     dna: ContentDNA,
     claim_key: str,
     final_value: str,
+    selected_claim: Claim | None = None,
+    rejected_claims: list[Claim] | None = None,
 ) -> ContentDNA:
     """
-    Apply a resolved source-integrity claim to the
-    appropriate Content DNA dimension.
+    Apply a resolved source-integrity claim to the Content DNA.
+    Actively purges all wrong/conflicted contradictory data from facts,
+    findings, entities, and overview across Content DNA.
     """
+    facts = dna.facts.model_copy()
+    findings = dna.findings.model_copy()
+    entities = dna.entities.model_copy()
+    overview = dna.overview.model_copy()
 
-    facts = dna.facts
-    findings = dna.findings
-    entities = dna.entities
+    # Collect bad/rejected values and tokens
+    bad_values: set[str] = set()
+    if rejected_claims:
+        for rc in rejected_claims:
+            if rc.value and rc.value.strip():
+                bad_val = rc.value.strip().lower()
+                if bad_val != str(final_value).strip().lower():
+                    bad_values.add(bad_val)
+                # Extract significant distinctive words from the rejected claim
+                stop_words = {"with", "that", "this", "from", "were", "been", "have", "some", "about", "their", "they", "among"}
+                for word in re.findall(r"\b[a-z0-9]{4,}\b", bad_val):
+                    if word not in str(final_value).lower() and word not in stop_words:
+                        bad_values.add(word)
+                # Numeric sub-tokens
+                clean_nums = re.findall(r"\b\d+(?:\.\d+)?\b", rc.value)
+                for num_tok in clean_nums:
+                    if num_tok not in str(final_value):
+                        bad_values.add(num_tok.lower())
 
-    # --------------------------------------------------------
-    # Overall winner / major conclusion
-    # --------------------------------------------------------
+    subj = selected_claim.subject if selected_claim and selected_claim.subject else ""
+    pred = selected_claim.predicate if selected_claim and selected_claim.predicate else ""
+    unit = selected_claim.unit if selected_claim and selected_claim.unit else ""
+    norm_key = claim_key.replace("_", " ").lower()
 
-    if claim_key in {
-        "declared_overall_winner",
-        "overall_winner",
-        "winner",
-    }:
-        text = f"Overall winner: {final_value}"
-
-        existing = [
-            item
-            for item in findings.key_findings
-            if not item.lower().startswith(
-                "overall winner:"
-            )
-        ]
-
-        updated_findings = findings.model_copy(
-            update={
-                "key_findings": [
-                    *existing,
-                    text,
-                ]
-            }
-        )
-
-        return dna.model_copy(
-            update={
-                "findings": updated_findings,
-            }
-        )
-
-    # --------------------------------------------------------
-    # Input types
-    # --------------------------------------------------------
-
-    if claim_key in {
-        "supports_input_types",
-        "supported_input_types",
-        "input_types",
-    }:
-        text = (
-            f"Supported input types: {final_value}"
-        )
-
-        existing = [
-            item
-            for item in facts.claims
-            if not item.lower().startswith(
-                "supported input types:"
-            )
-        ]
-
-        updated_facts = facts.model_copy(
-            update={
-                "claims": [
-                    *existing,
-                    text,
-                ]
-            }
-        )
-
-        return dna.model_copy(
-            update={
-                "facts": updated_facts,
-            }
-        )
-
-    # --------------------------------------------------------
-    # LLM inference modes
-    # --------------------------------------------------------
-
-    if claim_key in {
-        "supports_llm_inference",
-        "llm_inference_modes",
-        "inference_modes",
-    }:
-        text = (
-            f"LLM inference modes: {final_value}"
-        )
-
-        existing = [
-            item
-            for item in facts.claims
-            if not item.lower().startswith(
-                "llm inference modes:"
-            )
-        ]
-
-        updated_facts = facts.model_copy(
-            update={
-                "claims": [
-                    *existing,
-                    text,
-                ]
-            }
-        )
-
-        return dna.model_copy(
-            update={
-                "facts": updated_facts,
-            }
-        )
-
-    # --------------------------------------------------------
-    # Cloud LLM provider
-    # --------------------------------------------------------
-
-    if claim_key in {
-        "uses_cloud_llm_provider",
-        "cloud_llm_provider",
-    }:
-        text = (
-            f"Cloud LLM provider: {final_value}"
-        )
-
-        existing_claims = [
-            item
-            for item in facts.claims
-            if not item.lower().startswith(
-                "cloud llm provider:"
-            )
-        ]
-
-        updated_facts = facts.model_copy(
-            update={
-                "claims": [
-                    *existing_claims,
-                    text,
-                ]
-            }
-        )
-
-        existing_technologies = list(
-            entities.technologies
-        )
-
-        if final_value not in existing_technologies:
-            existing_technologies.append(
-                final_value
-            )
-
-        updated_entities = entities.model_copy(
-            update={
-                "technologies": existing_technologies,
-            }
-        )
-
-        return dna.model_copy(
-            update={
-                "facts": updated_facts,
-                "entities": updated_entities,
-            }
-        )
-
-    # --------------------------------------------------------
-    # Local LLM technology
-    # --------------------------------------------------------
-
-    if claim_key in {
-        "uses_local_llm_technology",
-        "local_llm_technology",
-        "local_llm",
-    }:
-        text = (
-            f"Local LLM technology: {final_value}"
-        )
-
-        existing_claims = [
-            item
-            for item in facts.claims
-            if not item.lower().startswith(
-                "local llm technology:"
-            )
-        ]
-
-        updated_facts = facts.model_copy(
-            update={
-                "claims": [
-                    *existing_claims,
-                    text,
-                ]
-            }
-        )
-
-        existing_technologies = list(
-            entities.technologies
-        )
-
-        if final_value not in existing_technologies:
-            existing_technologies.append(
-                final_value
-            )
-
-        updated_entities = entities.model_copy(
-            update={
-                "technologies": existing_technologies,
-            }
-        )
-
-        return dna.model_copy(
-            update={
-                "facts": updated_facts,
-                "entities": updated_entities,
-            }
-        )
-
-    # --------------------------------------------------------
-    # Fallback
-    # --------------------------------------------------------
-
-    text = (
-        f"{claim_key.replace('_', ' ').capitalize()}: "
-        f"{final_value}"
+    formatted_fact = (
+        f"{subj} {pred}: {final_value}{' ' + unit if unit and unit not in final_value else ''}".strip()
+        if (subj or pred)
+        else f"{claim_key.replace('_', ' ').capitalize()}: {final_value}{' ' + unit if unit and unit not in final_value else ''}".strip()
     )
 
-    existing = list(facts.claims)
+    def is_bad_entry(text: str) -> bool:
+        t_lower = text.lower()
+        # If matches any rejected value
+        for bv in bad_values:
+            if bv and bv in t_lower:
+                return True
+        # If starts with normalized claim key prefix but does not contain final value
+        if t_lower.startswith(f"{norm_key}:") or t_lower.startswith("overall winner:") or t_lower.startswith("headquarters:") or t_lower.startswith("revenue:"):
+            if final_value.lower() not in t_lower:
+                return True
+        return False
 
-    existing = [
-        item
-        for item in existing
-        if not item.lower().startswith(
-            f"{claim_key.replace('_', ' ').lower()}:"
-        )
-    ]
+    # 1. Clean facts.claims
+    new_claims = [item for item in facts.claims if not is_bad_entry(item)]
+    if not any(final_value.lower() in c.lower() for c in new_claims):
+        new_claims.append(formatted_fact)
+    facts.claims = new_claims
 
-    updated_facts = facts.model_copy(
-        update={
-            "claims": [
-                *existing,
-                text,
-            ]
-        }
-    )
+    # 2. Clean facts.statistics
+    new_stats = [item for item in facts.statistics if not is_bad_entry(item)]
+    if any(ch.isdigit() for ch in final_value) and not any(final_value.lower() in s.lower() for s in new_stats):
+        new_stats.append(formatted_fact)
+    facts.statistics = new_stats
+
+    # 3. Clean facts.dates
+    new_dates = [item for item in facts.dates if not is_bad_entry(item)]
+    if re.search(r"\b(?:19|20)\d{2}\b", final_value) and not any(final_value.lower() in d.lower() for d in new_dates):
+        new_dates.append(formatted_fact)
+    facts.dates = new_dates
+
+    # 4. Clean facts.events
+    facts.events = [item for item in facts.events if not is_bad_entry(item)]
+
+    # 5. Clean findings.key_findings
+    new_findings = [item for item in findings.key_findings if not is_bad_entry(item)]
+    if not any(final_value.lower() in f.lower() for f in new_findings):
+        new_findings.append(formatted_fact)
+    findings.key_findings = new_findings
+
+    # 6. Clean findings.risks, opportunities, implications
+    findings.risks = [item for item in findings.risks if not is_bad_entry(item)]
+    findings.opportunities = [item for item in findings.opportunities if not is_bad_entry(item)]
+    findings.implications = [item for item in findings.implications if not is_bad_entry(item)]
+
+    # 7. Clean entities
+    if bad_values:
+        entities.locations = [loc for loc in entities.locations if loc.lower() not in bad_values]
+        entities.organizations = [org for org in entities.organizations if org.lower() not in bad_values]
+        entities.technologies = [tech for tech in entities.technologies if tech.lower() not in bad_values]
+        entities.people = [p for p in entities.people if p.lower() not in bad_values]
+
+    if norm_key in ("headquarters", "incident location", "location", "based in", "city"):
+        if final_value not in entities.locations:
+            entities.locations.append(final_value)
+    elif norm_key in ("cloud llm provider", "local llm", "technology"):
+        if final_value not in entities.technologies:
+            entities.technologies.append(final_value)
+
+    # 8. Clean overview summary & purpose
+    for bv in bad_values:
+        if bv and bv in overview.summary.lower():
+            pattern = re.compile(re.escape(bv), re.IGNORECASE)
+            overview.summary = pattern.sub(final_value, overview.summary)
+        if bv and bv in overview.purpose.lower():
+            pattern = re.compile(re.escape(bv), re.IGNORECASE)
+            overview.purpose = pattern.sub(final_value, overview.purpose)
 
     return dna.model_copy(
         update={
-            "facts": updated_facts,
+            "facts": facts,
+            "findings": findings,
+            "entities": entities,
+            "overview": overview,
         }
     )
 
@@ -625,10 +518,15 @@ def add_text_source(
         updated,
         request,
     )
+    source_integrity = _recompute_integrity(
+        updated,
+        request,
+    )
 
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
+            "source_integrity": source_integrity,
             "status": "ready"
             if content_dna
             else "empty",
@@ -772,10 +670,15 @@ async def add_file_source(
         updated,
         request,
     )
+    source_integrity = _recompute_integrity(
+        updated,
+        request,
+    )
 
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
+            "source_integrity": source_integrity,
             "status": "ready"
             if content_dna
             else "empty",
@@ -855,10 +758,15 @@ def add_url_source(
         updated,
         request,
     )
+    source_integrity = _recompute_integrity(
+        updated,
+        request,
+    )
 
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
+            "source_integrity": source_integrity,
             "status": "ready"
             if content_dna
             else "empty",
@@ -966,10 +874,19 @@ def remove_source(
         if sources
         else None
     )
+    source_integrity = (
+        _recompute_integrity(
+            updated,
+            request,
+        )
+        if sources
+        else SourceIntegrity()
+    )
 
     updated = updated.model_copy(
         update={
             "content_dna": content_dna,
+            "source_integrity": source_integrity,
             "status": "ready"
             if content_dna
             else "empty",
@@ -1281,7 +1198,7 @@ def resolve_transformation_conflict(
     )
 
     # --------------------------------------------------------
-    # Apply resolved value to Content DNA
+    # Apply resolved value to Content DNA & Purge Wrong Data
     # --------------------------------------------------------
 
     updated_dna = transformation.content_dna
@@ -1290,10 +1207,18 @@ def resolve_transformation_conflict(
         final_value is not None
         and updated_dna is not None
     ):
+        rejected_claims = [
+            claim_map[cid]
+            for cid in conflict.claim_ids
+            if cid in claim_map and (selected_claim is None or cid != selected_claim.claim_id)
+        ]
+
         updated_dna = apply_resolution_to_dna(
             updated_dna,
             conflict.claim_key,
             final_value,
+            selected_claim=selected_claim,
+            rejected_claims=rejected_claims,
         )
 
     # --------------------------------------------------------
