@@ -601,5 +601,221 @@ def test_conflict_resolution_removes_wrong_data_from_content_dna() -> None:
     assert "overall winner" in updated_dna.overview.summary.lower()
 
 
+def test_cross_source_direct_contradictions_detected() -> None:
+    """
+    Test 23: Direct contradictions across multiple distinct sources
+    (such as headquarters location, launch date, employee count, and revenue)
+    are all reliably detected even when one source uses generic entity terms
+    ('The company', 'The project') and natural-language predicate synonyms.
+    """
+    service = SourceIntegrityService(mode="api")
+
+    # Source 1 claims
+    c1 = make_claim(
+        "s1_hq",
+        "headquarters",
+        "Nexar Dynamics",
+        "headquartered in",
+        "Bengaluru",
+    )
+    c2 = make_claim(
+        "s1_launch",
+        "launch_date",
+        "Nexar Dynamics",
+        "launched in",
+        "March 2024",
+    )
+    c3 = make_claim(
+        "s1_emp",
+        "employee_count",
+        "Nexar Dynamics",
+        "employs",
+        "450",
+        "employees",
+    )
+    c4 = make_claim(
+        "s1_rev",
+        "revenue",
+        "Nexar Dynamics",
+        "reported annual recurring revenue of",
+        "$18 million",
+        "USD",
+    )
+
+    # Source 2 conflicting claims (using generic subject 'The company' and different wording)
+    c5 = make_claim(
+        "s2_hq",
+        "location",
+        "The company",
+        "based in",
+        "Chennai",
+    )
+    c6 = make_claim(
+        "s2_launch",
+        "debut_date",
+        "The company",
+        "debuted in",
+        "November 2025",
+    )
+    c7 = make_claim(
+        "s2_emp",
+        "team_size",
+        "The company",
+        "operates with an active team of",
+        "250",
+        "employees",
+    )
+    c8 = make_claim(
+        "s2_rev",
+        "annual_turnover",
+        "The company",
+        "generated in revenue",
+        "$10 million",
+        "USD",
+    )
+
+    conflicts = service._compare_claims([c1, c2, c3, c4, c5, c6, c7, c8])
+
+    # Assert all 4 distinct contradictions are detected
+    assert len(conflicts) == 4
+
+    claim_id_pairs = [set(c.claim_ids) for c in conflicts]
+    # Check headquarters conflict
+    assert {"s1_hq", "s2_hq"} in claim_id_pairs
+    # Check launch date conflict
+    assert {"s1_launch", "s2_launch"} in claim_id_pairs
+    # Check employee count conflict
+    assert {"s1_emp", "s2_emp"} in claim_id_pairs
+    # Check revenue conflict
+    assert {"s1_rev", "s2_rev"} in claim_id_pairs
+
+
+def test_parental_and_relational_contradictions_detected() -> None:
+    """
+    Test 24: When two sources make conflicting claims about a relationship
+    (e.g., 'Vani is Karthikeyan's mom' vs 'bala is Karthikeyan's mom'),
+    the relational inversion normalizes them to canonical subject 'Karthikeyan',
+    predicate 'mother', and flags the conflict between 'Vani' and 'bala'.
+    """
+    from app.services.source_integrity import _ExtractedClaim
+    from app.models.content import RawContent
+
+    service = SourceIntegrityService(mode="api")
+
+    s1 = RawContent(
+        source_id="src_vani",
+        source_type="text",
+        title="Source 1",
+        text="vani is Karthikeyan's mom",
+    )
+    s2 = RawContent(
+        source_id="src_bala",
+        source_type="text",
+        title="Source 2",
+        text="bala is Karthikeyan's mom",
+    )
+
+    extracted_1 = _ExtractedClaim(
+        claim_key="parent_relationship",
+        subject="Vani",
+        predicate="is_mother_of",
+        value="Karthikeyan",
+        supporting_excerpt="vani is Karthikeyan's mom",
+    )
+    extracted_2 = _ExtractedClaim(
+        claim_key="parent_relationship",
+        subject="bala",
+        predicate="is_mother_of",
+        value="Karthikeyan",
+        supporting_excerpt="bala is Karthikeyan's mom",
+    )
+
+    claim_1 = service._build_claim(s1, extracted_1, 0)
+    claim_2 = service._build_claim(s2, extracted_2, 1)
+
+    # Check canonical inversion
+    assert claim_1.subject.lower() == "karthikeyan"
+    assert claim_1.value.lower() == "vani"
+    assert claim_2.subject.lower() == "karthikeyan"
+    assert claim_2.value.lower() == "bala"
+
+    conflicts = service._compare_claims([claim_1, claim_2])
+    assert len(conflicts) == 1
+    assert set(conflicts[0].claim_ids) == {claim_1.claim_id, claim_2.claim_id}
+    assert "vani" in conflicts[0].description.lower()
+    assert "bala" in conflicts[0].description.lower()
+
+
+def test_content_dna_direct_contradiction_detection() -> None:
+    """
+    Test 25: Source Integrity directly leverages Content DNA's synthesized
+    facts.claims and findings.key_findings to detect contradictions across sources.
+    """
+    import json
+    from unittest.mock import patch
+    from app.models.content import ContentDNA, Facts, Findings, RawContent
+
+    service = SourceIntegrityService(mode="api")
+
+    s1 = RawContent(
+        source_id="src-1",
+        source_type="text",
+        title="Source 1",
+        text="Vani is Karthikeyan's mom.",
+    )
+    s2 = RawContent(
+        source_id="src-2",
+        source_type="text",
+        title="Source 2",
+        text="Bala is Karthikeyan's mom.",
+    )
+
+    dna = ContentDNA(
+        facts=Facts(
+            claims=[
+                "Vani is Karthikeyan's mom.",
+                "Bala is Karthikeyan's mom.",
+            ]
+        ),
+        findings=Findings(
+            key_findings=[
+                "There is a direct contradiction between Source 1 and Source 2 regarding the identity of Karthikeyan's mother."
+            ]
+        ),
+    )
+
+    mock_llm_json = json.dumps({
+        "conflicts": [
+            {
+                "claim_a": "Vani is Karthikeyan's mom.",
+                "claim_b": "Bala is Karthikeyan's mom.",
+                "claim_key": "mother_identity",
+                "description": "Contradictory assertions detected between sources: Source 1 states 'Vani is Karthikeyan's mom'; Source 2 states 'Bala is Karthikeyan's mom'.",
+                "reason": "Competing maternal parent identities asserted for Karthikeyan.",
+            }
+        ]
+    })
+
+    class FakeChoice:
+        class FakeMsg:
+            content = mock_llm_json
+        message = FakeMsg()
+
+    class FakeCompletion:
+        choices = [FakeChoice()]
+
+    with patch("app.services.llm._call_groq", return_value=FakeCompletion()):
+        result = service.analyze([s1, s2], content_dna=dna)
+
+    assert len(result.conflicts) >= 1
+    conflict = result.conflicts[0]
+    assert len(conflict.claim_ids) == 2
+    assert "vani" in conflict.description.lower()
+    assert "bala" in conflict.description.lower()
+
+
+
+
+
 
 

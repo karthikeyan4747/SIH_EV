@@ -189,7 +189,10 @@ def _recompute_integrity(
     try:
         mode = getattr(request.app.state, "llm_provider_mode", "api")
         service = SourceIntegrityService(mode=mode)
-        return service.analyze(supported_sources)
+        return service.analyze(
+            supported_sources,
+            content_dna=transformation.content_dna,
+        )
     except Exception as exc:
         logger.warning("Automatic source integrity computation failed: %s", exc)
         return transformation.source_integrity or SourceIntegrity()
@@ -1659,7 +1662,8 @@ def analyze_source_integrity(
         )
 
         result = service.analyze(
-            transformation.sources
+            transformation.sources,
+            content_dna=transformation.content_dna,
         )
 
         updated = transformation.model_copy(

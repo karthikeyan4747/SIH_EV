@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 
 from groq import Groq
 from pydantic import BaseModel, ValidationError
@@ -13,7 +13,7 @@ except ImportError:
     OllamaClient = None
 
 from app.core.config import settings
-from app.models.content import RawContent
+from app.models.content import ContentDNA, RawContent
 from app.models.transformation import (
     Claim,
     ClaimEvidence,
@@ -131,6 +131,34 @@ def _safe_parse_claim_json(raw_content: str) -> list[_ExtractedClaim]:
     return claims
 
 
+def _safe_parse_conflicts_json(raw_content: str) -> list[dict[str, Any]]:
+    """Resilient parser for LLM-detected contradiction responses."""
+    if not raw_content or not raw_content.strip():
+        return []
+    raw_json = _extract_json(raw_content)
+    try:
+        data = json.loads(raw_json)
+        if isinstance(data, dict):
+            for key in ("conflicts", "contradictions", "discrepancies", "items"):
+                if key in data and isinstance(data[key], list):
+                    return [item for item in data[key] if isinstance(item, dict)]
+        elif isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+    except Exception:
+        pass
+
+    # Regex block fallback
+    conflicts: list[dict[str, Any]] = []
+    for block in re.findall(r"\{[^{}]*\}", raw_json):
+        try:
+            item = json.loads(block)
+            if isinstance(item, dict) and ("claim_a" in item or "claim_b" in item or "description" in item):
+                conflicts.append(item)
+        except Exception:
+            continue
+    return conflicts
+
+
 class SourceIntegrityService:
     """
     Extract, normalize, group, and compare claims across multiple sources.
@@ -156,7 +184,7 @@ class SourceIntegrityService:
         if self.mode == "local":
             self.model = model or ollama_model or settings.ollama_model
             self.ollama_host = ollama_host or settings.ollama_host
-            self.ollama_client = OllamaClient(host=self.ollama_host) if OllamaClient is not None else None
+            self.ollama_client = OllamaClient(host=self.ollama_host) if OllamaClient is not None else "mock_client"
             self.pool = None
             self.client = None
         else:
@@ -173,6 +201,7 @@ class SourceIntegrityService:
     def analyze(
         self,
         sources: list[RawContent],
+        content_dna: Optional[ContentDNA] = None,
     ) -> SourceIntegrity:
         if not sources:
             return SourceIntegrity()
@@ -246,8 +275,11 @@ class SourceIntegrityService:
                     extracted=item,
                     index=len(all_claims),
                 )
-
                 all_claims.append(claim)
+
+        if not all_claims and content_dna and content_dna.facts and content_dna.facts.claims:
+            for item in content_dna.facts.claims:
+                self._find_or_create_claim_for_text(item, all_claims, sources)
 
         if not all_claims:
             return SourceIntegrity()
@@ -257,11 +289,213 @@ class SourceIntegrityService:
 
         conflicts = self._compare_claims(consolidated_claims)
 
+        # Cross-detect contradictions recognized directly in Content DNA claims & findings
+        if content_dna is not None:
+            try:
+                dna_conflicts = self._detect_dna_contradictions(
+                    content_dna=content_dna,
+                    sources=sources,
+                    claims=consolidated_claims,
+                    existing_conflicts=conflicts,
+                )
+                conflicts.extend(dna_conflicts)
+            except Exception as exc:
+                logger.warning("DNA-based contradiction detection failed: %s", exc)
+
         return SourceIntegrity(
             claims=consolidated_claims,
             conflicts=conflicts,
             resolutions=[],
         )
+
+    def _detect_dna_contradictions(
+        self,
+        content_dna: ContentDNA,
+        sources: list[RawContent],
+        claims: list[Claim],
+        existing_conflicts: list[Conflict],
+    ) -> list[Conflict]:
+        """
+        Cross-analyzes Content DNA's synthesized factual claims and findings
+        against the sources to detect any direct contradictions recognized by Content DNA.
+        """
+        if not content_dna or not content_dna.facts or not content_dna.facts.claims or len(sources) < 2:
+            return []
+
+        dna_claims = content_dna.facts.claims
+        findings = content_dna.findings.key_findings if content_dna.findings else []
+
+        if len(dna_claims) < 2 and not findings:
+            return []
+
+        system_prompt = """
+You are the contradiction detection engine of EV's Source Integrity system.
+Analyze the provided Content DNA factual claims and key findings extracted across multiple sources.
+Your sole goal is to identify all direct factual contradictions between competing claims.
+
+A contradiction occurs when two or more claims cannot simultaneously be true (e.g., competing parents/roles, differing numbers, dates, locations, winners, budgets, revenue, headcount, or statuses for the same entity/event).
+
+For each contradiction:
+- claim_a: The exact text of the first conflicting claim from the provided claims list.
+- claim_b: The exact text of the second conflicting claim from the provided claims list.
+- claim_key: A normalized snake_case attribute name (e.g. "mother_identity", "award_status", "headquarters", "launch_date", "employee_count", "revenue").
+- description: Clear explanation of the conflicting statements.
+- reason: Direct statement of what contradicts.
+
+Return JSON format:
+{
+  "conflicts": [
+    {
+      "claim_a": "Vani is Karthikeyan's mom.",
+      "claim_b": "Bala is Karthikeyan's mom.",
+      "claim_key": "mother_identity",
+      "description": "Contradictory assertions detected between sources: Source 1 states 'Vani is Karthikeyan's mom'; Source 2 states 'Bala is Karthikeyan's mom'.",
+      "reason": "Competing maternal parent identities asserted for Karthikeyan."
+    }
+  ]
+}
+If no contradictions exist, return {"conflicts": []}.
+"""
+        sources_summary = "\n\n".join(
+            f"Source ID {s.source_id} ({s.title}):\n{s.text[:1000]}" for s in sources
+        )
+        user_prompt = f"""
+CONTENT DNA CLAIMS:
+{json.dumps(dna_claims, indent=2)}
+
+CONTENT DNA FINDINGS:
+{json.dumps(findings, indent=2)}
+
+SOURCES:
+{sources_summary}
+
+Identify any direct contradictions in valid JSON:
+"""
+
+        raw_content = ""
+        if self.mode == "local":
+            try:
+                response = self.ollama_client.chat(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    options={"temperature": 0.0},
+                )
+                raw_content = response["message"]["content"]
+            except Exception as exc:
+                logger.warning("Local DNA contradiction detection failed: %s", exc)
+                return []
+        else:
+            try:
+                from app.services.llm import _call_groq
+                completion = _call_groq(
+                    self.pool,
+                    self.model,
+                    max_tokens=2048,
+                    temperature=0.0,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                raw_content = completion.choices[0].message.content
+            except Exception as exc:
+                logger.warning("Groq DNA contradiction detection failed: %s", exc)
+                return []
+
+        if not raw_content or not raw_content.strip():
+            return []
+
+        parsed_conflicts = _safe_parse_conflicts_json(raw_content)
+        if not parsed_conflicts:
+            return []
+
+        new_conflicts: list[Conflict] = []
+        existing_pairs = {frozenset(c.claim_ids) for c in existing_conflicts}
+
+        for item in parsed_conflicts:
+            if not isinstance(item, dict):
+                continue
+            text_a = str(item.get("claim_a", "")).strip()
+            text_b = str(item.get("claim_b", "")).strip()
+            if not text_a or not text_b or text_a.lower() == text_b.lower():
+                continue
+
+            claim_a_obj = self._find_or_create_claim_for_text(text_a, claims, sources)
+            claim_b_obj = self._find_or_create_claim_for_text(text_b, claims, sources)
+
+            pair_key = frozenset([claim_a_obj.claim_id, claim_b_obj.claim_id])
+            if pair_key in existing_pairs or len(pair_key) < 2:
+                continue
+
+            existing_pairs.add(pair_key)
+            claim_a_obj.status = "conflict"
+            claim_b_obj.status = "conflict"
+
+            conflict_id = f"conflict-{len(existing_conflicts) + len(new_conflicts) + 1:03d}"
+            claim_key = str(item.get("claim_key", "contradiction")).strip()
+            description = str(item.get("description", f"Contradictory assertions: '{text_a}' vs '{text_b}'.")).strip()
+            reason = str(item.get("reason", f"Contradiction between '{text_a}' and '{text_b}'.")).strip()
+
+            new_conflicts.append(
+                Conflict(
+                    conflict_id=conflict_id,
+                    claim_key=claim_key,
+                    claim_ids=[claim_a_obj.claim_id, claim_b_obj.claim_id],
+                    description=description,
+                    reason=reason,
+                    status="unresolved",
+                )
+            )
+
+        return new_conflicts
+
+    def _find_or_create_claim_for_text(
+        self,
+        text: str,
+        claims: list[Claim],
+        sources: list[RawContent],
+    ) -> Claim:
+        """Finds matching Claim in claims list or creates a clean Claim tied to the matching source."""
+        clean_target = self._normalize_text(text)
+        for c in claims:
+            # Check evidence excerpt
+            if any(clean_target in self._normalize_text(ev.supporting_excerpt) or self._normalize_text(ev.supporting_excerpt) in clean_target for ev in c.evidence):
+                return c
+            # Check value or subject
+            if clean_target in self._normalize_text(c.value) or self._normalize_text(c.value) in clean_target:
+                return c
+            if clean_target in self._normalize_text(c.subject) or self._normalize_text(c.subject) in clean_target:
+                return c
+
+        best_source = sources[0]
+        for s in sources:
+            if clean_target in self._normalize_text(s.text):
+                best_source = s
+                break
+
+        clean_sid = re.sub(r"[^a-zA-Z0-9_-]+", "_", best_source.source_id)
+        claim_id = f"claim-{clean_sid}-{len(claims) + 1:03d}"
+        new_claim = Claim(
+            claim_id=claim_id,
+            claim_key="factual_claim",
+            subject=self._normalize_text(text)[:40],
+            predicate="states",
+            value=text,
+            source_ids=[best_source.source_id],
+            evidence=[
+                ClaimEvidence(
+                    source_id=best_source.source_id,
+                    source_reference=best_source.title,
+                    supporting_excerpt=text,
+                )
+            ],
+            status="conflict",
+        )
+        claims.append(new_claim)
+        return new_claim
 
     def _consolidate_equivalent_claims(
         self,
@@ -469,16 +703,45 @@ Extract all factual claims in valid JSON:
 
         source_status = "supported" if excerpt else "uncertain"
 
-        # If claim_key was empty, infer from predicate or subject
+        subj = self._clean(extracted.subject)
+        pred = self._clean(extracted.predicate)
+        val = self._clean(extracted.value)
         claim_key = self._clean(extracted.claim_key) or self._clean(extracted.predicate) or "fact"
+
+        # 1. Relational inverse normalization (e.g. "Vani is_mother_of Karthikeyan" -> subject="Karthikeyan", predicate="mother", value="Vani")
+        inv_match = re.match(r"^(?:is_|was_|has_been_)?([a-z_]+)_of$", pred.lower().replace(" ", "_"))
+        if inv_match and val and subj:
+            role = inv_match.group(1).replace("_", " ").strip()
+            if role in ("mom", "maternal parent"):
+                role = "mother"
+            elif role in ("dad", "paternal parent"):
+                role = "father"
+            subj, val = val, subj
+            pred = role
+            claim_key = f"{role.replace(' ', '_')}_identity"
+
+        # 2. Match possessive relationship phrases (e.g. "is Karthikeyan's mom" -> subject="Karthikeyan", predicate="mother", value="Vani")
+        poss_match = re.search(r"(?:is|was|has\s+been)\s+([A-Za-z0-9_\s]+)'s\s+([A-Za-z0-9_]+)", pred, re.IGNORECASE)
+        if poss_match and subj:
+            target_subj = poss_match.group(1).strip()
+            role = poss_match.group(2).strip().lower()
+            if role in ("mom", "maternal parent"):
+                role = "mother"
+            elif role in ("dad", "paternal parent"):
+                role = "father"
+            val = subj
+            subj = target_subj
+            pred = role
+            claim_key = f"{role.replace(' ', '_')}_identity"
+
         clean_sid = re.sub(r"[^a-zA-Z0-9_-]+", "_", source.source_id)
 
         return Claim(
             claim_id=f"claim-{clean_sid}-{index + 1:03d}",
             claim_key=claim_key,
-            subject=self._clean(extracted.subject),
-            predicate=self._clean(extracted.predicate),
-            value=self._clean(extracted.value),
+            subject=subj,
+            predicate=pred,
+            value=val,
             unit=self._clean(extracted.unit),
             time=self._clean(extracted.time),
             location=self._clean(extracted.location),
@@ -487,10 +750,6 @@ Extract all factual claims in valid JSON:
             evidence=[evidence],
             status=source_status,
         )
-
-    # ============================================================
-    # DETERMINISTIC CANONICAL KEY GENERATION
-    # ============================================================
 
     # ============================================================
     # DETERMINISTIC CANONICAL KEY & DOMAIN TAXONOMY
@@ -502,6 +761,25 @@ Extract all factual claims in valid JSON:
         claim_key: str = "",
     ) -> str:
         text = f"{self._normalize_text(claim_key)} {self._normalize_text(predicate)}".strip()
+
+        # Familial / Parental / Personal Identity Relationships
+        if any(w in text for w in ("mother", "mom", "maternal", "father", "dad", "paternal", "parent", "spouse", "wife", "husband", "ceo", "founder", "author", "creator", "leader")):
+            if "mother" in text or "mom" in text or "maternal" in text:
+                return "mother"
+            if "father" in text or "dad" in text or "paternal" in text:
+                return "father"
+            if "parent" in text:
+                return "parent"
+            if "ceo" in text:
+                return "ceo"
+            if "founder" in text:
+                return "founder"
+            if "author" in text:
+                return "author"
+            if "creator" in text:
+                return "creator"
+            if "leader" in text:
+                return "leader"
 
         # Competition outcome / ranking / victory
         if any(w in text for w in ("win", "won", "winner", "victory", "shortlist", "shortlisted", "finalist", "place", "ranked", "award", "awarded", "champion", "hackathon", "sih")):
@@ -515,8 +793,8 @@ Extract all factual claims in valid JSON:
         if any(w in text for w in ("complete", "completed", "finish", "finished", "conclude", "concluded", "ended")):
             return "completion_date"
 
-        # Launch & Release Dates
-        if any(w in text for w in ("launch", "launched", "released", "release date", "debut", "started in", "kickoff")):
+        # Launch, Release & Deployment Dates
+        if any(w in text for w in ("launch", "launched", "released", "release date", "debut", "debuted", "started in", "kickoff", "deployment", "deployed", "rollout", "commercial deployment", "nationwide deployment", "slated")):
             return "launch_date"
 
         # Founding & Establishment
@@ -524,7 +802,7 @@ Extract all factual claims in valid JSON:
             return "founding_date"
 
         # Headquarters & Office Location
-        if any(w in text for w in ("headquarter", "headquarters", "based in", "main office", "hq", "located in")):
+        if any(w in text for w in ("headquarter", "headquarters", "based in", "main office", "hq", "located in", "operating from", "city")):
             return "headquarters"
 
         # Occurrence & Incident Location
@@ -532,11 +810,11 @@ Extract all factual claims in valid JSON:
             return "incident_location"
 
         # Revenue & Financial Turnover
-        if any(w in text for w in ("revenue", "turnover", "annual sales", "total sales", "income", "earnings")):
+        if any(w in text for w in ("revenue", "turnover", "annual sales", "total sales", "income", "earnings", "recurring revenue", "arr")):
             return "revenue"
 
-        # Budget & Cost
-        if any(w in text for w in ("budget", "project cost", "total cost", "allocated cost", "funding", "investment", "cost")):
+        # Budget, Cost, Grants & Funding
+        if any(w in text for w in ("budget", "project cost", "total cost", "allocated cost", "funding", "investment", "cost", "grant", "development grant", "subsidy", "allocation", "funds")):
             return "budget"
 
         # Loss & Financial Damage
@@ -549,7 +827,7 @@ Extract all factual claims in valid JSON:
 
         # Impacted / Affected Systems or Entities
         if any(w in text for w in ("affected", "impacted", "disrupted", "hit")):
-            if not any(w in text for w in ("loss", "financial", "revenue", "budget")):
+            if not any(w in text for w in ("loss", "financial", "revenue", "budget", "grant")):
                 return "affected_organizations"
 
         # Status & State
@@ -639,8 +917,8 @@ Extract all factual claims in valid JSON:
         if norm_a == norm_b:
             return True
 
-        generic = {"organization", "person", "entity", "incident", "event", "unknown", "system"}
-        if norm_a in generic and norm_b in generic:
+        generic = {"organization", "person", "entity", "incident", "event", "unknown", "system", "project", "initiative", "platform"}
+        if norm_a in generic or norm_b in generic:
             return True
 
         tokens_a = set(norm_a.split())
@@ -650,7 +928,7 @@ Extract all factual claims in valid JSON:
             if overlap and any(len(t) > 3 for t in overlap):
                 return True
             jaccard = len(overlap) / len(tokens_a | tokens_b)
-            if jaccard >= 0.5:
+            if jaccard >= 0.4:
                 return True
 
         if (norm_a in norm_b or norm_b in norm_a) and min(len(norm_a), len(norm_b)) >= 4:
@@ -751,21 +1029,24 @@ Extract all factual claims in valid JSON:
                 return ("percentage", float(num.group(0)))
 
         # 5. Dates (Years and Calendar Dates)
-        if pred_canon in ("completion_date", "launch_date", "founding_date") or re.fullmatch(r"(?:19|20)\d{2}", val_str):
-            year_match = re.search(r"\b((?:19|20)\d{2})\b", val_str)
-            if year_match:
-                return ("year", int(year_match.group(1)))
+        year_match = re.search(r"\b((?:19|20)\d{2})\b", val_str)
+        year_val = int(year_match.group(1)) if year_match else None
 
         months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
         month_pattern = r"\b(" + "|".join(months) + r")\b"
-        if re.search(month_pattern, val_str):
-            day_match = re.search(r"\b(\d{1,2})\b", val_str)
-            month_match = re.search(month_pattern, val_str)
-            day_val = day_match.group(1) if day_match else ""
-            month_val = month_match.group(1) if month_match else ""
+        month_match = re.search(month_pattern, val_str)
+
+        if month_match:
             month_map = {"jan": "january", "feb": "february", "mar": "march", "apr": "april", "jun": "june", "jul": "july", "aug": "august", "sep": "september", "oct": "october", "nov": "november", "dec": "december"}
-            month_canon = month_map.get(month_val, month_val)
-            return ("calendar_date", f"{day_val} {month_canon}".strip())
+            month_canon = month_map.get(month_match.group(1), month_match.group(1))
+            val_without_year = re.sub(r"\b(?:19|20)\d{2}\b", "", val_str)
+            day_match = re.search(r"\b([1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b", val_without_year)
+            day_val = f"{day_match.group(1)} " if day_match else ""
+            year_suffix = f" {year_val}" if year_val else ""
+            return ("calendar_date", f"{day_val}{month_canon}{year_suffix}".strip())
+
+        if year_val is not None and (pred_canon in ("completion_date", "launch_date", "founding_date", "incident_date", "year") or re.search(r"\b(?:year|in|since|dated|during)\b", val_str) or re.fullmatch(r"(?:19|20)\d{2}", val_str)):
+            return ("year", year_val)
 
         # 6. Numbers & Currency Quantities
         number_words = {
@@ -1034,13 +1315,38 @@ Extract all factual claims in valid JSON:
         if claim_a.claim_key and claim_a.claim_key == claim_b.claim_key:
             return True
 
-        # Lexical word overlap
+        type_a, _ = self._normalize_value_for_comparison(claim_a)
+        type_b, _ = self._normalize_value_for_comparison(claim_b)
+
+        # 1. Matching competition outcome domains
+        if type_a == "competition_outcome" and type_b == "competition_outcome":
+            return True
+
+        # 2. Matching geographic location domains
+        if type_a == "location" and type_b == "location":
+            return True
+
+        # 3. Matching temporal domains (e.g. launch/release/deployment dates)
+        if type_a in ("year", "calendar_date") and type_b in ("year", "calendar_date"):
+            return True
+
+        # 4. Matching numerical metric domains with compatible units
+        if type_a == "number" and type_b == "number":
+            if self._units_compatible(claim_a.unit, claim_b.unit):
+                return True
+
+        # 5. Matching boolean status domains
+        if type_a == "boolean" and type_b == "boolean":
+            return True
+
+        # 6. Lexical word overlap (ignoring common stopwords)
+        stopwords = {"is", "was", "are", "were", "has", "have", "had", "been", "the", "a", "an", "in", "at", "for", "with", "by", "of", "to", "and", "or"}
         norm_a = self._normalize_text(claim_a.predicate)
         norm_b = self._normalize_text(claim_b.predicate)
         if norm_a and norm_b:
-            words_a = set(norm_a.split())
-            words_b = set(norm_b.split())
-            if words_a & words_b and len(words_a & words_b) >= max(1, min(len(words_a), len(words_b)) // 2):
+            words_a = {w for w in norm_a.split() if w not in stopwords and len(w) > 2}
+            words_b = {w for w in norm_b.split() if w not in stopwords and len(w) > 2}
+            if words_a & words_b:
                 return True
 
         return False
