@@ -10,57 +10,135 @@ export function markdownToStyledHtml(title: string, markdown: string): string {
   const htmlParts: string[] = []
 
   let inList = false
+  let listType: 'ul' | 'ol' = 'ul'
+  let inTable = false
+  let inBlockquote = false
+  let blockquoteLines: string[] = []
+
+  function closeOpenBlocks() {
+    if (inList) {
+      htmlParts.push(listType === 'ul' ? '</ul>' : '</ol>')
+      inList = false
+    }
+    if (inTable) {
+      htmlParts.push('</tbody></table>')
+      inTable = false
+    }
+    if (inBlockquote) {
+      const bqContent = blockquoteLines.join(' ')
+      htmlParts.push(`<blockquote class="doc-callout"><p>${bqContent}</p></blockquote>`)
+      inBlockquote = false
+      blockquoteLines = []
+    }
+  }
+
+  function formatInline(text: string): string {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code>$1</code>')
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i]
     const trimmed = rawLine.trim()
 
     if (!trimmed) {
-      if (inList) {
-        htmlParts.push('</ul>')
-        inList = false
-      }
+      closeOpenBlocks()
       continue
     }
 
-    // Format bold and italic
-    let formatted = trimmed
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code>$1</code>')
+    // Markdown Table Line
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      if (inList || inBlockquote) closeOpenBlocks()
+
+      // Check if separator line (| --- | --- |)
+      if (/^\|(\s*:?-+:?\s*\|)+$/.test(trimmed)) {
+        continue
+      }
+
+      const rawCells = trimmed.slice(1, -1).split('|').map((c) => c.trim())
+      const formattedCells = rawCells.map((c) => formatInline(c))
+
+      if (!inTable) {
+        inTable = true
+        htmlParts.push('<table class="doc-table"><thead><tr>')
+        formattedCells.forEach((cell) => {
+          htmlParts.push(`<th>${cell}</th>`)
+        })
+        htmlParts.push('</tr></thead><tbody>')
+      } else {
+        htmlParts.push('<tr>')
+        formattedCells.forEach((cell) => {
+          htmlParts.push(`<td>${cell}</td>`)
+        })
+        htmlParts.push('</tr>')
+      }
+      continue
+    } else if (inTable) {
+      htmlParts.push('</tbody></table>')
+      inTable = false
+    }
+
+    // Blockquote / Callout Box
+    if (trimmed.startsWith('>')) {
+      if (inList) closeOpenBlocks()
+      const cleanBq = trimmed.replace(/^>\s*/, '').replace(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, '')
+      inBlockquote = true
+      blockquoteLines.push(formatInline(cleanBq))
+      continue
+    } else if (inBlockquote) {
+      const bqContent = blockquoteLines.join(' ')
+      htmlParts.push(`<blockquote class="doc-callout"><p>${bqContent}</p></blockquote>`)
+      inBlockquote = false
+      blockquoteLines = []
+    }
+
+    const formatted = formatInline(trimmed)
 
     // Headings
     if (trimmed.startsWith('# ')) {
-      if (inList) { htmlParts.push('</ul>'); inList = false }
-      htmlParts.push(`<h1>${formatted.slice(2)}</h1>`)
+      closeOpenBlocks()
+      htmlParts.push(`<h1>${formatInline(trimmed.slice(2))}</h1>`)
     } else if (trimmed.startsWith('## ')) {
-      if (inList) { htmlParts.push('</ul>'); inList = false }
-      htmlParts.push(`<h2>${formatted.slice(3)}</h2>`)
+      closeOpenBlocks()
+      htmlParts.push(`<h2>${formatInline(trimmed.slice(3))}</h2>`)
     } else if (trimmed.startsWith('### ')) {
-      if (inList) { htmlParts.push('</ul>'); inList = false }
-      htmlParts.push(`<h3>${formatted.slice(4)}</h3>`)
+      closeOpenBlocks()
+      htmlParts.push(`<h3>${formatInline(trimmed.slice(4))}</h3>`)
     } else if (trimmed.startsWith('#### ')) {
-      if (inList) { htmlParts.push('</ul>'); inList = false }
-      htmlParts.push(`<h4>${formatted.slice(5)}</h4>`)
+      closeOpenBlocks()
+      htmlParts.push(`<h4>${formatInline(trimmed.slice(5))}</h4>`)
     } else if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
-      if (!inList) {
+      if (inTable || inBlockquote) closeOpenBlocks()
+      if (!inList || listType !== 'ul') {
+        if (inList) htmlParts.push(listType === 'ul' ? '</ul>' : '</ol>')
         htmlParts.push('<ul>')
         inList = true
+        listType = 'ul'
       }
-      const bulletContent = formatted.replace(/^[-•*]\s+/, '')
+      const bulletContent = formatInline(trimmed.replace(/^[-•*]\s+/, ''))
       htmlParts.push(`<li>${bulletContent}</li>`)
+    } else if (/^\d+\.\s+/.test(trimmed)) {
+      if (inTable || inBlockquote) closeOpenBlocks()
+      if (!inList || listType !== 'ol') {
+        if (inList) htmlParts.push(listType === 'ul' ? '</ul>' : '</ol>')
+        htmlParts.push('<ol>')
+        inList = true
+        listType = 'ol'
+      }
+      const itemContent = formatInline(trimmed.replace(/^\d+\.\s+/, ''))
+      htmlParts.push(`<li>${itemContent}</li>`)
     } else if (trimmed.startsWith('---') || trimmed.startsWith('***')) {
-      if (inList) { htmlParts.push('</ul>'); inList = false }
+      closeOpenBlocks()
       htmlParts.push('<hr />')
     } else {
-      if (inList) { htmlParts.push('</ul>'); inList = false }
+      closeOpenBlocks()
       htmlParts.push(`<p>${formatted}</p>`)
     }
   }
 
-  if (inList) {
-    htmlParts.push('</ul>')
-  }
+  closeOpenBlocks()
 
   return `
 <!DOCTYPE html>
@@ -71,7 +149,7 @@ export function markdownToStyledHtml(title: string, markdown: string): string {
   <style>
     @page {
       size: A4;
-      margin: 20mm;
+      margin: 18mm;
     }
     @media print {
       body {
@@ -115,7 +193,7 @@ export function markdownToStyledHtml(title: string, markdown: string): string {
     h2 { font-size: 13pt; margin-top: 20px; margin-bottom: 10px; color: #0f172a; }
     h3 { font-size: 11pt; margin-top: 16px; margin-bottom: 8px; }
     p { margin: 0 0 10px; }
-    ul { margin: 0 0 12px; padding-left: 24px; }
+    ul, ol { margin: 0 0 12px; padding-left: 24px; }
     li { margin-bottom: 6px; }
     code {
       background: #f1f5f9;
@@ -124,6 +202,39 @@ export function markdownToStyledHtml(title: string, markdown: string): string {
       font-family: ui-monospace, Menlo, monospace;
       font-size: 9.5pt;
       color: #0f172a;
+    }
+    table.doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px 0;
+      font-size: 10pt;
+      page-break-inside: avoid;
+    }
+    table.doc-table th, table.doc-table td {
+      border: 1px solid #cbd5e1;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    table.doc-table th {
+      background-color: #f1f5f9;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    table.doc-table tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+    blockquote.doc-callout {
+      margin: 14px 0 16px 0;
+      padding: 10px 16px;
+      background: #f0fdf4;
+      border-left: 4px solid #0d9488;
+      border-radius: 0 6px 6px 0;
+      color: #166534;
+      font-size: 10.5pt;
+      page-break-inside: avoid;
+    }
+    blockquote.doc-callout p {
+      margin: 0;
     }
     hr {
       border: 0;
@@ -234,14 +345,18 @@ export function exportToDocx(filename: string, title: string, markdown: string):
     </xml>
     <![endif]-->
     <style>
-      body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; }
-      h1 { font-size: 18pt; color: #0f172a; font-weight: bold; border-bottom: 1.5pt solid #0d9488; padding-bottom: 4pt; }
-      h2 { font-size: 14pt; color: #0f172a; font-weight: bold; margin-top: 12pt; }
-      h3 { font-size: 12pt; color: #0f172a; font-weight: bold; }
+      body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; margin: 24pt; }
+      h1 { font-size: 18pt; color: #0f172a; font-weight: bold; border-bottom: 1.5pt solid #0d9488; padding-bottom: 4pt; margin-top: 18pt; }
+      h2 { font-size: 14pt; color: #0f172a; font-weight: bold; margin-top: 14pt; }
+      h3 { font-size: 12pt; color: #0f172a; font-weight: bold; margin-top: 10pt; }
       p { margin-bottom: 8pt; }
-      ul { margin-bottom: 8pt; }
+      ul, ol { margin-bottom: 8pt; padding-left: 20pt; }
       li { margin-bottom: 4pt; }
       strong { font-weight: bold; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10pt; margin-bottom: 14pt; }
+      th, td { border: 1pt solid #cbd5e1; padding: 6pt 10pt; text-align: left; }
+      th { background-color: #f1f5f9; font-weight: bold; color: #0f172a; }
+      blockquote { margin: 10pt 0; padding: 8pt 12pt; background: #f0fdf4; border-left: 3pt solid #0d9488; }
     </style>
   </head>
   <body>

@@ -2,12 +2,14 @@ import { createPortal } from 'react-dom'
 import { useMemo, useState, useEffect } from 'react'
 import {
   BookOpen,
+  Camera,
   ChevronDown,
   ChevronUp,
   Clipboard,
   Download,
   FileJson,
   FileText,
+  Image,
   Link,
   Mic,
   MonitorPlay,
@@ -18,6 +20,7 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 
@@ -41,7 +44,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
-import { analyzeSourceIntegrity, listWorkflows, saveWorkflow, getAvailableModels } from '../../lib/api/client'
+import { analyzeSourceIntegrity, listWorkflows, saveWorkflow, getAvailableModels, generateFromTemplate } from '../../lib/api/client'
 import type { WorkflowTemplate, ModelListResponse } from '../../lib/api/client'
 import { ConflictResolutionPanel } from '../dna/ConflictResolutionPanel'
 import { DNASkeleton, IntegritySkeleton, OutputsSkeleton } from '../ui/Skeleton'
@@ -680,6 +683,7 @@ export function TransformationWorkspace({
         onGenerateOutputs={onGenerateOutputs}
         onRestoreVersion={onRestoreVersion}
         onDeleteOutput={onDeleteOutput}
+        onTransformationUpdated={onConflictResolved}
         dnaChangedPrompt={dnaChangedPrompt}
         onDismissDnaChangedPrompt={() => setDnaChangedPrompt(null)}
       />
@@ -772,16 +776,27 @@ function ArtifactDownloadDropdown({
       <button
         type="button"
         className="btn-download-primary"
-        title="Download as PDF (Default format)"
+        title="Download as styled print-ready PDF"
         onClick={() => handleExport('pdf')}
       >
-        <Download size={14} />
-        Download PDF
+        <Download size={13} />
+        PDF
       </button>
+
+      <button
+        type="button"
+        className="btn-download-docx"
+        title="Download as formatted Microsoft Word (.docx) document"
+        onClick={() => handleExport('docx')}
+      >
+        <FileText size={13} />
+        Word (.docx)
+      </button>
+
       <button
         type="button"
         className="btn-download-toggle"
-        title="Choose format (PDF, DOCX, TXT, MD, PPT)"
+        title="Choose more formats (Plain Text, Markdown, PowerPoint)"
         onClick={() => setOpen((prev) => !prev)}
       >
         <ChevronDown size={12} />
@@ -862,6 +877,7 @@ function WorkspaceOutputs({
   onGenerateOutputs,
   onRestoreVersion,
   onDeleteOutput,
+  onTransformationUpdated,
   dnaChangedPrompt,
   onDismissDnaChangedPrompt,
 }: {
@@ -873,6 +889,7 @@ function WorkspaceOutputs({
   ) => void
   onRestoreVersion: (version: number) => void
   onDeleteOutput?: (outputId: string) => void
+  onTransformationUpdated?: (transformation: Transformation) => void
   dnaChangedPrompt?: { open: boolean; reason: string } | null
   onDismissDnaChangedPrompt?: () => void
 }) {
@@ -908,6 +925,109 @@ function WorkspaceOutputs({
 
   const [customWorkflowName, setCustomWorkflowName] =
     useState('')
+
+  // Template Cloning Modal State
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [templateMode, setTemplateMode] = useState<'file' | 'text'>('file')
+  const [templateFileBase64, setTemplateFileBase64] = useState<string | null>(null)
+  const [templateFileName, setTemplateFileName] = useState<string>('')
+  const [templateFileType, setTemplateFileType] = useState<'pdf' | 'docx' | 'image' | 'text' | null>(null)
+  const [templateFileSize, setTemplateFileSize] = useState<string>('')
+  const [templateText, setTemplateText] = useState<string>('')
+  const [templateName, setTemplateName] = useState<string>('')
+  const [templatePrompt, setTemplatePrompt] = useState<string>('')
+  const [templateGenerating, setTemplateGenerating] = useState(false)
+  const [templateError, setTemplateError] = useState<string>('')
+
+  function handleFileUpload(file: File) {
+    const fn = file.name.toLowerCase()
+    let detectedType: 'pdf' | 'docx' | 'image' | 'text' | null = null
+
+    if (file.type === 'application/pdf' || fn.endsWith('.pdf')) {
+      detectedType = 'pdf'
+    } else if (
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.type === 'application/msword' ||
+      fn.endsWith('.docx') ||
+      fn.endsWith('.doc')
+    ) {
+      detectedType = 'docx'
+    } else if (
+      file.type.startsWith('image/') ||
+      fn.endsWith('.png') ||
+      fn.endsWith('.jpg') ||
+      fn.endsWith('.jpeg') ||
+      fn.endsWith('.webp')
+    ) {
+      detectedType = 'image'
+    } else if (file.type.startsWith('text/') || fn.endsWith('.txt') || fn.endsWith('.md')) {
+      detectedType = 'text'
+    } else {
+      setTemplateError('Unsupported file type. Please upload a PDF (.pdf), Word Document (.docx), Image (.png, .jpg), or text file.')
+      return
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      setTemplateError('File size must be under 25MB.')
+      return
+    }
+
+    setTemplateError('')
+    setTemplateFileName(file.name)
+    setTemplateFileType(detectedType)
+    setTemplateFileSize(
+      file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${(file.size / 1024).toFixed(0)} KB`
+    )
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      setTemplateFileBase64(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleGenerateTemplate() {
+    if (templateMode === 'file' && !templateFileBase64) {
+      setTemplateError('Please upload or drop a reference PDF, DOCX, or screenshot file first.')
+      return
+    }
+    if (templateMode === 'text' && !templateText.trim()) {
+      setTemplateError('Please paste or enter reference template text.')
+      return
+    }
+    setTemplateGenerating(true)
+    setTemplateError('')
+    try {
+      const updated = await generateFromTemplate(transformation.id, {
+        template_file_base64: templateMode === 'file' ? (templateFileBase64 || undefined) : undefined,
+        template_file_name: templateMode === 'file' ? (templateFileName || undefined) : undefined,
+        template_image_base64: (templateMode === 'file' && templateFileType === 'image') ? (templateFileBase64 || undefined) : undefined,
+        template_text: templateMode === 'text' ? (templateText.trim() || undefined) : undefined,
+        template_name: templateName.trim() || (templateMode === 'file' ? templateFileName || 'Reference Template' : 'Text Template Structure'),
+        generation_config: {
+          ...generationConfig,
+          ...(templatePrompt.trim() ? { objective: templatePrompt.trim() } : {}),
+        },
+      })
+      onTransformationUpdated?.(updated)
+      setShowTemplateModal(false)
+      setTemplateFileBase64(null)
+      setTemplateFileName('')
+      setTemplateFileType(null)
+      setTemplateFileSize('')
+      setTemplateText('')
+      setTemplateName('')
+      setTemplatePrompt('')
+    } catch (err: any) {
+      console.error('Template clone failed:', err)
+      setTemplateError(err?.message || 'Failed to clone template. Please try again.')
+    } finally {
+      setTemplateGenerating(false)
+    }
+  }
 
   const options = [
     ['executive_summary', 'Executive Summary'],
@@ -1492,6 +1612,20 @@ function WorkspaceOutputs({
           </Button>
 
           <Button
+            variant="secondary"
+            className="btn-template-clone"
+            disabled={
+              busy ||
+              (!transformation.content_dna && !transformation.sources.length)
+            }
+            onClick={() => setShowTemplateModal(true)}
+            title="Upload a reference PDF, Word doc (.docx), or screenshot to clone its format and layout"
+          >
+            <FileText size={15} />
+            Clone Format (PDF / DOCX / Image)
+          </Button>
+
+          <Button
             variant="ghost"
             disabled={
               !transformation.outputs.length
@@ -1556,16 +1690,29 @@ function WorkspaceOutputs({
             {transformation.outputs.map(
               (artifact) => (
                 <article
-                  className="artifact-card"
+                  className={`artifact-card ${artifact.type === 'template_clone' ? 'template-clone-card' : ''}`}
                   key={artifact.id}
                 >
-                  <div>
-                    <strong>
-                      {artifact.type.replaceAll(
-                        '_',
-                        ' ',
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {artifact.type === 'template_clone' ? (
+                        <>
+                          <span className="template-clone-badge">
+                            <Camera size={11} /> Cloned Blueprint
+                          </span>
+                          <strong>
+                            {(artifact.metadata as any)?.template_name || 'Visual Template Clone'}
+                          </strong>
+                        </>
+                      ) : (
+                        <strong>
+                          {artifact.type.replaceAll(
+                            '_',
+                            ' ',
+                          )}
+                        </strong>
                       )}
-                    </strong>
+                    </div>
 
                     <small>
                       DNA v
@@ -1778,6 +1925,263 @@ function WorkspaceOutputs({
                 >
                   Save Workflow
                 </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {showTemplateModal &&
+        createPortal(
+          <div
+            className="template-clone-modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !templateGenerating) {
+                setShowTemplateModal(false)
+                setTemplateError('')
+              }
+            }}
+          >
+            <div
+              className="template-clone-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="template-clone-title"
+            >
+              <div className="template-clone-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="template-clone-header-icon">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 id="template-clone-title">Format & Template Cloning (PDF, DOCX, Image)</h3>
+                    <p>
+                      Upload any reference PDF, Word document (.docx), or image screenshot to extract its layout, headings, and tables, and clone it with verified facts from your Semantic Lineage Graph.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="template-clone-close"
+                  aria-label="Close"
+                  disabled={templateGenerating}
+                  onClick={() => {
+                    setShowTemplateModal(false)
+                    setTemplateError('')
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="template-input-tabs">
+                <button
+                  type="button"
+                  className={templateMode === 'file' ? 'active' : ''}
+                  onClick={() => {
+                    setTemplateMode('file')
+                    setTemplateError('')
+                  }}
+                >
+                  <FileText size={14} />
+                  Upload File (PDF, DOCX, Image)
+                </button>
+                <button
+                  type="button"
+                  className={templateMode === 'text' ? 'active' : ''}
+                  onClick={() => {
+                    setTemplateMode('text')
+                    setTemplateError('')
+                  }}
+                >
+                  <BookOpen size={14} />
+                  Paste Reference Text / Structure
+                </button>
+              </div>
+
+              {templateMode === 'file' ? (
+                <div>
+                  {!templateFileBase64 ? (
+                    <div
+                      className="template-dropzone"
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleFileUpload(e.dataTransfer.files[0])
+                        }
+                      }}
+                    >
+                      <input
+                        type="file"
+                        id="template-doc-input"
+                        accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.txt,.md"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleFileUpload(e.target.files[0])
+                          }
+                        }}
+                      />
+                      <label htmlFor="template-doc-input" className="template-upload-label">
+                        <Upload size={32} style={{ color: '#0ea5e9' }} />
+                        <strong>Click or drag & drop reference PDF, DOCX, or screenshot</strong>
+                        <span>Supports PDF (.pdf), Word (.docx), Screenshots (.png, .jpg), and Markdown (up to 25MB)</span>
+                      </label>
+                    </div>
+                  ) : templateFileType === 'image' ? (
+                    <div className="template-preview-container">
+                      <img
+                        src={templateFileBase64}
+                        alt="Template Reference"
+                        className="template-preview-img"
+                      />
+                      <div className="template-preview-name">
+                        <Image size={14} style={{ color: '#38bdf8' }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {templateFileName || 'Reference Screenshot'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="template-remove-btn"
+                        onClick={() => {
+                          setTemplateFileBase64(null)
+                          setTemplateFileName('')
+                          setTemplateFileType(null)
+                          setTemplateFileSize('')
+                        }}
+                        disabled={templateGenerating}
+                      >
+                        <Trash2 size={13} />
+                        Remove & Replace
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="template-doc-preview-card">
+                      <div className="template-doc-info">
+                        <div className={`template-doc-icon-box ${templateFileType || 'pdf'}`}>
+                          {templateFileType === 'pdf' ? '📄' : templateFileType === 'docx' ? '📝' : '📑'}
+                        </div>
+                        <div className="template-doc-details">
+                          <strong>{templateFileName || 'Reference Document'}</strong>
+                          <div className="template-doc-meta">
+                            <span className={`template-doc-tag ${templateFileType || 'pdf'}`}>
+                              {(templateFileType || 'doc').toUpperCase()}
+                            </span>
+                            <span>{templateFileSize}</span>
+                            <span>· Ready for layout extraction</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="template-remove-btn"
+                        onClick={() => {
+                          setTemplateFileBase64(null)
+                          setTemplateFileName('')
+                          setTemplateFileType(null)
+                          setTemplateFileSize('')
+                        }}
+                        disabled={templateGenerating}
+                      >
+                        <Trash2 size={13} />
+                        Remove & Replace
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <textarea
+                    className="template-textarea"
+                    placeholder="Paste reference executive summary, report structure, or markdown template here... (e.g., # EXECUTIVE BRIEFING &#10;## Key Findings &#10;- Fact A &#10;- Fact B &#10;## Risk Matrix &#10;| Risk | Impact | Action |)"
+                    value={templateText}
+                    onChange={(e) => setTemplateText(e.target.value)}
+                    rows={6}
+                    disabled={templateGenerating}
+                  />
+                </div>
+              )}
+
+              <div className="template-fields-grid">
+                <label>
+                  <span>Template Name (Optional)</span>
+                  <input
+                    type="text"
+                    className="template-text-input"
+                    placeholder="e.g., Q3 Investor Memo Format"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    disabled={templateGenerating}
+                  />
+                </label>
+                <label>
+                  <span>Custom Style / Focus Prompt (Optional)</span>
+                  <input
+                    type="text"
+                    className="template-text-input"
+                    placeholder="e.g., Emphasize cost savings and financial tables"
+                    value={templatePrompt}
+                    onChange={(e) => setTemplatePrompt(e.target.value)}
+                    disabled={templateGenerating}
+                  />
+                </label>
+              </div>
+
+              {templateError && (
+                <div className="template-error-banner" role="alert">
+                  <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                  <span>{templateError}</span>
+                </div>
+              )}
+
+              <div className="template-clone-actions">
+                <button
+                  type="button"
+                  className="workflow-cancel-button"
+                  disabled={templateGenerating}
+                  onClick={() => {
+                    setShowTemplateModal(false)
+                    setTemplateError('')
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <Button
+                  variant="primary"
+                  disabled={
+                    templateGenerating ||
+                    (templateMode === 'file' && !templateFileBase64) ||
+                    (templateMode === 'text' && !templateText.trim())
+                  }
+                  onClick={() => void handleGenerateTemplate()}
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7, #0ea5e9)',
+                    borderColor: '#38bdf8',
+                    padding: '8px 18px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  {templateGenerating ? (
+                    <>
+                      <RefreshCw size={14} className="spin" />
+                      Extracting Format & Cloning...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      Extract Format & Generate Clone
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </div>,

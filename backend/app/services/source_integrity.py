@@ -335,6 +335,8 @@ Your sole goal is to identify all direct factual contradictions between competin
 
 A contradiction occurs when two or more claims cannot simultaneously be true (e.g., competing parents/roles, differing numbers, dates, locations, winners, budgets, revenue, headcount, or statuses for the same entity/event).
 
+CRITICAL: Do NOT flag distinct items of multi-valued attributes (such as skills, technologies, programming languages, certifications, hobbies, features, tools, or team members) as contradictions. An entity possessing multiple distinct skills (e.g., 'Knows Python' and 'Knows React') or capabilities is expected and non-contradictory.
+
 For each contradiction:
 - claim_a: The exact text of the first conflicting claim from the provided claims list.
 - claim_b: The exact text of the second conflicting claim from the provided claims list.
@@ -780,6 +782,8 @@ Extract all factual claims in valid JSON:
                 return "creator"
             if "leader" in text:
                 return "leader"
+            if "spouse" in text or "wife" in text or "husband" in text:
+                return "spouse"
 
         # Competition outcome / ranking / victory
         if any(w in text for w in ("win", "won", "winner", "victory", "shortlist", "shortlisted", "finalist", "place", "ranked", "award", "awarded", "champion", "hackathon", "sih")):
@@ -798,11 +802,11 @@ Extract all factual claims in valid JSON:
             return "launch_date"
 
         # Founding & Establishment
-        if any(w in text for w in ("founded", "founding", "established", "created in", "started in", "incorporated")):
+        if any(w in text for w in ("founded", "founding", "established", "created in", "incorporated")):
             return "founding_date"
 
         # Headquarters & Office Location
-        if any(w in text for w in ("headquarter", "headquarters", "based in", "main office", "hq", "located in", "operating from", "city")):
+        if any(w in text for w in ("headquarter", "headquarters", "based in", "main office", "hq", "located in", "operating from")):
             return "headquarters"
 
         # Occurrence & Incident Location
@@ -814,15 +818,15 @@ Extract all factual claims in valid JSON:
             return "revenue"
 
         # Budget, Cost, Grants & Funding
-        if any(w in text for w in ("budget", "project cost", "total cost", "allocated cost", "funding", "investment", "cost", "grant", "development grant", "subsidy", "allocation", "funds")):
+        if any(w in text for w in ("budget", "project cost", "total cost", "allocated cost", "funding", "grant", "development grant", "subsidy", "allocation", "funds")):
             return "budget"
 
         # Loss & Financial Damage
-        if any(w in text for w in ("loss", "losses", "damage", "damages", "financial loss")):
+        if any(w in text for w in ("financial loss", "reported losses", "damages", "damage")):
             return "reported_losses"
 
         # Security Incidents & Breaches
-        if any(w in text for w in ("security incident", "breach", "cyber attack", "outage", "attack", "incidents reported")):
+        if any(w in text for w in ("security incident", "breach", "cyber attack", "outage", "incidents reported")):
             return "reported_security_incidents"
 
         # Impacted / Affected Systems or Entities
@@ -831,17 +835,35 @@ Extract all factual claims in valid JSON:
                 return "affected_organizations"
 
         # Status & State
-        if any(w in text for w in ("status", "condition", "state", "active status", "approval", "approved", "rejected")):
+        if any(w in text for w in ("active status", "approval status", "operational status", "status", "condition", "state")):
             return "status"
 
-        # Feature Enabled
-        if any(w in text for w in ("feature", "enabled", "capability", "functionality", "supports")):
-            return "feature_enabled"
+        # Specific Contact & Channel Attributes
+        if any(w in text for w in ("email", "mail address", "email address")):
+            return "email"
+        if any(w in text for w in ("github", "git repo", "repository")):
+            return "github"
+        if any(w in text for w in ("phone", "telephone", "mobile", "contact number")):
+            return "phone"
+        if any(w in text for w in ("website", "domain", "url", "web page")):
+            return "website"
 
-        # Fallback to normalized predicate
-        norm_pred = self._normalize_predicate(predicate)
-        norm_key = self._normalize_text(claim_key)
-        return norm_key if norm_key and norm_key not in ("fact", "claim") else (norm_pred or "fact")
+        # Multi-Valued Attributes (Skills, Languages, Tech, Credentials)
+        if any(w in text for w in ("skill", "skills", "technical skills", "soft skills", "expertise", "competencies", "proficiencies")):
+            return "skill"
+        if any(w in text for w in ("languages", "spoken languages", "programming languages")):
+            return "language"
+        if any(w in text for w in ("tools", "tech stack", "technologies", "frameworks", "libraries")):
+            return "technology"
+        if any(w in text for w in ("certifications", "credentials", "qualifications", "degrees")):
+            return "certification"
+        if any(w in text for w in ("hobbies", "interests", "passions")):
+            return "hobby"
+
+        # Fallback to normalized predicate / key
+        norm_key = self._normalize_predicate_key(claim_key)
+        norm_pred = self._normalize_predicate_key(predicate)
+        return norm_key if norm_key and norm_key not in ("fact", "claim", "unknown") else (norm_pred or "fact")
 
     def _canonical_subject(
         self,
@@ -936,13 +958,42 @@ Extract all factual claims in valid JSON:
 
         return False
 
+    def _is_multivalued_attribute(
+        self,
+        claim: Claim,
+    ) -> bool:
+        """
+        Determines whether a claim refers to a multi-valued set property
+        (e.g., skills, programming languages, technologies, certifications, tools, features, hobbies, interests, tags).
+        For multi-valued properties, having multiple distinct items is expected and non-conflicting.
+        """
+        pred = self._canonical_predicate(claim.predicate, claim.claim_key)
+        key = self._normalize_predicate_key(claim.claim_key)
+        raw_pred = self._normalize_predicate_key(claim.predicate)
+        text = f"{pred} {key} {raw_pred}".strip()
+
+        multivalued_patterns = (
+            "skill", "expertise", "proficiency", "competenc",
+            "language",
+            "technolog", "tech_stack", "framework", "library", "tool", "database",
+            "certification", "credential", "qualification", "degree", "course",
+            "hobby", "interest", "passion",
+            "feature", "capability", "integration", "plugin",
+            "tag", "topic", "category", "keyword",
+            "product", "service", "offering",
+            "partner", "client", "customer", "investor", "backer",
+            "contributor", "collaborator",
+            "publication", "patent", "project",
+        )
+        return any(pat in text for pat in multivalued_patterns)
+
     def _canonical_claim_key(
         self,
         claim: Claim,
     ) -> str:
         """
         Build a deterministic canonical key representing the logical property of an entity.
-        Format: {normalized_subject}|{canonical_predicate}[|{time}][|{location}]
+        Format: {normalized_subject}|{canonical_predicate}[|{time}][|{location}][|{value}]
         """
         subject = self._canonical_subject(claim.subject) or "unknown"
         predicate = self._canonical_predicate(claim.predicate, claim.claim_key)
@@ -960,7 +1011,11 @@ Extract all factual claims in valid JSON:
         if norm_loc and norm_loc != norm_val and norm_loc not in norm_val and predicate not in ("incident_location", "headquarters"):
             loc_part = f"|{norm_loc}"
 
-        return f"{subject}|{predicate}{time_part}{loc_part}"
+        val_part = ""
+        if self._is_multivalued_attribute(claim) and norm_val:
+            val_part = f"|{norm_val}"
+
+        return f"{subject}|{predicate}{time_part}{loc_part}{val_part}"
 
     # ============================================================
     # MULTI-TYPE VALUE NORMALIZATION & EQUIVALENCE
@@ -1298,6 +1353,12 @@ Extract all factual claims in valid JSON:
         if not self._predicates_compatible(claim_a, claim_b):
             return False
 
+        # For multi-valued set attributes (e.g. skills, languages, certifications, features, tools, tags, hobbies),
+        # distinct items are additive, not competing. Two claims are only comparable if they refer to the SAME item.
+        if self._is_multivalued_attribute(claim_a) or self._is_multivalued_attribute(claim_b):
+            if self._values_are_incompatible(claim_a, claim_b):
+                return False
+
         return True
 
     def _predicates_compatible(
@@ -1305,49 +1366,28 @@ Extract all factual claims in valid JSON:
         claim_a: Claim,
         claim_b: Claim,
     ) -> bool:
-        """Check if predicates represent the same attribute domain."""
+        """
+        Check if predicates represent the exact same attribute domain.
+        Strictly prevents false conflicts across distinct attributes (e.g., has_email_address vs has_github).
+        """
         pred_a = self._canonical_predicate(claim_a.predicate, claim_a.claim_key)
         pred_b = self._canonical_predicate(claim_b.predicate, claim_b.claim_key)
 
-        if pred_a == pred_b and pred_a != "fact":
+        # 1. Matching canonical predicates (non-generic)
+        if pred_a and pred_b and pred_a == pred_b and pred_a not in ("fact", "claim", "unknown", "states"):
             return True
 
-        if claim_a.claim_key and claim_a.claim_key == claim_b.claim_key:
+        # 2. Exact match of non-generic claim_key
+        key_a = self._normalize_predicate_key(claim_a.claim_key)
+        key_b = self._normalize_predicate_key(claim_b.claim_key)
+        if key_a and key_b and key_a == key_b and key_a not in ("fact", "claim", "unknown", "states"):
             return True
 
-        type_a, _ = self._normalize_value_for_comparison(claim_a)
-        type_b, _ = self._normalize_value_for_comparison(claim_b)
-
-        # 1. Matching competition outcome domains
-        if type_a == "competition_outcome" and type_b == "competition_outcome":
+        # 3. Exact match of stripped normalized predicate text
+        p_a = self._normalize_predicate_key(claim_a.predicate)
+        p_b = self._normalize_predicate_key(claim_b.predicate)
+        if p_a and p_b and p_a == p_b and p_a not in ("fact", "claim", "unknown", "states"):
             return True
-
-        # 2. Matching geographic location domains
-        if type_a == "location" and type_b == "location":
-            return True
-
-        # 3. Matching temporal domains (e.g. launch/release/deployment dates)
-        if type_a in ("year", "calendar_date") and type_b in ("year", "calendar_date"):
-            return True
-
-        # 4. Matching numerical metric domains with compatible units
-        if type_a == "number" and type_b == "number":
-            if self._units_compatible(claim_a.unit, claim_b.unit):
-                return True
-
-        # 5. Matching boolean status domains
-        if type_a == "boolean" and type_b == "boolean":
-            return True
-
-        # 6. Lexical word overlap (ignoring common stopwords)
-        stopwords = {"is", "was", "are", "were", "has", "have", "had", "been", "the", "a", "an", "in", "at", "for", "with", "by", "of", "to", "and", "or"}
-        norm_a = self._normalize_text(claim_a.predicate)
-        norm_b = self._normalize_text(claim_b.predicate)
-        if norm_a and norm_b:
-            words_a = {w for w in norm_a.split() if w not in stopwords and len(w) > 2}
-            words_b = {w for w in norm_b.split() if w not in stopwords and len(w) > 2}
-            if words_a & words_b:
-                return True
 
         return False
 
@@ -1367,8 +1407,13 @@ Extract all factual claims in valid JSON:
         if pred_a in ("headquarters", "incident_location", "location") or pred_b in ("headquarters", "incident_location", "location"):
             return True
 
-        # 3. For outcomes, competition outcomes, status, or features, do not block on context
-        if pred_a in ("competition_outcome", "status", "feature_enabled") or pred_b in ("competition_outcome", "status", "feature_enabled"):
+        # 3. For outcomes, competition outcomes, status, identity, multi-valued attributes, or contact channels, do not block on context
+        exempt_domains = {
+            "competition_outcome", "status", "email", "github", "phone", "website",
+            "skill", "language", "technology", "certification", "hobby",
+            "mother", "father", "parent", "ceo", "founder", "author", "creator", "leader", "spouse",
+        }
+        if pred_a in exempt_domains or pred_b in exempt_domains:
             return True
 
         # 4. Check time and location for longitudinal metrics (e.g. annual financial results)
@@ -1394,6 +1439,16 @@ Extract all factual claims in valid JSON:
 
         return True
 
+    def _normalize_predicate_key(
+        self,
+        value: str,
+    ) -> str:
+        """Strips prefix helper words and normalizes to a clean snake_case property key."""
+        clean = self._normalize_text(value)
+        clean = re.sub(r"^(?:has|have|had|is|was|are|were|contains|includes|provides|supports|with)\s+", "", clean).strip()
+        clean = re.sub(r"^(?:reported|asserted|claimed|stated)\s+", "", clean).strip()
+        return clean.replace(" ", "_")
+
     def _normalize_text(
         self,
         value: str,
@@ -1406,7 +1461,7 @@ Extract all factual claims in valid JSON:
         self,
         value: str,
     ) -> str:
-        return self._normalize_text(value)
+        return self._normalize_predicate_key(value)
 
     def _predicates_related(
         self,
@@ -1415,7 +1470,7 @@ Extract all factual claims in valid JSON:
     ) -> bool:
         norm_a = self._canonical_predicate(predicate_a)
         norm_b = self._canonical_predicate(predicate_b)
-        return norm_a == norm_b or norm_a in norm_b or norm_b in norm_a
+        return norm_a == norm_b and norm_a not in ("fact", "claim", "unknown")
 
     def _units_compatible(
         self,

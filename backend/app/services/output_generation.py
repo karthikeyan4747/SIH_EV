@@ -161,6 +161,34 @@ class OutputGenerationService:
             content=f"# {structure.name}\n\n" + "\n\n".join(sections),
         )
 
+    def generate_from_template(
+        self,
+        transformation_id: str,
+        content_dna: ContentDNA,
+        blueprint: dict,
+        dna_version: int,
+        template_name: str | None = None,
+        prompt: str | None = None,
+        generation_config: dict | None = None,
+    ) -> Artifact:
+        name = template_name or blueprint.get("title") or "Cloned Template Deliverable"
+        content = self.llm_provider.generate_output_from_template(
+            content_dna=content_dna,
+            blueprint=blueprint,
+            user_prompt=prompt,
+            generation_config=generation_config,
+        )
+
+        return Artifact(
+            id=str(uuid4()),
+            transformation_id=transformation_id,
+            type="template_clone",
+            structure_id=name,
+            dna_version=dna_version,
+            content=content,
+            metadata={"template_name": name},
+        )
+
     def _executive_summary(self, dna: ContentDNA) -> str:
         findings = "\n".join(f"- {item}" for item in dna.findings.key_findings[:6])
         facts = "\n".join(f"- {item}" for item in dna.facts.claims[:6])

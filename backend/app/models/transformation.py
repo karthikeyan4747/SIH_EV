@@ -83,6 +83,7 @@ class Artifact(BaseModel):
     dna_version: int
     status: ArtifactStatus = "generated"
     content: str = ""
+    metadata: dict = Field(default_factory=dict)
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
@@ -242,6 +243,16 @@ class OutputGenerateRequest(BaseModel):
     structure_ids: list[str] = Field(default_factory=list)
 
     generation_config: dict = Field(default_factory=dict)
+
+
+class TemplateGenerateRequest(BaseModel):
+    template_name: str | None = None
+    template_image_base64: str | None = None
+    template_file_base64: str | None = None
+    template_file_name: str | None = None
+    template_text: str | None = None
+    generation_config: dict = Field(default_factory=dict)
+    user_prompt: str | None = None
 class StructureSectionInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""

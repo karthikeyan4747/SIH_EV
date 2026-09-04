@@ -34,6 +34,27 @@ class FakeProvider:
     ) -> str:
         return f"# Generated {output_type}\n\nContent for {content_dna.identity.title}"
 
+    def extract_layout_blueprint(
+        self,
+        image_base64: str | None = None,
+        template_text: str | None = None,
+    ) -> dict:
+        return {
+            "title": "Test Blueprint",
+            "sections": [
+                {"heading": "Key Findings", "style": "bullet_list", "description": "Core points"},
+            ],
+        }
+
+    def generate_output_from_template(
+        self,
+        content_dna: ContentDNA,
+        blueprint: dict,
+        user_prompt: str | None = None,
+        generation_config: dict | None = None,
+    ) -> str:
+        return f"# Cloned: {blueprint.get('title', 'Deliverable')}\n\n{content_dna.overview.summary}"
+
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:

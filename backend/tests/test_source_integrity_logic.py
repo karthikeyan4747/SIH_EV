@@ -814,6 +814,103 @@ def test_content_dna_direct_contradiction_detection() -> None:
     assert "bala" in conflict.description.lower()
 
 
+def test_distinct_attributes_no_false_conflicts() -> None:
+    """
+    Test 26: Distinct, independent attributes on the same subject MUST NOT conflict.
+    Specifically:
+    - has_email_address vs has_github
+    - birth_city vs headquarters
+    - age vs height
+    - employee_count vs patents_count
+    - has_sso vs has_export_pdf
+    """
+    service = SourceIntegrityService(mode="api")
+
+    claims = [
+        make_claim("c1", "has_email_address", "Pathenova", "has_email_address", "true"),
+        make_claim("c2", "has_github", "Pathenova", "has_github", "false"),
+        make_claim("c3", "birth_city", "Karthikeyan", "born in", "Madurai"),
+        make_claim("c4", "headquarters", "Karthikeyan", "headquartered in", "Chennai"),
+        make_claim("c5", "age", "Karthikeyan", "age is", "25", unit="years"),
+        make_claim("c6", "height", "Karthikeyan", "height is", "180", unit="cm"),
+        make_claim("c7", "patents_count", "Pathenova", "patents", "10"),
+        make_claim("c8", "hubs_count", "Pathenova", "hubs", "5"),
+    ]
+
+    conflicts = service._compare_claims(claims)
+    assert len(conflicts) == 0
+    for c in claims:
+        assert c.status == "supported"
+
+
+def test_direct_conflicts_on_same_attribute_detected() -> None:
+    """
+    Test 27: Direct contradictions regarding the SAME attribute are correctly flagged.
+    """
+    service = SourceIntegrityService(mode="api")
+
+    # 1. Competing emails for same entity
+    claims_email = [
+        make_claim("e1", "email_address", "Pathenova", "contact email", "info@pathenova.com"),
+        make_claim("e2", "has_email", "Pathenova", "email", "admin@pathenova.com"),
+    ]
+    conflicts_email = service._compare_claims(claims_email)
+    assert len(conflicts_email) == 1
+    assert set(conflicts_email[0].claim_ids) == {"e1", "e2"}
+
+    # 2. Competing boolean values for same feature
+    claims_bool = [
+        make_claim("b1", "has_github", "Pathenova", "has_github", "true"),
+        make_claim("b2", "has_github", "Pathenova", "has_github", "false"),
+    ]
+    conflicts_bool = service._compare_claims(claims_bool)
+    assert len(conflicts_bool) == 1
+    assert set(conflicts_bool[0].claim_ids) == {"b1", "b2"}
+
+
+def test_multivalued_attributes_skills_no_conflicts() -> None:
+    """
+    Test 28: Multi-valued attributes (skills, technologies, languages, certifications, hobbies, features)
+    allow an entity to possess multiple distinct items simultaneously without raising false conflicts.
+    Identical items across sources are properly corroborated.
+    """
+    service = SourceIntegrityService(mode="api")
+
+    # 1. Multiple distinct skills for the same person
+    skill_claims = [
+        make_claim("s1", "technical_skills", "Karthikeyan", "skill", "Python"),
+        make_claim("s2", "technical_skills", "Karthikeyan", "proficient in", "React"),
+        make_claim("s3", "skill", "Karthikeyan", "has skill", "FastAPI"),
+        make_claim("s4", "skills", "Karthikeyan", "expertise", "Machine Learning"),
+        make_claim("s5", "languages", "Karthikeyan", "speaks", "English"),
+        make_claim("s6", "languages", "Karthikeyan", "speaks", "Tamil"),
+        make_claim("s7", "certifications", "Karthikeyan", "certified in", "AWS Solutions Architect"),
+        make_claim("s8", "certifications", "Karthikeyan", "certified in", "CKA"),
+        make_claim("s9", "tools", "Pathenova", "built with", "Docker"),
+        make_claim("s10", "technologies", "Pathenova", "uses", "PostgreSQL"),
+        make_claim("s11", "hobbies", "Karthikeyan", "interested in", "Chess"),
+        make_claim("s12", "hobbies", "Karthikeyan", "enjoys", "Robotics"),
+    ]
+
+    conflicts = service._compare_claims(skill_claims)
+    assert len(conflicts) == 0
+    for c in skill_claims:
+        assert c.status == "supported"
+
+    # 2. Corroborating identical multi-valued items across sources
+    corroboration_claims = [
+        make_claim("s_a1", "skills", "Karthikeyan", "skilled in", "Python"),
+        make_claim("s_b1", "skills", "Karthikeyan", "proficient in", "Python"),
+        make_claim("s_a2", "skills", "Karthikeyan", "skilled in", "React"),
+        make_claim("s_b2", "skills", "Karthikeyan", "proficient in", "React"),
+    ]
+    corroboration_conflicts = service._compare_claims(corroboration_claims)
+    assert len(corroboration_conflicts) == 0
+    assert all(c.status == "corroborated" for c in corroboration_claims)
+
+
+
+
 
 
 

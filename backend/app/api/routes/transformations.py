@@ -26,6 +26,7 @@ from app.models.transformation import (
     TransformationCreateRequest,
     TransformationListResponse,
     TransformationRenameRequest,
+    TemplateGenerateRequest,
     URLSourceAddRequest,
     UnsupportedSourceRequest,
     WorkflowTemplate,
@@ -1452,6 +1453,166 @@ def generate_outputs(
                 "outputs": [
                     *transformation.outputs,
                     *artifacts,
+                ],
+            }
+        )
+    )
+
+
+def _parse_template_file_payload(file_base64: str | None, filename: str | None) -> tuple[str | None, str | None]:
+    """Extracts template text or image base64 from an uploaded file payload (PDF, DOCX, TXT, or Image)."""
+    import base64
+    from io import BytesIO
+
+    if not file_base64:
+        return None, None
+
+    raw_b64 = file_base64
+    mime = ""
+    if "," in file_base64 and file_base64.startswith("data:"):
+        header, raw_b64 = file_base64.split(",", 1)
+        mime = header.split(";")[0].replace("data:", "").lower()
+
+    fn_lower = (filename or "").lower()
+
+    # Image formats -> return image URL for vision parsing
+    if (
+        mime.startswith("image/")
+        or fn_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"))
+    ):
+        img_url = file_base64 if file_base64.startswith("data:image/") else f"data:image/jpeg;base64,{raw_b64}"
+        return None, img_url
+
+    try:
+        file_bytes = base64.b64decode(raw_b64)
+    except Exception:
+        return None, None
+
+    # PDF format
+    if "pdf" in mime or fn_lower.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(BytesIO(file_bytes))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            pdf_text = "\n\n".join(
+                f"[Page {idx + 1}]\n{page_text.strip()}"
+                for idx, page_text in enumerate(pages)
+                if page_text.strip()
+            )
+            return pdf_text if pdf_text.strip() else None, None
+        except Exception as exc:
+            logger.warning("Failed to extract template text from PDF: %s", exc)
+            return None, None
+
+    # Word DOCX format
+    if "word" in mime or "docx" in mime or fn_lower.endswith(".docx"):
+        try:
+            from docx import Document
+            doc = Document(BytesIO(file_bytes))
+            parts = []
+            for p in doc.paragraphs:
+                txt = p.text.strip()
+                if not txt:
+                    continue
+                style_name = (p.style.name or "").lower() if p.style else ""
+                if "heading 1" in style_name:
+                    parts.append(f"# {txt}")
+                elif "heading 2" in style_name:
+                    parts.append(f"## {txt}")
+                elif "heading 3" in style_name:
+                    parts.append(f"### {txt}")
+                elif "list" in style_name or "bullet" in style_name:
+                    parts.append(f"- {txt}")
+                else:
+                    parts.append(txt)
+
+            for table in doc.tables:
+                if not table.rows:
+                    continue
+                headers = [c.text.strip().replace("\n", " ") for c in table.rows[0].cells]
+                table_md = [f"| {' | '.join(headers)} |"]
+                table_md.append(f"| {' | '.join(['---'] * len(headers))} |")
+                for row in table.rows[1:]:
+                    cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+                    table_md.append(f"| {' | '.join(cells)} |")
+                parts.append("\n".join(table_md))
+
+            docx_text = "\n\n".join(parts)
+            return docx_text if docx_text.strip() else None, None
+        except Exception as exc:
+            logger.warning("Failed to extract template text from DOCX: %s", exc)
+            return None, None
+
+    # Plain text / Markdown
+    try:
+        decoded = file_bytes.decode("utf-8-sig")
+        return decoded, None
+    except Exception:
+        return None, None
+
+
+@router.post(
+    "/{transformation_id}/generate-from-template",
+    response_model=Transformation,
+)
+def generate_from_template(
+    transformation_id: str,
+    payload: TemplateGenerateRequest,
+    request: Request,
+) -> Transformation:
+    transformation = _get_transformation(
+        transformation_id,
+        request,
+    )
+
+    if transformation.content_dna is None:
+        if transformation.sources:
+            transformation.content_dna = _dna_service(request).provider.generate_content_dna(transformation.sources[0])
+            _storage(request).save(transformation)
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail="Generate Content DNA before creating outputs",
+            )
+
+    dna_version = len(transformation.versions) or 1
+
+    file_text, file_img = _parse_template_file_payload(
+        payload.template_file_base64 or payload.template_image_base64,
+        payload.template_file_name,
+    )
+
+    template_text = payload.template_text or file_text
+    image_base64 = file_img or (payload.template_image_base64 if not file_text else None)
+
+    try:
+        blueprint = _outputs(request).llm_provider.extract_layout_blueprint(
+            image_base64=image_base64,
+            template_text=template_text,
+        )
+
+        artifact = _outputs(request).generate_from_template(
+            transformation_id=transformation.id,
+            content_dna=transformation.content_dna,
+            blueprint=blueprint,
+            dna_version=dna_version,
+            template_name=payload.template_name,
+            prompt=payload.user_prompt,
+            generation_config=payload.generation_config,
+        )
+
+    except LLMProviderError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
+
+    return _storage(request).save(
+        transformation.model_copy(
+            update={
+                "outputs": [
+                    *transformation.outputs,
+                    artifact,
                 ],
             }
         )

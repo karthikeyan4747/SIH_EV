@@ -489,3 +489,26 @@ export function selectActiveModel(modelId: string, provider: ModelMode = 'api') 
     body: JSON.stringify({ model_id: modelId, provider }),
   })
 }
+
+export interface TemplateGeneratePayload {
+  template_name?: string
+  template_image_base64?: string
+  template_file_base64?: string
+  template_file_name?: string
+  template_text?: string
+  generation_config?: Record<string, any>
+  user_prompt?: string
+}
+
+export function generateFromTemplate(
+  transformationId: string,
+  payload: TemplateGeneratePayload,
+) {
+  return request<Transformation>(
+    `/api/v1/transformations/${transformationId}/generate-from-template`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
