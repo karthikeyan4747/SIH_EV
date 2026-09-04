@@ -1,46 +1,57 @@
 # EV Frontend Workspace
 
-EV is a professional content transformation workspace. This frontend currently supports source intake, Semantic Lineage Graph construction & review, Source Integrity verification, and section-level editing. Output generation and verified artifact export are fully supported.
+React + TypeScript web application providing an interactive transformation workspace, Semantic Lineage Graph visualizer, Source Integrity conflict review, Content DNA editor, and multi-format deliverable exporter.
 
-## Run locally
+---
 
-From `EV/frontend`:
+## 1. Setup and Installation
 
-```powershell
+### Prerequisites
+
+- Node.js 18.0.0 or higher
+- `npm`, `pnpm`, or `yarn`
+
+### Local Environment Setup
+
+```bash
+# 1. Install dependencies
 npm install
-Copy-Item .env.example .env
+
+# 2. Copy environment configuration
+cp .env.example .env
+```
+
+### Environment Configuration
+
+Configure `frontend/.env`:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+### Start Development Server
+
+```bash
 npm run dev
 ```
 
-Open the URL printed by Vite, usually `http://127.0.0.1:5173`.
+Open the local server URL, typically `http://127.0.0.1:5173`.
 
-The backend must be running separately from `EV/backend`:
+### Production Build and Validation
 
-```powershell
-uvicorn app.main:app --reload
-```
-
-## Environment
-
-`VITE_API_BASE_URL` is the public backend URL used by the API client. It defaults to `http://127.0.0.1:8000` when omitted. The frontend never contains or accepts Groq keys.
-
-## Current workflows
-
-- Paste one or multiple text sources and construct the Semantic Lineage Graph.
-- Select multiple TXT or PDF files and construct the Semantic Lineage Graph.
-- Review the immutable source beside structured Semantic Lineage Graph nodes.
-- Inspect and resolve factual discrepancies via Source Integrity.
-- Edit semantic sections using partial `PATCH` requests.
-- Synchronize outputs across graph revisions.
-- Retry or dismiss network and backend errors without exposing tracebacks.
-
-Use the sidebar collapse control on desktop or the menu button on smaller screens.
-
-## Validation
-
-```powershell
+```bash
 npm run lint
 npm run build
 ```
 
-For an end-to-end check, start both servers, paste a source in the intake screen, generate the Semantic Lineage Graph, and edit a section. Confirm the top-right state changes through `Saving...` to `Synced`, then refresh the source through the backend to verify persistence.
+---
+
+## 2. Key Workspace Features
+
+- **Multi-Source Ingestion**: Ingest raw text, `.txt`, `.pdf`, `.docx`, layout images, or URLs.
+- **Semantic Lineage Graph Visualizer**: 2D force-directed canvas displaying lineage links connecting raw sources, extracted evidence, Content DNA nodes, and generated deliverables.
+- **Source Integrity Review**: Visual review panel for detecting, inspecting, and resolving factual discrepancies across multiple documents.
+- **Section-Level DNA Editing**: Edit any Content DNA section with non-destructive server-side synchronization.
+- **Format Cloning & Custom Generator**: Upload reference template formats (`.pdf`, `.docx`, image screenshots) to extract structure and generate custom deliverables.
+- **Direct Multi-Format Export**: 1-click downloads for Native Microsoft Word (`.docx`), styled PDF, Markdown, and plain text.
+

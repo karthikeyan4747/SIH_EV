@@ -1,74 +1,93 @@
-# GenAI Content Transformation Platform Backend
+# EV Backend Application
 
-This is the FastAPI backend for SIH Problem Statement 26154. It accepts direct text, TXT files, and PDF files, normalizes them into immutable `RawContent`, and extracts editable, validated Content DNA through Groq's `openai/gpt-oss-120b` model.
+FastAPI backend service powering the Content DNA extraction, deterministic source integrity verification, multi-format template cloning, and grounded deliverable generation engines.
 
-## Requirements
+---
 
-- Python 3.12+
+## 1. Setup and Installation
 
-## Local setup
+### Prerequisites
 
-From this directory:
+- Python 3.12 or higher
+- `pip` package manager
 
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+### Local Environment Setup
+
+```bash
+# 1. Create virtual environment
+python3 -m venv .venv
+
+# 2. Activate virtual environment
+# macOS / Linux:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\Activate.ps1
+
+# 3. Upgrade pip and install requirements
+pip install --upgrade pip
 pip install -r requirements.txt
-Copy-Item .env.example .env
+
+# 4. Copy environment configuration
+cp .env.example .env
 ```
 
-Set `GROQ_API_KEY` in `.env` to your own Groq API key. The key is read from the environment and must not be committed.
+### Environment Configuration
 
-Start the development server:
+Configure `backend/.env`:
 
-```powershell
-uvicorn app.main:app --reload
+```env
+# Inference Mode: "api" (Groq Cloud) or "local" (Ollama)
+LLM_MODE=api
+
+# Groq Configuration (for LLM_MODE=api)
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-120b
+
+# Ollama Configuration (for LLM_MODE=local)
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3:latest
+
+# Server
+HOST=127.0.0.1
+PORT=8000
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-The interactive API documentation is available at <http://127.0.0.1:8000/docs>.
+### Start Development Server
 
-The source endpoints are:
-
-- `POST /api/v1/sources/text` - create a source from JSON text
-- `POST /api/v1/sources/file` - upload a `.txt` or `.pdf` file
-- `GET /api/v1/sources/{source_id}` - retrieve immutable source data and current DNA
-- `GET /api/v1/sources/{source_id}/content-dna` - retrieve current DNA
-- `PUT /api/v1/sources/{source_id}/content-dna` - replace DNA with a validated object
-- `PATCH /api/v1/sources/{source_id}/content-dna` - partially update DNA while preserving omitted fields
-
-The health endpoint is <http://127.0.0.1:8000/health> and returns:
-
-```json
-{"status": "ok"}
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## Docker
+- API Base URL: `http://127.0.0.1:8000`
+- Interactive Swagger UI: `http://127.0.0.1:8000/docs`
+- Health Check: `http://127.0.0.1:8000/health`
 
-Build the image:
+### Run Automated Tests
 
-```powershell
+```bash
+pytest -v
+```
+
+---
+
+## 2. Core Modules
+
+- `app/api/routes/`: REST API endpoints for transformations, sources, Content DNA mutations, conflict resolutions, deliverable generation, and template cloning.
+- `app/models/`: Pydantic V2 models for `ContentDNA`, `Claim`, `Conflict`, `Deliverable`, and `Transformation`.
+- `app/services/`:
+  - `source_integrity.py`: Atomic factual claim extraction, deterministic predicate clustering, functional vs multi-valued attribute differentiation, and conflict sanitization.
+  - `output_generation.py`: Deterministic and LLM-grounded artifact synthesis.
+  - `template_cloner.py`: PDF, DOCX, and image layout blueprint extraction and grounded deliverable population.
+  - `document_chunker.py`: Semantic page-aware document partitioner with token budget constraints.
+  - `llm.py`: Multi-key Groq pooling, 8,000 TPM rate limiting, exponential backoff, and Ollama integration.
+
+---
+
+## 3. Docker Deployment
+
+```bash
 docker build -t content-transformation-backend .
+docker run --rm -p 8000:8000 --env-file .env content-transformation-backend
 ```
 
-Run it:
-
-```powershell
-docker run --rm -p 8000:8000 content-transformation-backend
-```
-
-To use another port inside the container, provide `PORT`:
-
-```powershell
-docker run --rm -e PORT=8080 -p 8080:8080 content-transformation-backend
-```
-
-## Tests
-
-Run the tests from `EV/backend` with:
-
-```powershell
-python -m pytest -q
-```
-
-The test suite uses a fake LLM provider and never makes a real Groq API call.
