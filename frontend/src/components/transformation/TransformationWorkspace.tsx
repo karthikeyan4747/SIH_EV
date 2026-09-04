@@ -11,6 +11,8 @@ import {
   Link,
   Mic,
   MonitorPlay,
+  Network,
+  Layers,
   PictureInPicture,
   RefreshCw,
   RotateCcw,
@@ -23,6 +25,7 @@ import { exportArtifact, type ExportFormat } from '../../lib/export/documentExpo
 
 import { NewSourceBatch } from '../ev/NewSourceBatch'
 import { ContentDNAStructure } from '../dna/ContentDNAStructure'
+import { SemanticLineageGraphVisualizer } from '../dna/SemanticLineageGraphVisualizer'
 import type { DNASectionKey } from '../dna/dnaData'
 import { DNAInspector } from '../dna/DNAInspector'
 import { getDNANodes } from '../dna/dnaData'
@@ -167,6 +170,9 @@ export function TransformationWorkspace({
   const [showRawClaims, setShowRawClaims] =
     useState(false)
 
+  const [graphViewMode, setGraphViewMode] =
+    useState<'lineage' | 'helix'>('lineage')
+
   const [selectedNode, setSelectedNode] =
     useState<DNASectionKey | null>(null)
 
@@ -196,7 +202,7 @@ export function TransformationWorkspace({
     if (transformation.outputs && transformation.outputs.length > 0) {
       setDnaChangedPrompt({
         open: true,
-        reason: 'Content DNA was modified in the DNA Inspector',
+        reason: 'Semantic Lineage Graph was modified in the Lineage Inspector',
       })
     }
   }
@@ -247,7 +253,7 @@ export function TransformationWorkspace({
             />
 
           <p>
-            Inputs become one isolated workspace. Content DNA
+            Inputs become one isolated workspace. Semantic Lineage Graph
             stays attached here.
           </p>
         </div>
@@ -317,7 +323,7 @@ export function TransformationWorkspace({
         <span>INPUTS</span>
         <span />
         <Sparkles size={14} />
-        <span>CONTENT DNA</span>
+        <span>SEMANTIC LINEAGE GRAPH</span>
         <span />
         <span className="future-flow">OUTPUTS</span>
       </div>
@@ -336,16 +342,16 @@ export function TransformationWorkspace({
               <span className="dna-mini-mark">*</span>
 
               <span>
-                <strong>CONTENT DNA</strong>
+                <strong>SEMANTIC LINEAGE GRAPH</strong>
                 <small>
-                  Canonical structured understanding for this
+                  Canonical structured knowledge graph & lineage for this
                   transformation
                 </small>
               </span>
             </span>
 
             <span className="dna-collapse-meta">
-              <Badge>{dimensions}/8 dimensions</Badge>
+              <Badge>{dimensions}/8 semantic nodes</Badge>
               <Badge>{elements} elements</Badge>
 
               {dnaOpen ? (
@@ -358,27 +364,137 @@ export function TransformationWorkspace({
 
           {dnaOpen && (
             <div className="embedded-dna-body">
-              <div className="compact-structure">
-                <ContentDNAStructure
-                  dna={dna}
-                  selectedNode={selectedNode}
-                  onSelectNode={selectNode}
-                />
+              {/* 1. Full-Width Top Bar across both columns */}
+              <div
+                className="embedded-dna-toolbar"
+                style={{
+                  gridColumn: '1 / -1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 20px',
+                  background: 'rgba(15, 23, 42, 0.75)',
+                  borderBottom: '1px solid var(--border)',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#64748b',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    Visual Mode:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setGraphViewMode('lineage')}
+                    style={{
+                      background:
+                        graphViewMode === 'lineage'
+                          ? 'rgba(56, 189, 248, 0.2)'
+                          : 'rgba(255, 255, 255, 0.04)',
+                      border: `1px solid ${
+                        graphViewMode === 'lineage'
+                          ? '#38bdf8'
+                          : 'rgba(255, 255, 255, 0.1)'
+                      }`,
+                      color: graphViewMode === 'lineage' ? '#38bdf8' : '#94a3b8',
+                      padding: '6px 14px',
+                      borderRadius: '7px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <Network size={14} />
+                    <span>⚡ Interactive Lineage Graph</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGraphViewMode('helix')}
+                    style={{
+                      background:
+                        graphViewMode === 'helix'
+                          ? 'rgba(56, 189, 248, 0.2)'
+                          : 'rgba(255, 255, 255, 0.04)',
+                      border: `1px solid ${
+                        graphViewMode === 'helix'
+                          ? '#38bdf8'
+                          : 'rgba(255, 255, 255, 0.1)'
+                      }`,
+                      color: graphViewMode === 'helix' ? '#38bdf8' : '#94a3b8',
+                      padding: '6px 14px',
+                      borderRadius: '7px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <Layers size={14} />
+                    <span>🧬 Helix Blueprint</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Badge>{dimensions}/8 semantic nodes</Badge>
+                  <Badge>{elements} elements</Badge>
+                </div>
               </div>
 
-              <DNAInspector
-                dna={dna}
-                selectedNode={selectedNode}
-                saveState={saveState}
-                onPatch={handlePatch}
-              />
+              {/* 2. Left Column: Visual Structure (Lineage Graph or Helix) */}
+              <div
+                className="compact-structure"
+                style={{
+                  minWidth: 0,
+                  borderRight: '1px solid var(--border)',
+                  overflow: 'visible',
+                }}
+              >
+                {graphViewMode === 'lineage' ? (
+                  <SemanticLineageGraphVisualizer
+                    transformation={transformation}
+                    selectedSectionKey={selectedNode}
+                    onSelectSection={selectNode}
+                  />
+                ) : (
+                  <ContentDNAStructure
+                    dna={dna}
+                    selectedNode={selectedNode}
+                    onSelectNode={selectNode}
+                  />
+                )}
+              </div>
+
+              {/* 3. Right Column: Data Inspector */}
+              <div className="compact-inspector" style={{ minWidth: 0 }}>
+                <DNAInspector
+                  dna={dna}
+                  selectedNode={selectedNode}
+                  saveState={saveState}
+                  onPatch={handlePatch}
+                />
+              </div>
             </div>
           )}
         </Card>
       ) : busy ? (
         <Card className="embedded-dna">
           <div className="workspace-panel-heading compact-heading" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <span className="panel-kicker"><Sparkles size={14} /> EXTRACTING CONTENT DNA...</span>
+            <span className="panel-kicker"><Sparkles size={14} /> CONSTRUCTING SEMANTIC LINEAGE GRAPH...</span>
           </div>
           <DNASkeleton />
         </Card>
@@ -387,11 +503,11 @@ export function TransformationWorkspace({
           <div className="dna-mini-mark">*</div>
 
           <div>
-            <strong>CONTENT DNA</strong>
+            <strong>SEMANTIC LINEAGE GRAPH</strong>
 
             <p>
-              Add source material to build the structured
-              understanding for this transformation.
+              Add source material to construct the semantic lineage
+              graph for this transformation.
             </p>
           </div>
 
@@ -1006,8 +1122,8 @@ function WorkspaceOutputs({
             </span>
 
             <p>
-              Generate and export artifacts from the current
-              Content DNA version.
+              Generate and export verified artifacts from the current
+              Semantic Lineage Graph.
             </p>
           </div>
 
@@ -1052,7 +1168,7 @@ function WorkspaceOutputs({
               </div>
               <div>
                 <strong style={{ display: 'block', fontSize: '13px', color: '#f8fafc', marginBottom: '2px' }}>
-                  Content DNA Updated — Synchronize Outputs?
+                  Semantic Lineage Graph Updated — Synchronize Outputs?
                 </strong>
                 <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8', lineHeight: '1.4' }}>
                   {dnaChangedPrompt.reason}. You have <strong>{transformation.outputs.length}</strong> generated output{transformation.outputs.length === 1 ? '' : 's'}. Would you like to update your outputs with the resolved facts?

@@ -140,10 +140,129 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
     ])
   }
 
+  function loadDemoPreset(preset: 'conflicts' | 'ev_policy' | 'leadership') {
+    setMode('text')
+    if (preset === 'conflicts') {
+      setDrafts([
+        {
+          id: 1,
+          title: 'Nexar Dynamics Q3 Report (Source 1)',
+          text: 'Nexar Dynamics was founded in Bengaluru in 2022. In Q3 2026, the company generated $18 million in revenue and expanded its engineering team to 450 employees. The next-generation battery platform is scheduled for commercial rollout in March 2027.',
+        },
+        {
+          id: 2,
+          title: 'Nexar Dynamics Market Overview (Source 2)',
+          text: 'Nexar Dynamics is a Chennai-based clean tech firm incorporated in 2022. According to internal reports, the firm recorded $10 million in revenue with a workforce of 250 employees. Commercial launch of the battery platform is planned for November 2027.',
+        },
+      ])
+    } else if (preset === 'ev_policy') {
+      setDrafts([
+        {
+          id: 1,
+          title: 'National Clean Mobility Mission 2030',
+          text: "India's National Clean Mobility Mission targets 30% EV adoption by 2030 across all vehicle categories. The central government has allocated 10,900 Crore INR under the PM E-DRIVE initiative. Over 8,500 fast DC charging stations are currently operational across national highway corridors.",
+        },
+        {
+          id: 2,
+          title: 'EV Charging Infrastructure Assessment',
+          text: "The Ministry of Heavy Industries report highlights 8,500 active high-speed charging hubs deployed across tier-1 logistics arteries. Grid readiness evaluations confirm capacity expansion to support 15,000 public chargers by 2028 under the 10,900 Crore INR subsidy framework.",
+        },
+      ])
+    } else {
+      setDrafts([
+        {
+          id: 1,
+          title: 'Executive Biography Source 1',
+          text: "Karthikeyan founded the EV intelligence platform. Vani is Karthikeyan's mom. The initiative was declared the Overall Winner in SIH 2026.",
+        },
+        {
+          id: 2,
+          title: 'Executive Biography Source 2',
+          text: "Karthikeyan leads the EV research group. Bala is Karthikeyan's mom. The initiative was shortlisted among top teams in SIH 2026.",
+        },
+      ])
+    }
+  }
+
   return <section className="new-source page-enter">
     <div className="eyebrow"><span className="eyebrow-line" /> SOURCE INTAKE <span className="eyebrow-line" /></div>
     <h1>Start with a source.</h1>
-    <p className="lead">Give EV one source or a batch of materials. Supported inputs become one combined Content DNA.</p>
+    <p className="lead">Give EV one source or a batch of materials. Supported inputs become one combined Semantic Lineage Graph.</p>
+
+    {/* One-Click Demo Presets Bar */}
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      background: 'rgba(15, 23, 42, 0.65)',
+      border: '1px solid rgba(56, 189, 248, 0.25)',
+      borderRadius: '10px',
+      padding: '10px 16px',
+      marginBottom: '18px',
+      gap: '12px',
+      flexWrap: 'wrap',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Sparkles size={15} color="#38bdf8" />
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          ⚡ Quick Demo Scenarios:
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => loadDemoPreset('conflicts')}
+          style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            color: '#fca5a5',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          🚨 Discrepancy & Revenue Conflict
+        </button>
+        <button
+          type="button"
+          onClick={() => loadDemoPreset('ev_policy')}
+          style={{
+            background: 'rgba(16, 185, 129, 0.15)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            color: '#86efac',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          🔋 EV Policy & Corroboration
+        </button>
+        <button
+          type="button"
+          onClick={() => loadDemoPreset('leadership')}
+          style={{
+            background: 'rgba(56, 189, 248, 0.15)',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            color: '#7dd3fc',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          👥 Relational & SIH Dispute
+        </button>
+      </div>
+    </div>
+
     {fileError && (
       <div className="error-banner" role="alert" style={{ marginBottom: '1rem' }}>
         <span>{fileError}</span>
@@ -515,12 +634,12 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
        )}
        {!modes.find((item) => item.key === mode)?.supported && <div className="unsupported-source-panel">
          <strong>{modes.find((item) => item.key === mode)?.label} processing is not available</strong>
-         <p>EV can record this source in the transformation history, but this backend cannot extract usable Content DNA from it yet.</p>
+         <p>EV can record this source in the transformation history, but this backend cannot construct a usable Semantic Lineage Graph from it yet.</p>
          <label>Source title <DragInput as="input" input={{ value: unsupportedTitle, onChange: (event) => setUnsupportedTitle(event.target.value), placeholder: `${mode.toUpperCase()} source` }} /></label>
          <Button variant="ghost" loading={busy} loadingLabel="Recording..." onClick={() => { onUnsupported(mode as SourceType, unsupportedTitle || `${mode.toUpperCase()} source`, 'Adapter unavailable in current backend'); setUnsupportedTitle('') }}>Record unavailable source</Button>
        </div>}
     </div>
-    <div className="pipeline"><span><b>01</b> Source</span><ArrowRight size={15} /><span><b>02</b> Understand</span><ArrowRight size={15} /><span className="pipeline-current"><b>03</b> Review DNA</span><ArrowRight size={15} /><span className="pipeline-muted">04 Outputs</span></div>
+    <div className="pipeline"><span><b>01</b> Source</span><ArrowRight size={15} /><span><b>02</b> Semantic Graph</span><ArrowRight size={15} /><span className="pipeline-current"><b>03</b> Lineage Verification</span><ArrowRight size={15} /><span className="pipeline-muted">04 Outputs</span></div>
   </section>
 }
 

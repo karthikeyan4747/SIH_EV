@@ -202,7 +202,7 @@ function App() {
       }
       replaceTransformation(updated)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Content DNA generation failed.')
+      setError(cause instanceof Error ? cause.message : 'Semantic Lineage Graph construction failed.')
     } finally {
       setBusy(false)
     }

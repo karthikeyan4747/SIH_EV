@@ -1,0 +1,465 @@
+/* Semantic Lineage Graph Visualizer - Ultra-Sleek Theme */
+
+.lineage-graph-container {
+  position: relative;
+  width: 100%;
+  min-height: 560px;
+  background: radial-gradient(circle at 50% 30%, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 1));
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.7), 0 12px 36px rgba(0, 0, 0, 0.5);
+  font-family: inherit;
+  user-select: none;
+}
+
+.lineage-graph-container:fullscreen,
+.lineage-graph-container:-webkit-full-screen,
+.lineage-graph-container.fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 999999 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  margin: 0 !important;
+  background: radial-gradient(circle at 50% 30%, rgba(15, 23, 42, 1), rgba(2, 6, 23, 1)) !important;
+}
+
+.compact-structure .lineage-graph-container:not(.fullscreen):not(:fullscreen) {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 590px;
+  height: 100%;
+}
+
+/* Scroll / Zoom hint banners */
+.lineage-zoom-hint-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 30;
+  pointer-events: none;
+  animation: hint-pop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.lineage-zoom-hint-banner.active-mode {
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #86efac;
+  background: rgba(6, 78, 59, 0.6);
+}
+
+@keyframes hint-pop-in {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Toolbar */
+.lineage-graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 10;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lineage-graph-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+}
+
+.lineage-graph-title .pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #38bdf8;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #38bdf8;
+  animation: lineage-pulse 2s infinite ease-in-out;
+}
+
+.lineage-stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.lineage-dispute-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  animation: dispute-glow 2s infinite ease-in-out;
+}
+
+@keyframes dispute-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.5); }
+}
+
+.lineage-verified-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #86efac;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+@keyframes lineage-pulse {
+  0%, 100% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+.lineage-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lineage-filter-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lineage-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.lineage-filter-btn.active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+.lineage-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lineage-ctrl-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.lineage-ctrl-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+}
+
+.lineage-ctrl-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 3px;
+}
+
+/* Canvas Area */
+.lineage-canvas-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.lineage-canvas-viewport.dragging,
+.lineage-canvas-viewport:active {
+  cursor: grabbing !important;
+}
+
+.lineage-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Layer Labels */
+.lineage-layer-header {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: #94a3b8;
+}
+
+/* Grid & Guide Lines */
+.lineage-grid-line {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-dasharray: 4 4;
+}
+
+/* Edges / Lineage Connections */
+.lineage-edge {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.2);
+  stroke-width: 1.4;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease;
+}
+
+.lineage-edge.highlighted {
+  stroke: #38bdf8;
+  stroke-width: 2.4;
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.7));
+}
+
+.lineage-edge.conflict-edge {
+  stroke: rgba(239, 68, 68, 0.35);
+}
+
+.lineage-edge.conflict-edge.highlighted {
+  stroke: #ef4444;
+  stroke-width: 2.6;
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.85));
+}
+
+.lineage-edge.dimmed {
+  opacity: 0.06;
+  stroke-width: 1;
+}
+
+/* Nodes */
+.lineage-node-group {
+  cursor: pointer;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: bounding-box;
+}
+
+.lineage-node-group * {
+  pointer-events: none;
+}
+
+.lineage-node-group.dimmed {
+  opacity: 0.18;
+}
+
+.lineage-node-group.highlighted {
+  opacity: 1;
+}
+
+.lineage-node-bg {
+  pointer-events: all;
+  rx: 9px;
+  ry: 9px;
+  stroke-width: 1.2;
+  transition: stroke 0.18s ease, stroke-width 0.18s ease, fill 0.18s ease, filter 0.18s ease;
+}
+
+/* Source Nodes */
+.node-source .lineage-node-bg {
+  fill: rgba(30, 41, 59, 0.95);
+  stroke: rgba(56, 189, 248, 0.4);
+}
+.node-source:hover .lineage-node-bg,
+.node-source.highlighted .lineage-node-bg,
+.node-source.selected .lineage-node-bg {
+  fill: rgba(30, 41, 59, 1);
+  stroke: #38bdf8;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
+}
+
+/* Semantic Graph Nodes */
+.node-semantic .lineage-node-bg {
+  fill: rgba(15, 23, 42, 0.96);
+  stroke: rgba(129, 140, 248, 0.45);
+}
+.node-semantic:hover .lineage-node-bg,
+.node-semantic.highlighted .lineage-node-bg,
+.node-semantic.selected .lineage-node-bg {
+  stroke: #818cf8;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 10px rgba(129, 140, 248, 0.5));
+}
+
+/* Claim / Corroborated Nodes */
+.node-claim .lineage-node-bg {
+  fill: rgba(6, 78, 59, 0.45);
+  stroke: rgba(52, 211, 153, 0.55);
+}
+.node-claim:hover .lineage-node-bg,
+.node-claim.highlighted .lineage-node-bg,
+.node-claim.selected .lineage-node-bg {
+  stroke: #34d399;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.6));
+}
+
+/* Conflict Nodes */
+.node-conflict .lineage-node-bg {
+  fill: rgba(127, 29, 29, 0.55);
+  stroke: rgba(248, 113, 113, 0.75);
+}
+.node-conflict:hover .lineage-node-bg,
+.node-conflict.highlighted .lineage-node-bg,
+.node-conflict.selected .lineage-node-bg {
+  stroke: #f87171;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.85));
+}
+
+/* Output Nodes */
+.node-output .lineage-node-bg {
+  fill: rgba(19, 78, 74, 0.55);
+  stroke: rgba(45, 212, 191, 0.65);
+}
+.node-output:hover .lineage-node-bg,
+.node-output.highlighted .lineage-node-bg,
+.node-output.selected .lineage-node-bg {
+  stroke: #2dd4bf;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 10px rgba(45, 212, 191, 0.6));
+}
+
+/* Active Trace Breadcrumb in Header */
+.lineage-active-trace-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #bae6fd;
+  font-size: 10.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  animation: trace-fade-in 0.2s ease-out;
+}
+
+.lineage-active-trace-pill .trace-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+.lineage-active-trace-pill strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+@keyframes trace-fade-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Node Text Styles */
+.lineage-node-title {
+  font-size: 11px;
+  font-weight: 600;
+  fill: #f8fafc;
+  pointer-events: none;
+}
+
+.lineage-node-sub {
+  font-size: 9.5px;
+  fill: #94a3b8;
+  pointer-events: none;
+}
+
+.lineage-node-badge {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+
+
+.lineage-legend {
+  position: absolute;
+  bottom: 14px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10.5px;
+  color: #94a3b8;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.lineage-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lineage-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}

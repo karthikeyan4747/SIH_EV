@@ -93,7 +93,7 @@ export function ContentDNAWorkspace({
           <div className="eyebrow eyebrow-left">
             <span className="eyebrow-dot" />
 
-            CONTENT DNA
+            SEMANTIC LINEAGE GRAPH
 
             <Badge>
               CANONICAL
@@ -105,14 +105,14 @@ export function ContentDNAWorkspace({
           </h1>
 
           <p>
-            The structured intelligence extracted
+            The structured semantic graph and lineage extracted
             from this source.
           </p>
 
           <div className="dna-metrics">
             <span>
               <b>{populated} / 8</b>{' '}
-              dimensions populated
+              semantic nodes
             </span>
 
             <span>
@@ -152,7 +152,7 @@ export function ContentDNAWorkspace({
           <div
             className="view-switcher"
             role="tablist"
-            aria-label="Content DNA view"
+            aria-label="Semantic Lineage Graph view"
           >
             <button
               className={

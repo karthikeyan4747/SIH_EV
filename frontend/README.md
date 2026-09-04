@@ -1,6 +1,6 @@
 # EV Frontend Workspace
 
-EV is a professional content transformation workspace. This frontend currently supports source intake, Content DNA review, and section-level editing. Output generation, publishing, voice commands, and authentication are intentionally not implemented.
+EV is a professional content transformation workspace. This frontend currently supports source intake, Semantic Lineage Graph construction & review, Source Integrity verification, and section-level editing. Output generation and verified artifact export are fully supported.
 
 ## Run locally
 
@@ -26,13 +26,15 @@ uvicorn app.main:app --reload
 
 ## Current workflows
 
-- Paste one or multiple text sources and generate Content DNA for each.
-- Select multiple TXT or PDF files and generate Content DNA for each.
-- Review the immutable source beside structured Content DNA.
-- Edit sections using partial `PATCH` requests.
+- Paste one or multiple text sources and construct the Semantic Lineage Graph.
+- Select multiple TXT or PDF files and construct the Semantic Lineage Graph.
+- Review the immutable source beside structured Semantic Lineage Graph nodes.
+- Inspect and resolve factual discrepancies via Source Integrity.
+- Edit semantic sections using partial `PATCH` requests.
+- Synchronize outputs across graph revisions.
 - Retry or dismiss network and backend errors without exposing tracebacks.
 
-Use the sidebar collapse control on desktop or the menu button on smaller screens. Future navigation is visibly disabled and does not perform fake actions.
+Use the sidebar collapse control on desktop or the menu button on smaller screens.
 
 ## Validation
 
@@ -41,4 +43,4 @@ npm run lint
 npm run build
 ```
 
-For an end-to-end check, start both servers, paste a source in the intake screen, generate DNA, and edit a section. Confirm the top-right state changes through `Saving...` to `Synced`, then refresh the source through the backend to verify persistence.
+For an end-to-end check, start both servers, paste a source in the intake screen, generate the Semantic Lineage Graph, and edit a section. Confirm the top-right state changes through `Saving...` to `Synced`, then refresh the source through the backend to verify persistence.

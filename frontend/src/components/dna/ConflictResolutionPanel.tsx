@@ -365,7 +365,7 @@ export function ConflictResolutionPanel({
                     </button>
                   </div>
                   <div style={{ fontSize: '11px', color: '#86efac', opacity: 0.9, marginTop: '8px' }}>
-                    ✓ Stale conflicting claims removed. Authoritative fact updated in Content DNA.
+                    ✓ Stale conflicting claims removed. Authoritative fact updated in Semantic Lineage Graph.
                   </div>
                 </div>
               ) : (
