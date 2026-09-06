@@ -13,11 +13,18 @@ from app.services.structure_extraction import StructureExtractionService
 from app.services.storage import LocalJSONStorage, LocalTransformationStorage
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+origins = settings.get_allowed_origins()
+allow_origins = ["*"] if "*" in origins else origins
+allow_regex = r"^https:\/\/.*\.vercel\.app$" if "*" not in allow_origins else None
+
 app.add_middleware(
-	CORSMiddleware,
-	allow_origins=[origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()],
-	allow_methods=["*"],
-	allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_origin_regex=allow_regex,
+    allow_credentials=True if "*" not in allow_origins else False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 app.include_router(health_router)
 app.include_router(model_mode_router)

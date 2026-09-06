@@ -76,15 +76,20 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5178,http://localhost:5178,"
         "http://127.0.0.1:5179,http://localhost:5179,"
         "http://localhost:5500,"
-        "https://ev-sih.vercel.app/"
-        "http://localhost:5500"
+        "https://ev-sih.vercel.app"
     )
 
-    ffmpeg_path: str = (
-        r"C:\Users\Karthikeyan K\AppData\Local\Microsoft\WinGet"
-        r"\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
-        r"\ffmpeg-9.0-full_build\bin\ffmpeg.exe"
-    )
+    def get_allowed_origins(self) -> list[str]:
+        origins: list[str] = []
+        for origin in self.allowed_origins.replace("\n", ",").replace(";", ",").split(","):
+            cleaned = origin.strip().rstrip("/")
+            if cleaned and cleaned not in origins:
+                origins.append(cleaned)
+        if not origins:
+            return ["*"]
+        return origins
+
+    ffmpeg_path: str = "ffmpeg"
 
     model_config = SettingsConfigDict(
         env_file=".env",
