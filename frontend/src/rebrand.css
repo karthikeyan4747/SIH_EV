@@ -2882,26 +2882,38 @@ body {
 }
 
 .delete-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000000;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(19, 31, 43, 0.42);
-  backdrop-filter: blur(4px);
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 1000000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: clamp(16px, 3.5vh, 32px) clamp(14px, 3vw, 24px) !important;
+  background: rgba(4, 8, 14, 0.78) !important;
+  backdrop-filter: blur(8px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  box-sizing: border-box !important;
 }
 
 .delete-modal {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  width: min(360px, calc(100vw - 40px));
-  padding: 18px;
-  background: #ffffff;
-  border: 1px solid #d8e3ec;
-  border-radius: 12px;
-  box-shadow: 0 18px 44px rgba(28, 45, 68, 0.2);
+  position: relative !important;
+  margin: auto !important;
+  display: grid !important;
+  grid-template-columns: auto 1fr !important;
+  gap: 12px !important;
+  width: min(380px, calc(100vw - 32px)) !important;
+  padding: 20px !important;
+  background: #ffffff !important;
+  border: 1px solid #d8e3ec !important;
+  border-radius: 12px !important;
+  box-shadow: 0 24px 60px rgba(28, 45, 68, 0.4) !important;
 }
 
 .delete-modal-icon {
@@ -4730,4 +4742,114 @@ body {
   .resolve-button {
     width: 100%;
   }
+}
+
+/* --------------------------------------------------------------------------
+   CRITICAL: Overrides for Dark Mode to eliminate grey/black invisible text
+   -------------------------------------------------------------------------- */
+.theme-dark,
+[data-theme='dark'],
+.app-shell.theme-dark {
+  --text: #f8fafc !important;
+  --muted: #94a3b8 !important;
+  --dim: #cbd5e1 !important;
+  --nav-ink: #f8fafc !important;
+  --nav-muted: #94a3b8 !important;
+}
+
+.theme-dark .integrity-detail-row strong,
+[data-theme='dark'] .integrity-detail-row strong,
+.app-shell.theme-dark .integrity-detail-row strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .integrity-evidence-heading,
+[data-theme='dark'] .integrity-evidence-heading,
+.app-shell.theme-dark .integrity-evidence-heading {
+  color: #f8fafc !important;
+}
+
+.theme-dark .integrity-evidence-source strong,
+[data-theme='dark'] .integrity-evidence-source strong,
+.app-shell.theme-dark .integrity-evidence-source strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .integrity-summary strong,
+[data-theme='dark'] .integrity-summary strong,
+.app-shell.theme-dark .integrity-summary strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .integrity-claim-main strong,
+[data-theme='dark'] .integrity-claim-main strong,
+.app-shell.theme-dark .integrity-claim-main strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .integrity-claim-main span,
+[data-theme='dark'] .integrity-claim-main span,
+.app-shell.theme-dark .integrity-claim-main span {
+  color: #cbd5e1 !important;
+}
+
+.theme-dark .source-verification-heading h3,
+.theme-dark .source-verification-heading strong,
+[data-theme='dark'] .source-verification-heading h3,
+[data-theme='dark'] .source-verification-heading strong,
+.app-shell.theme-dark .source-verification-heading h3,
+.app-shell.theme-dark .source-verification-heading strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .source-verification-heading span,
+[data-theme='dark'] .source-verification-heading span,
+.app-shell.theme-dark .source-verification-heading span {
+  color: #cbd5e1 !important;
+}
+
+.theme-dark .outputs-panel .artifact-card > div:first-child strong,
+[data-theme='dark'] .outputs-panel .artifact-card > div:first-child strong,
+.app-shell.theme-dark .outputs-panel .artifact-card > div:first-child strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .outputs-panel .artifact-card pre,
+[data-theme='dark'] .outputs-panel .artifact-card pre,
+.app-shell.theme-dark .outputs-panel .artifact-card pre {
+  color: #f1f5f9 !important;
+  background: #0b1018 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.theme-dark .inputs-panel > .new-source .text-form input,
+.theme-dark .inputs-panel > .new-source .text-form textarea,
+[data-theme='dark'] .inputs-panel > .new-source .text-form input,
+[data-theme='dark'] .inputs-panel > .new-source .text-form textarea,
+.app-shell.theme-dark .inputs-panel > .new-source .text-form input,
+.app-shell.theme-dark .inputs-panel > .new-source .text-form textarea {
+  color: #f8fafc !important;
+  background: #0b1018 !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.theme-dark .unsupported-source-panel strong,
+[data-theme='dark'] .unsupported-source-panel strong {
+  color: #f8fafc !important;
+}
+
+.theme-dark .unsupported-source-panel p,
+[data-theme='dark'] .unsupported-source-panel p {
+  color: #cbd5e1 !important;
+}
+
+.theme-dark .unsupported-source-panel label,
+[data-theme='dark'] .unsupported-source-panel label {
+  color: #94a3b8 !important;
+}
+
+.theme-dark .unsupported-source-panel input,
+[data-theme='dark'] .unsupported-source-panel input {
+  color: #f8fafc !important;
+  background: #0b1018 !important;
 }

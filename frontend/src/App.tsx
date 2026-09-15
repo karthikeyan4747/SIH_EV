@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, FileText, Home, LogOut, Plus, Settings, SlidersHorizontal, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ChevronDown, FileText, Home, LogOut, Moon, Plus, Settings, SlidersHorizontal, Sparkles, Sun, Trash2, TriangleAlert, X } from 'lucide-react'
 import {
   TransformationWorkspace,
   type GenerationConfig,
@@ -34,7 +35,7 @@ import './rebrand.css'
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 type ViewState = 'workspace' | 'settings'
-type ThemeMode = 'light' | 'dark' | 'aesthetic'
+type ThemeMode = 'light' | 'dark'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => window.localStorage.getItem('ev-authenticated') !== 'false')
@@ -59,10 +60,10 @@ function App() {
   const [homeMenuOpen, setHomeMenuOpen] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const savedMode = window.localStorage.getItem('ev-theme-mode')
-    if (savedMode === 'light' || savedMode === 'dark' || savedMode === 'aesthetic') {
+    if (savedMode === 'light' || savedMode === 'dark') {
       return savedMode
     }
-    return 'aesthetic'
+    return 'dark'
   })
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [busy, setBusy] = useState(false)
@@ -377,17 +378,165 @@ function App() {
 
   if (!isAuthenticated) return <LoginPage onLogin={login} themeMode={themeMode} />
 
-  return <div className={`app-shell theme-${themeMode}`}><Sidebar collapsed={collapsed} onCollapsedChange={setCollapsed} onHome={goHome} onNew={() => void newTransformation()} onSettings={openSettings} onLogout={logout} mobileOpen={mobileNav} onClose={() => setMobileNav(false)} active={active} homeOpen={homeMenuOpen} settingsActive={view === 'settings'} transformations={transformations} onSelect={(id) => void selectTransformation(id)} onDelete={setDeleteTargetId} /><main className="main-shell"><header className="topbar"><div className="crumbs"><span>EV</span><span className="crumb-slash">/</span><span>{view === 'settings' ? 'Settings' : 'Transformations'}</span><span className="crumb-slash">/</span><strong>{pageTitle}</strong></div><div className="topbar-actions"><span className="sync-state"><span className="sync-icon"><span /></span>{saveState === 'saving' ? 'Saving...' : saveState === 'dirty' ? 'Unsaved changes' : saveState === 'error' ? 'Save failed' : 'Synced'}</span><ModelTelemetryBadge /><Button variant="ghost" aria-label="Settings" onClick={openSettings}><Settings size={17} /></Button></div></header>{error && <div className="error-banner" role="alert"><TriangleAlert size={17} /><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}{view === 'settings' ? <SettingsDashboard transformationCount={transformations.length} activeTitle={active?.title} themeMode={themeMode} onThemeModeChange={changeThemeMode} /> : active ? <TransformationWorkspace key={active.id} transformation={active} busy={busy} saveState={saveState} onTexts={createTexts} onFiles={createFiles} onUrl={createUrl} onUnsupported={createUnsupported} onPatch={savePatch} onRename={rename} onRemoveSource={(id) => void removeSource(id)} onGenerateOutputs={(types, generationConfig) =>
-  void generateOutputs(types, generationConfig)} onRestoreVersion={(version) => void restoreVersion(version)} onConflictResolved={replaceTransformation} onDeleteOutput={(outputId) => void removeOutput(outputId)} /> : <EmptyHome onNew={() => void newTransformation()} busy={busy} />}</main>{deleteTargetId && <DeleteConfirmation target={transformations.find((item) => item.id === deleteTargetId)} busy={busy} onCancel={() => setDeleteTargetId(null)} onConfirm={() => void removeTransformation(deleteTargetId)} />}</div>
+  return (
+    <div className={`app-shell theme-${themeMode}`} data-theme={themeMode}>
+      <Sidebar
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+        onHome={goHome}
+        onNew={() => void newTransformation()}
+        onSettings={openSettings}
+        onLogout={logout}
+        mobileOpen={mobileNav}
+        onClose={() => setMobileNav(false)}
+        active={active}
+        homeOpen={homeMenuOpen}
+        settingsActive={view === 'settings'}
+        transformations={transformations}
+        onSelect={(id) => void selectTransformation(id)}
+        onDelete={setDeleteTargetId}
+      />
+      <main className="main-shell">
+        <header className="topbar">
+          <div className="crumbs">
+            <span>EV</span>
+            <span className="crumb-slash">/</span>
+            <span>{view === 'settings' ? 'Settings' : 'Transformations'}</span>
+            <span className="crumb-slash">/</span>
+            <strong>{pageTitle}</strong>
+          </div>
+          <div className="topbar-actions">
+            <span className="sync-state">
+              <span className="sync-icon"><span /></span>
+              {saveState === 'saving' ? 'Saving...' : saveState === 'dirty' ? 'Unsaved changes' : saveState === 'error' ? 'Save failed' : 'Synced'}
+            </span>
+            <ModelTelemetryBadge />
+            <Button
+              variant="ghost"
+              aria-label="Toggle Theme"
+              onClick={() => changeThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+              title={`Switch to ${themeMode === 'dark' ? 'Light' : 'Dark'} mode`}
+            >
+              {themeMode === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            </Button>
+            <Button variant="ghost" aria-label="Settings" onClick={openSettings}>
+              <Settings size={17} />
+            </Button>
+          </div>
+        </header>
+        {error && (
+          <div className="error-banner" role="alert">
+            <TriangleAlert size={17} />
+            <span>{error}</span>
+            <button aria-label="Dismiss error" onClick={() => setError('')}>
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        {view === 'settings' ? (
+          <SettingsDashboard
+            transformationCount={transformations.length}
+            activeTitle={active?.title}
+            themeMode={themeMode}
+            onThemeModeChange={changeThemeMode}
+          />
+        ) : active ? (
+          <TransformationWorkspace
+            key={active.id}
+            transformation={active}
+            busy={busy}
+            saveState={saveState}
+            themeMode={themeMode}
+            onThemeToggle={() => changeThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+            onTexts={createTexts}
+            onFiles={createFiles}
+            onUrl={(url, title) => createUrl(url, title || '')}
+            onUnsupported={(sourceType, title, note) => createUnsupported(sourceType, title, note || '')}
+            onPatch={savePatch}
+            onRename={rename}
+            onRemoveSource={(id) => removeSource(id)}
+            onGenerateOutputs={(types, generationConfig) => void generateOutputs(types, generationConfig)}
+            onRestoreVersion={(version) => void restoreVersion(version)}
+            onConflictResolved={replaceTransformation}
+            onDeleteOutput={(outputId) => void removeOutput(outputId)}
+          />
+        ) : (
+          <EmptyHome onNew={() => void newTransformation()} busy={busy} />
+        )}
+      </main>
+      {deleteTargetId && (
+        <DeleteConfirmation
+          target={transformations.find((item) => item.id === deleteTargetId)}
+          busy={busy}
+          onCancel={() => setDeleteTargetId(null)}
+          onConfirm={() => void removeTransformation(deleteTargetId)}
+        />
+      )}
+    </div>
+  )
 }
 
 function DeleteConfirmation({ target, busy, onCancel, onConfirm }: { target?: Transformation; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
   if (!target) return null
 
-  return <div className="delete-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel() }}><section className="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-transformation-title"><div className="delete-modal-icon"><Trash2 size={18} /></div><div className="delete-modal-copy"><h2 id="delete-transformation-title">Delete transformation?</h2><p>Are you sure you want to delete <strong>{target.title}</strong>?</p></div><div className="delete-modal-actions"><button type="button" className="delete-cancel-button" onClick={onCancel} disabled={busy}>Cancel</button><button type="button" className="delete-confirm-button" data-loading={busy ? 'true' : undefined} aria-busy={busy || undefined} onClick={onConfirm} disabled={busy}><span className="delete-spinner" aria-hidden="true" />{busy ? 'Deleting...' : 'Delete'}</button></div></section></div>
+  return createPortal(
+    <div className="delete-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel() }}>
+      <section className="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-transformation-title">
+        <div className="delete-modal-icon"><Trash2 size={18} /></div>
+        <div className="delete-modal-copy">
+          <h2 id="delete-transformation-title">Delete transformation?</h2>
+          <p>Are you sure you want to delete <strong>{target.title}</strong>?</p>
+        </div>
+        <div className="delete-modal-actions">
+          <button type="button" className="delete-cancel-button" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="button" className="delete-confirm-button" data-loading={busy ? 'true' : undefined} aria-busy={busy || undefined} onClick={onConfirm} disabled={busy}>
+            <span className="delete-spinner" aria-hidden="true" />{busy ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body
+  )
 }
 
-function SettingsDashboard({ transformationCount, activeTitle, themeMode, onThemeModeChange }: { transformationCount: number; activeTitle?: string; themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void }) { return <section className="home-dashboard settings-dashboard page-enter"><div className="home-header"><div className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> SETTINGS</div><h1>Workspace settings</h1><p>Review the current workspace status and local configuration.</p></div><section className="home-module settings-module"><div className="home-module-icon"><SlidersHorizontal size={22} /></div><div><span className="home-module-kicker">SETTINGS</span><h2>Workspace settings</h2><p>Current workspace information for this local project.</p></div><div className="mode-setting"><span>Mode</span><div className="mode-options" role="group" aria-label="Display mode">{(['light', 'dark', 'aesthetic'] as const).map((mode) => <button key={mode} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} onClick={() => onThemeModeChange(mode)}>{mode === 'light' ? 'Light Mode' : mode === 'dark' ? 'Dark Mode' : 'Aesthetic Mode'}</button>)}</div></div><div className="settings-list"><div><span>Transformations</span><strong>{transformationCount}</strong></div><div><span>Active workspace</span><strong>{activeTitle || 'None selected'}</strong></div></div></section></section> }
+function SettingsDashboard({ transformationCount, activeTitle, themeMode, onThemeModeChange }: { transformationCount: number; activeTitle?: string; themeMode: ThemeMode; onThemeModeChange: (mode: ThemeMode) => void }) {
+  return (
+    <section className="home-dashboard settings-dashboard page-enter">
+      <div className="home-header">
+        <div className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> SETTINGS</div>
+        <h1>Workspace settings</h1>
+        <p>Review the current workspace status and local configuration.</p>
+      </div>
+      <section className="home-module settings-module">
+        <div className="home-module-icon"><SlidersHorizontal size={22} /></div>
+        <div>
+          <span className="home-module-kicker">SETTINGS</span>
+          <h2>Workspace settings</h2>
+          <p>Current workspace information for this local project.</p>
+        </div>
+        <div className="mode-setting">
+          <span>Theme Mode</span>
+          <div className="mode-options" role="group" aria-label="Display mode">
+            {(['dark', 'light'] as const).map((mode) => (
+              <button
+                key={mode}
+                className={themeMode === mode ? 'active' : ''}
+                aria-pressed={themeMode === mode}
+                onClick={() => onThemeModeChange(mode)}
+              >
+                {mode === 'dark' ? 'Dark Mode (Obsidian)' : 'Light Mode (Snow)'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="settings-list">
+          <div><span>Transformations</span><strong>{transformationCount}</strong></div>
+          <div><span>Active workspace</span><strong>{activeTitle || 'None selected'}</strong></div>
+        </div>
+      </section>
+    </section>
+  )
+}
 
 function EmptyHome({ onNew, busy }: { onNew: () => void; busy: boolean }) { return <section className="empty-home page-enter"><img className="empty-home-mark" src="/ev-logo.svg" alt="EV workspace" /><div className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> TRANSFORMATION WORKSPACE</div><h1>Make meaning from the material.</h1><p>Open a recent transformation or start a clean workspace for a new body of source material.</p><Button variant="primary" onClick={onNew} loading={busy} loadingLabel="Creating..."><Plus size={16} />New Transformation</Button></section> }
 

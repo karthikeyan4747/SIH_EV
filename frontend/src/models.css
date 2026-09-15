@@ -106,8 +106,11 @@
   position: fixed;
   top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: rgba(4, 8, 13, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -115,16 +118,16 @@
   align-items: center;
   justify-content: center;
   z-index: 99999;
-  padding: 24px;
-  overflow: hidden;
+  padding: clamp(16px, 3.5vh, 32px) clamp(14px, 3vw, 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-sizing: border-box;
 }
 
 /* Modal Card */
 .model-modal-card {
-  width: min(920px, 95vw);
-  height: min(760px, 86vh);
-  max-height: 86vh;
+  width: min(920px, calc(100vw - 32px));
+  max-height: min(86vh, 86dvh);
   background: #0d1318;
   border: 1px solid #253944;
   border-radius: 12px;

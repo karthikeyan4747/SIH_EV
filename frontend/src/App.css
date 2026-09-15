@@ -101,46 +101,35 @@
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-
   width: 100vw !important;
   height: 100vh !important;
-
+  height: 100dvh !important;
   z-index: 999999 !important;
-
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-
-  padding: 24px !important;
+  padding: clamp(16px, 3.5vh, 32px) !important;
   margin: 0 !important;
   box-sizing: border-box !important;
-
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(7px);
+  background: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(8px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
 }
 
 .workflow-modal {
   position: relative !important;
-
-  width: min(440px, calc(100vw - 48px)) !important;
-  max-width: 440px !important;
-
-  margin: 0 !important;
-
+  width: min(460px, calc(100vw - 32px)) !important;
+  max-width: 460px !important;
+  max-height: min(88vh, 88dvh) !important;
+  margin: auto !important;
   box-sizing: border-box;
-
   padding: 22px;
-
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
-
   background: #10161a;
-
-  box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.55),
-    0 8px 24px rgba(0, 0, 0, 0.3);
-
-  animation: workflow-modal-in 0.16s ease-out;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: workflow-modal-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .workflow-modal-header {

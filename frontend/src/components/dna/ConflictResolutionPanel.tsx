@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   GitCompareArrows,
   UserRound,
 } from 'lucide-react'
@@ -20,6 +22,7 @@ interface ConflictResolutionPanelProps {
   transformationId: string
   conflicts: IntegrityConflict[]
   claims: IntegrityClaim[]
+  initialExpanded?: boolean
   onResolved: (transformation: Transformation) => void
 }
 
@@ -27,8 +30,13 @@ export function ConflictResolutionPanel({
   transformationId,
   conflicts,
   claims,
+  initialExpanded = false,
   onResolved,
 }: ConflictResolutionPanelProps) {
+  const [isExpanded, setIsExpanded] = useState<boolean>(initialExpanded)
+
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({})
+
   const [selected, setSelected] =
     useState<Record<string, string>>({})
 
@@ -212,9 +220,29 @@ export function ConflictResolutionPanel({
     )
   }
 
+  const resolvedCount = conflicts.filter(
+    (c) => resolved[c.conflict_id] || c.status === 'resolved',
+  ).length
+  const unresolvedCount = conflicts.length - resolvedCount
+
   return (
     <section className="conflict-resolution-panel">
-      <div className="conflict-panel-header">
+      <div
+        className="conflict-panel-header"
+        style={{
+          cursor: 'pointer',
+          padding: '14px 18px',
+          background: 'rgba(255, 170, 80, 0.04)',
+          border: '1px solid rgba(255, 170, 80, 0.18)',
+          borderRadius: '10px',
+          transition: 'all 0.15s ease',
+          marginBottom: isExpanded ? '18px' : '0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+        onClick={() => setIsExpanded((prev) => !prev)}
+      >
         <div>
           <div className="panel-kicker">
             <GitCompareArrows size={15} />
@@ -226,19 +254,66 @@ export function ConflictResolutionPanel({
           </h2>
 
           <p>
-            Review disagreements between sources
-            and choose the value that should be used
-            for future transformations.
+            {isExpanded
+              ? 'Review disagreements between sources and choose the authoritative value that should be used.'
+              : `${unresolvedCount > 0 ? `${unresolvedCount} conflict${unresolvedCount !== 1 ? 's' : ''} requiring review and correction.` : 'All source conflicts have been resolved.'} Click to ${isExpanded ? 'minimize' : 'expand and resolve'}.`}
           </p>
         </div>
 
-        <span className="conflict-count">
-          {conflicts.length} conflict
-          {conflicts.length !== 1 ? 's' : ''}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          {resolvedCount > 0 && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 600,
+                background: 'rgba(34, 197, 94, 0.12)',
+                color: '#86efac',
+                border: '1px solid rgba(34, 197, 94, 0.25)',
+              }}
+            >
+              <Check size={12} /> {resolvedCount} Resolved
+            </span>
+          )}
+
+          <span className="conflict-count">
+            {unresolvedCount > 0 ? `${unresolvedCount} Unresolved` : `${conflicts.length} Total`}
+          </span>
+
+          <button
+            type="button"
+            className="panel-toggle-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              borderRadius: '6px',
+              color: '#f8fafc',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+          >
+            <span>{isExpanded ? 'Minimize' : 'Expand / Review'}</span>
+            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
       </div>
 
-      <div className="conflict-list">
+      {isExpanded && (
+        <div className="conflict-list">
         {conflicts.map((conflict) => {
           const conflictClaims =
             getClaimsForConflict(conflict)
@@ -277,6 +352,8 @@ export function ConflictResolutionPanel({
                   )
                 : 'No value selected'
 
+          const isCardExpanded = expandedCards[conflict.conflict_id] ?? true
+
           return (
             <article
               className={`conflict-card ${
@@ -286,7 +363,16 @@ export function ConflictResolutionPanel({
               }`}
               key={conflict.conflict_id}
             >
-              <div className="conflict-card-header">
+              <div
+                className="conflict-card-header"
+                style={{ cursor: 'pointer' }}
+                onClick={() =>
+                  setExpandedCards((prev) => ({
+                    ...prev,
+                    [conflict.conflict_id]: !isCardExpanded,
+                  }))
+                }
+              >
                 <div>
                   <span className="conflict-label">
                     CONFLICT DETECTED
@@ -303,9 +389,9 @@ export function ConflictResolutionPanel({
                         marginTop: '8px',
                         fontSize: '0.85rem',
                         lineHeight: 1.45,
-                        color: 'var(--color-primary-400, #a855f7)',
-                        background: 'rgba(168, 85, 247, 0.08)',
-                        borderLeft: '3px solid #a855f7',
+                        color: 'var(--accent-text, #60a5fa)',
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        borderLeft: '3px solid #3b82f6',
                         padding: '6px 10px',
                         borderRadius: '4px',
                       }}
@@ -316,15 +402,43 @@ export function ConflictResolutionPanel({
                   )}
                 </div>
 
-                {isResolved && (
-                  <span className="resolved-badge">
-                    <Check size={13} />
-                    Resolved
-                  </span>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  {isResolved && (
+                    <span className="resolved-badge">
+                      <Check size={13} />
+                      Resolved
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="card-toggle-btn"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '4px',
+                      color: '#94a3b8',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setExpandedCards((prev) => ({
+                        ...prev,
+                        [conflict.conflict_id]: !isCardExpanded,
+                      }))
+                    }}
+                  >
+                    <span>{isCardExpanded ? 'Minimize' : 'Expand'}</span>
+                    {isCardExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                </div>
               </div>
 
-              {isResolved ? (
+              {isCardExpanded && (isResolved ? (
                 <div
                   className="resolved-summary-box"
                   style={{
@@ -428,7 +542,7 @@ export function ConflictResolutionPanel({
                             </blockquote>
                           )}
 
-                          <div className="claim-meta-tags" style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '10px', color: '#64748b' }}>
+                          <div className="claim-meta-tags" style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '10.5px', color: '#94a3b8' }}>
                             {claim.time && <span>Time: {claim.time}</span>}
                             {claim.location && <span>Location: {claim.location}</span>}
                             {claim.scope && <span>Scope: {claim.scope}</span>}
@@ -571,11 +685,12 @@ export function ConflictResolutionPanel({
                     </button>
                   </div>
                 </>
-              )}
+              ))}
             </article>
           )
         })}
       </div>
+      )}
     </section>
   )
 }

@@ -187,7 +187,7 @@ export function SemanticLineageGraphVisualizer({
 
     // 3. Layer 3: Claims & Conflicts
     const claims = integrity?.claims || []
-    const conflicts = integrity?.conflicts || []
+    const conflicts = (integrity?.conflicts || []).filter((c) => c.status !== 'resolved')
     const displayClaims = claims.slice(0, 8)
     const effectiveClaimsCount = Math.max(displayClaims.length + conflicts.length, 1)
 

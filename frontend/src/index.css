@@ -1,219 +1,279 @@
 @import 'tailwindcss';
 
-:root { font-family: 'DM Sans', 'Segoe UI', sans-serif; color: #e7e9ee; background: #0b0d10; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
-button, input, textarea { font: inherit; }
-button { cursor: pointer; }
-button:disabled { cursor: not-allowed; }
-#root { min-height: 100vh; }
+/* ==========================================================================
+   EV Design System: Dual-Mode Tactile Architecture (Dark & Light)
+   World-class non-flat enterprise studio aesthetic (Cobalt & Slate)
+   ========================================================================== */
 
-/* Output generation UI polish */
-.outputs-panel {
-  background:
-    radial-gradient(
-      circle at 15% 10%,
-      rgba(190, 255, 60, 0.035),
-      transparent 35%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(18, 24, 29, 0.96),
-      rgba(11, 16, 20, 0.98)
-    );
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  overflow: hidden;
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.generation-parameters {
-  padding: 16px 22px 15px;
-  background: rgba(255, 255, 255, 0.015);
-  border-top: 1px solid rgba(255, 255, 255, 0.025);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+/* --------------------------------------------------------------------------
+   Dark Mode (Default)
+   Deep obsidian background with multi-layered elevated charcoal surfaces
+   -------------------------------------------------------------------------- */
+:root,
+.theme-dark,
+[data-theme='dark'] {
+  --bg-root: #06090e;
+  --bg-subtle: #0b0f16;
+  --surface-card: #0f1520;
+  --surface-card-hover: #141c2b;
+  --surface-elevated: #192336;
+  --surface-sunken: #090d13;
+  --surface-input: #0b1018;
+  
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-medium: rgba(255, 255, 255, 0.13);
+  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-focus: #3b82f6;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0f172a;
+
+  /* Legacy variable mappings to prevent dark-on-dark bleed from old stylesheets */
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --dim: #cbd5e1;
+  --nav-ink: #f8fafc;
+  --nav-muted: #94a3b8;
+  --page-panel: #0f1520;
+  --page-soft: #0b0f16;
+  --page-input: #0b1018;
+  --page-line: rgba(255, 255, 255, 0.12);
+  --page-highlight: rgba(59, 130, 246, 0.14);
+
+  /* Tech Cobalt Primary */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-surface: rgba(59, 130, 246, 0.12);
+  --accent-border: rgba(59, 130, 246, 0.32);
+  --accent-text: #60a5fa;
+
+  /* Semantic Feedback */
+  --color-success: #10b981;
+  --color-success-surface: rgba(16, 185, 129, 0.12);
+  --color-success-border: rgba(16, 185, 129, 0.3);
+  --color-success-text: #34d399;
+
+  --color-warning: #f59e0b;
+  --color-warning-surface: rgba(245, 158, 11, 0.12);
+  --color-warning-border: rgba(245, 158, 11, 0.3);
+  --color-warning-text: #fbbf24;
+
+  --color-error: #ef4444;
+  --color-error-surface: rgba(239, 68, 68, 0.12);
+  --color-error-border: rgba(239, 68, 68, 0.3);
+  --color-error-text: #f87171;
+
+  /* Non-flat tactile shadows & lighting bevels */
+  --shadow-card: 0 4px 24px -2px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 16px 40px -6px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --top-bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
-.generation-heading {
-  margin-bottom: 16px;
+/* --------------------------------------------------------------------------
+   Light Mode
+   Soft crisp alabaster with tactile white cards and crisp slate typography
+   -------------------------------------------------------------------------- */
+.theme-light,
+[data-theme='light'] {
+  --bg-root: #f8fafc;
+  --bg-subtle: #f1f5f9;
+  --surface-card: #ffffff;
+  --surface-card-hover: #f8fafc;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #f1f5f9;
+  --surface-input: #ffffff;
+
+  --border-subtle: #e2e8f0;
+  --border-medium: #cbd5e1;
+  --border-hover: #94a3b8;
+  --border-focus: #2563eb;
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  /* Legacy variable mappings */
+  --text: #0f172a;
+  --muted: #64748b;
+  --dim: #64748b;
+  --nav-ink: #0f172a;
+  --nav-muted: #64748b;
+  --page-panel: #ffffff;
+  --page-soft: #f8fafc;
+  --page-input: #ffffff;
+  --page-line: #e2e8f0;
+  --page-highlight: rgba(37, 99, 235, 0.08);
+
+  /* Royal Tech Cobalt */
+  --accent-primary: #2563eb;
+  --accent-primary-hover: #1d4ed8;
+  --accent-surface: rgba(37, 99, 235, 0.08);
+  --accent-border: rgba(37, 99, 235, 0.28);
+  --accent-text: #1d4ed8;
+
+  /* Semantic Feedback */
+  --color-success: #059669;
+  --color-success-surface: rgba(5, 150, 105, 0.08);
+  --color-success-border: rgba(5, 150, 105, 0.25);
+  --color-success-text: #047857;
+
+  --color-warning: #d97706;
+  --color-warning-surface: rgba(217, 119, 6, 0.08);
+  --color-warning-border: rgba(217, 119, 6, 0.25);
+  --color-warning-text: #b45309;
+
+  --color-error: #dc2626;
+  --color-error-surface: rgba(220, 38, 38, 0.08);
+  --color-error-border: rgba(220, 38, 38, 0.25);
+  --color-error-text: #b91c1c;
+
+  /* Non-flat tactile ambient shadows */
+  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+  --shadow-elevated: 0 10px 30px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  --top-bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
 }
 
-.generation-heading > span {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--text-muted);
-}
-
-.generation-heading p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.generation-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.generation-field {
-  min-width: 0;
-}
-
-.generation-field label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.generation-field select {
-  width: 100%;
-  min-height: 38px;
-  padding: 0 30px 0 11px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--surface-2);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12px;
-  outline: none;
+/* Global Reset & Base */
+* {
   box-sizing: border-box;
 }
 
-.generation-field select:focus {
-  border-color: var(--accent);
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: var(--bg-root);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.outputs-panel .output-controls {
-  padding: 16px 24px 18px;
-  border-top: 1px solid var(--border-color);
+button, input, textarea, select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+#root {
+  min-height: 100vh;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
 }
 
-.outputs-panel .output-controls > button {
-  flex: 0 0 auto;
-}
-
-.outputs-panel .artifact-list {
-  padding: 20px 24px 24px;
-}
-
-@media (max-width: 900px) {
-  .generation-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 600px) {
-  .generation-parameters {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .outputs-panel .output-controls,
-  .outputs-panel .artifact-list {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .generation-grid {
-    grid-template-columns: 1fr;
-  }
-}
-/* =========================================================
-   OUTPUTS PANEL — FINAL OVERRIDES
-   ========================================================= */
-
-.workspace-lower-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-}
-
-.outputs-panel {
+/* Utility Card Styling with Non-Flat Depth */
+.tactile-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   position: relative;
-  background: #0d1318 !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 10px !important;
   overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-/* Subtle panel depth */
-.outputs-panel::before {
-  content: "";
+.tactile-card::before {
+  content: '';
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--top-bevel);
   pointer-events: none;
-  background:
-    radial-gradient(
-      circle at 12% 0%,
-      rgba(190, 255, 60, 0.035),
-      transparent 32%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.012),
-      transparent 35%
-    );
 }
 
-/* Keep actual content above the background layer */
-.outputs-panel > * {
-  position: relative;
-  z-index: 1;
+.tactile-card:hover {
+  border-color: var(--border-hover);
 }
 
-/* Generation parameters */
-.outputs-panel .generation-parameters {
-  padding: 16px 22px 15px !important;
-  background: rgba(255, 255, 255, 0.012) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.025);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+.tactile-elevated {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  box-shadow: var(--shadow-elevated);
 }
 
-/* Parameter grid */
-.outputs-panel .generation-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-/* Make sure the area around the controls doesn't inherit
-   some random card background */
-.outputs-panel .output-controls {
-  background: transparent !important;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.generation-select {
-  width: 100%;
-  background: #10171c;
-  color: #e8edf0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  padding: 10px 34px 10px 12px;
-  outline: none;
-  appearance: auto;
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
 }
 
-.generation-select:focus {
-  border-color: rgba(190, 255, 60, 0.35);
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
 }
 
-.generation-select option {
-  background: #10171c;
-  color: #e8edf0;
+/* --------------------------------------------------------------------------
+   Global Dark Mode Contrast Enforcement
+   Guarantees no dark/grey text becomes invisible or awkward on dark surfaces
+   -------------------------------------------------------------------------- */
+.theme-dark,
+[data-theme='dark'],
+.app-shell.theme-dark {
+  color: var(--text-primary);
 }
 
-.generation-select option:checked {
-  background: #1b252c;
-  color: #ffffff;
+.theme-dark input,
+.theme-dark textarea,
+.theme-dark select,
+[data-theme='dark'] input,
+[data-theme='dark'] textarea,
+[data-theme='dark'] select,
+.app-shell.theme-dark input,
+.app-shell.theme-dark textarea,
+.app-shell.theme-dark select {
+  color: #f8fafc !important;
+  background-color: var(--surface-input, #0b1018) !important;
+  border-color: var(--border-medium, rgba(255, 255, 255, 0.15)) !important;
 }
 
+.theme-dark select option,
+[data-theme='dark'] select option,
+.app-shell.theme-dark select option {
+  color: #f8fafc !important;
+  background-color: #0f1520 !important;
+}
+
+.theme-dark input::placeholder,
+.theme-dark textarea::placeholder,
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder,
+.app-shell.theme-dark input::placeholder,
+.app-shell.theme-dark textarea::placeholder {
+  color: #64748b !important;
+  opacity: 0.85;
+}
+
+.theme-dark pre,
+.theme-dark code,
+[data-theme='dark'] pre,
+[data-theme='dark'] code,
+.app-shell.theme-dark pre,
+.app-shell.theme-dark code {
+  color: #cbd5e1 !important;
+}
