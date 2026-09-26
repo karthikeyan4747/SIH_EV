@@ -117,7 +117,7 @@ export function IntegrityStage({
               </div>
               <div className="banner-content">
                 <strong>Source Integrity Fully Verified</strong>
-                <p>All extracted facts corroborate consistently with zero active disputes across the source corpus.</p>
+                <p>All extracted facts corroborate consistently with zero active disputes across all attached sources.</p>
               </div>
             </div>
           )}

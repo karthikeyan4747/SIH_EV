@@ -538,10 +538,10 @@ function SettingsDashboard({ transformationCount, activeTitle, themeMode, onThem
   )
 }
 
-function EmptyHome({ onNew, busy }: { onNew: () => void; busy: boolean }) { return <section className="empty-home page-enter"><img className="empty-home-mark" src="/ev-logo.svg" alt="EV workspace" /><div className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> TRANSFORMATION WORKSPACE</div><h1>Make meaning from the material.</h1><p>Open a recent transformation or start a clean workspace for a new body of source material.</p><Button variant="primary" onClick={onNew} loading={busy} loadingLabel="Creating..."><Plus size={16} />New Transformation</Button></section> }
+function EmptyHome({ onNew, busy }: { onNew: () => void; busy: boolean }) { return <section className="empty-home page-enter"><div className="empty-home-mark" aria-hidden="true"><span>EV</span></div><div className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> TRANSFORMATION WORKSPACE</div><h1>Make meaning from the material.</h1><p>Open a recent transformation or start a clean workspace for a new body of source material.</p><Button variant="primary" onClick={onNew} loading={busy} loadingLabel="Creating..."><Plus size={16} />New Transformation</Button></section> }
 
 function LoginPage({ onLogin, themeMode }: { onLogin: () => void; themeMode: ThemeMode }) {
-  return <main className={`login-page theme-${themeMode}`}><section className="login-card"><img className="login-mark" src="/ev-logo.svg" alt="EV workspace" /><span className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> EV WORKSPACE</span><h1>Welcome back</h1><p>Sign in to continue to your transformation workspace.</p><Button variant="primary" onClick={onLogin}>Sign in</Button></section></main>
+  return <main className={`login-page theme-${themeMode}`}><section className="login-card"><div className="login-mark" aria-hidden="true"><span>EV</span></div><span className="eyebrow eyebrow-left"><span className="eyebrow-dot" /> EV WORKSPACE</span><h1>Welcome back</h1><p>Sign in to continue to your transformation workspace.</p><Button variant="primary" onClick={onLogin}>Sign in</Button></section></main>
 }
 
 function Sidebar({
@@ -590,7 +590,7 @@ function Sidebar({
       onMouseLeave={collapseSidebar}
     >
       <div className="brand-row">
-        <img className="brand-mark" src="/ev-logo.svg" alt="EV workspace" />
+        <div className="brand-mark" aria-hidden="true"><span>EV</span></div>
         {!collapsed && <span className="brand-name">EV</span>}
         <button className="sidebar-close" aria-label="Close navigation" onClick={onClose}><X size={18} /></button>
       </div>

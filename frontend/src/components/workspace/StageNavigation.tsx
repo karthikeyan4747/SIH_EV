@@ -40,7 +40,7 @@ export function StageNavigation({
     {
       id: 'sources',
       num: '01',
-      title: 'Sources & Ingestion',
+      title: 'Sources & Upload',
       desc: 'Documents, URLs & Audio',
       icon: FileText,
       badgeText: sourceCount === 0 ? 'Empty' : `${sourceCount} source${sourceCount > 1 ? 's' : ''}`,
@@ -50,9 +50,9 @@ export function StageNavigation({
       id: 'dna',
       num: '02',
       title: 'Content DNA & Lineage',
-      desc: 'Knowledge Synthesis',
+      desc: 'Key Facts & Identity',
       icon: Dna,
-      badgeText: hasDna ? 'Synthesized' : 'Awaiting Input',
+      badgeText: hasDna ? 'Ready' : 'Awaiting Input',
       badgeVariant: hasDna ? 'success' : 'default',
     },
     {
@@ -78,7 +78,7 @@ export function StageNavigation({
       title: 'Deliverables Studio',
       desc: 'Reports, Slides & Briefs',
       icon: Sparkles,
-      badgeText: outputCount > 0 ? `${outputCount} deliverable${outputCount > 1 ? 's' : ''}` : 'Ready to Forge',
+      badgeText: outputCount > 0 ? `${outputCount} deliverable${outputCount > 1 ? 's' : ''}` : 'Ready to Create',
       badgeVariant: outputCount > 0 ? 'cobalt' : 'default',
     },
   ]

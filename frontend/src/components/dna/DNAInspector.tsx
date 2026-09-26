@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { Check, Plus, RotateCcw, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { DragInput } from '../ui/DragInput'
@@ -48,7 +48,7 @@ export function DNAInspector({
   if (!selectedNode || !node) {
     return (
       <Card className="dna-inspector empty-inspector">
-        <div className="empty-inspector-mark">✦</div>
+        <div className="empty-inspector-mark"><SlidersHorizontal size={20} /></div>
         <h2>Select a DNA dimension</h2>
         <p>
           Choose a node to inspect and edit the structured

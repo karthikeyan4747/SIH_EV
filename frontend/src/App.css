@@ -616,7 +616,7 @@ body {
 
 .brand-mark,
 .empty-home-mark {
-  box-shadow: 0 8px 24px rgba(184, 230, 77, 0.28);
+  box-shadow: none;
 }
 
 .brand-name,

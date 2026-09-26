@@ -48,11 +48,6 @@ export function SourcesStage({
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Calculations
-  const totalChars = sources.reduce((sum, s) => sum + (s.text?.length || 0), 0)
-  const estTokens = Math.round(totalChars * 0.25)
-  const estWords = Math.round(totalChars / 5)
-
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
@@ -90,55 +85,14 @@ export function SourcesStage({
 
   return (
     <div className="sources-stage-container">
-      {/* Metrics Banner */}
-      <div className="sources-telemetry-row tactile-card">
-        <div className="telemetry-item">
-          <span className="telemetry-label">Ingested Sources</span>
-          <strong className="telemetry-value">{sources.length}</strong>
-        </div>
-        <div className="telemetry-item">
-          <span className="telemetry-label">Total Corpus Size</span>
-          <strong className="telemetry-value">{(totalChars / 1024).toFixed(1)} KB</strong>
-        </div>
-        <div className="telemetry-item">
-          <span className="telemetry-label">Estimated Tokens</span>
-          <strong className="telemetry-value">{estTokens.toLocaleString()}</strong>
-        </div>
-        <div className="telemetry-item">
-          <span className="telemetry-label">Corpus Words</span>
-          <strong className="telemetry-value">~{estWords.toLocaleString()}</strong>
-        </div>
-
-        {busy && (
-          <div className="telemetry-item active-ingest-pulse">
-            <span className="telemetry-label">Ingestion Pipeline</span>
-            <strong className="telemetry-value active-ingest-text">
-              <Loader2 size={15} className="spin" /> Processing Source...
-            </strong>
-          </div>
-        )}
-
-        {sources.length > 0 && (
-          <button
-            type="button"
-            className="proceed-stage-btn primary"
-            onClick={onProceedToDNA}
-            disabled={busy}
-          >
-            <span>Proceed to Content DNA</span>
-            <ArrowRight size={15} />
-          </button>
-        )}
-      </div>
-
       {/* Main Two-Column Stage Grid */}
       <div className="sources-split-grid">
         {/* Left Column: Multi-Source Ingestion Console */}
         <section className="ingestion-console tactile-card">
           <div className="console-header">
             <div>
-              <h3>Add Source Documents</h3>
-              <p>Ingest multi-format unstructured data into the unified canonical layer.</p>
+              <h3>Add Sources</h3>
+              <p>Upload documents, paste links, or enter text to build your knowledge base.</p>
             </div>
             <button
               type="button"
@@ -195,8 +149,8 @@ export function SourcesStage({
                   <Loader2 size={34} className="spin" style={{ color: 'var(--accent-primary)' }} />
                   <div className="orbital-ring" />
                 </div>
-                <h4>Ingesting & Analyzing Source Content...</h4>
-                <p>Extracting text streams, generating boundary chunks, and synthesizing canonical lineage.</p>
+                <h4>Analyzing Document...</h4>
+                <p>Extracting text and organizing facts for your knowledge base.</p>
 
                 <div className="ingestion-progress-track">
                   <div className="ingestion-progress-bar indeterminate" />
@@ -207,7 +161,7 @@ export function SourcesStage({
                     <span className="step-indicator" /> Upload & Verify
                   </span>
                   <span className="step-pill active">
-                    <span className="step-indicator pulse" /> Semantic Chunking
+                    <span className="step-indicator pulse" /> Processing Content
                   </span>
                   <span className="step-pill">
                     <span className="step-indicator" /> Lineage Graph
@@ -352,12 +306,30 @@ export function SourcesStage({
           )}
         </section>
 
-        {/* Right Column: Ingested Sources Library */}
+        {/* Right Column: Uploaded Sources Library */}
         <section className="sources-library-section tactile-card">
           <div className="library-header">
             <div>
-              <h3>Corpus Library ({sources.length})</h3>
-              <p>Active sources synthesized into the canonical knowledge layer.</p>
+              <h3>Attached Sources ({sources.length})</h3>
+              <p>Uploaded documents and media linked to this project.</p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {busy && (
+                <span style={{ fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--accent-text)', fontWeight: 600 }}>
+                  <Loader2 size={14} className="spin" /> Processing Source...
+                </span>
+              )}
+              {sources.length > 0 && (
+                <button
+                  type="button"
+                  className="proceed-stage-btn primary"
+                  onClick={onProceedToDNA}
+                  disabled={busy}
+                >
+                  <span>Proceed to Content DNA</span>
+                  <ArrowRight size={15} />
+                </button>
+              )}
             </div>
           </div>
 

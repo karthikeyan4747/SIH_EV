@@ -445,7 +445,7 @@ export function DNAVersionTimelineView({
                           <span className="context-label">Tone</span>
                           <span className="context-val">
                             <span className="old-val">{selectedChanges.toneChanged.from}</span>
-                            <span className="arrow">➔</span>
+                            <span className="arrow">→</span>
                             <span className="new-val">{selectedChanges.toneChanged.to}</span>
                           </span>
                         </div>
@@ -455,7 +455,7 @@ export function DNAVersionTimelineView({
                           <span className="context-label">Target Audience</span>
                           <span className="context-val">
                             <span className="old-val">{selectedChanges.audienceChanged.from}</span>
-                            <span className="arrow">➔</span>
+                            <span className="arrow">→</span>
                             <span className="new-val">{selectedChanges.audienceChanged.to}</span>
                           </span>
                         </div>

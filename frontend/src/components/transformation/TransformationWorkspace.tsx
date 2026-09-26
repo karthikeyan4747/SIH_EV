@@ -116,6 +116,41 @@ export function TransformationWorkspace({
     }
   }
 
+  const scrollToSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId)
+    if (el) {
+      const yOffset = -90
+      const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset
+      window.scrollTo({ top: y, behavior: 'smooth' })
+    }
+  }
+
+  const handleSelectStage = (stage: WorkspaceStage) => {
+    setActiveStage(stage)
+    scrollToSection(`section-${stage}`)
+  }
+
+  useEffect(() => {
+    const sectionIds: WorkspaceStage[] = ['sources', 'dna', 'integrity', 'studio']
+    const handleScroll = () => {
+      const scrollPos = window.scrollY + 140
+      let current: WorkspaceStage = 'sources'
+      for (const id of sectionIds) {
+        const el = document.getElementById(`section-${id}`)
+        if (el) {
+          const top = el.offsetTop
+          if (scrollPos >= top) {
+            current = id
+          }
+        }
+      }
+      setActiveStage(current)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   const conflicts = integrity?.conflicts || []
   const activeConflicts = conflicts.filter((c) => c.status !== 'resolved')
 
@@ -129,13 +164,12 @@ export function TransformationWorkspace({
         onThemeToggle={onThemeToggle}
         onRename={onRename}
         onOpenVersions={() => setShowVersionsModal(true)}
-        onGenerateQuick={() => setActiveStage('studio')}
       />
 
-      {/* 2. Persistent 4-Stage Stepper Navigation */}
+      {/* 2. Persistent 4-Stage Stepper Quick-Jump Dock */}
       <StageNavigation
         activeStage={activeStage}
-        onSelectStage={setActiveStage}
+        onSelectStage={handleSelectStage}
         sourceCount={transformation.sources?.length || 0}
         hasDna={Boolean(transformation.content_dna)}
         conflictCount={activeConflicts.length}
@@ -158,7 +192,7 @@ export function TransformationWorkspace({
             style={{ fontSize: '11px', padding: '5px 10px' }}
             onClick={() => {
               setDnaChangedPrompt(null)
-              setActiveStage('studio')
+              handleSelectStage('studio')
             }}
           >
             <span>Go to Studio</span>
@@ -167,9 +201,16 @@ export function TransformationWorkspace({
         </div>
       )}
 
-      {/* 4. Active Stage Viewports */}
-      <main className="stage-viewport">
-        {activeStage === 'sources' && (
+      {/* 4. Single-Page Continuous Vertical Scroll Flow */}
+      <main className="workspace-scroll-flow">
+        {/* Phase 01: Sources & Documents */}
+        <section id="section-sources" className="workspace-section">
+          <div className="section-anchor-header">
+            <div className="section-anchor-tag">
+              <span className="section-num">PHASE 01</span>
+              <span className="section-title">Sources & Documents</span>
+            </div>
+          </div>
           <SourcesStage
             sources={transformation.sources || []}
             busy={busy}
@@ -178,22 +219,36 @@ export function TransformationWorkspace({
             onAddUrl={onUrl}
             onAddUnsupported={onUnsupported}
             onRemoveSource={onRemoveSource}
-            onProceedToDNA={() => setActiveStage('dna')}
+            onProceedToDNA={() => handleSelectStage('dna')}
           />
-        )}
+        </section>
 
-        {activeStage === 'dna' && (
+        {/* Phase 02: Content DNA & Facts */}
+        <section id="section-dna" className="workspace-section">
+          <div className="section-anchor-header">
+            <div className="section-anchor-tag">
+              <span className="section-num">PHASE 02</span>
+              <span className="section-title">Content DNA & Key Facts</span>
+            </div>
+          </div>
           <ContentDNAStage
             transformation={transformation}
             dna={transformation.content_dna ?? null}
             busy={busy}
             onPatch={handlePatch}
             onRestoreVersion={onRestoreVersion}
-            onProceedToIntegrity={() => setActiveStage('integrity')}
+            onProceedToIntegrity={() => handleSelectStage('integrity')}
           />
-        )}
+        </section>
 
-        {activeStage === 'integrity' && (
+        {/* Phase 03: Fact Integrity & Audit Deck */}
+        <section id="section-integrity" className="workspace-section">
+          <div className="section-anchor-header">
+            <div className="section-anchor-tag">
+              <span className="section-num">PHASE 03</span>
+              <span className="section-title">Fact Integrity & Audit</span>
+            </div>
+          </div>
           <IntegrityStage
             transformation={transformation}
             integrity={integrity}
@@ -207,15 +262,22 @@ export function TransformationWorkspace({
               if (updated.outputs && updated.outputs.length > 0) {
                 setDnaChangedPrompt({
                   open: true,
-                  reason: 'Conflicted assertions were resolved and purged from the canonical layer',
+                  reason: 'Conflicted assertions were resolved and updated in your Content DNA',
                 })
               }
             }}
-            onProceedToStudio={() => setActiveStage('studio')}
+            onProceedToStudio={() => handleSelectStage('studio')}
           />
-        )}
+        </section>
 
-        {activeStage === 'studio' && (
+        {/* Phase 04: Deliverables Production Studio */}
+        <section id="section-studio" className="workspace-section">
+          <div className="section-anchor-header">
+            <div className="section-anchor-tag">
+              <span className="section-num">PHASE 04</span>
+              <span className="section-title">Deliverables Studio</span>
+            </div>
+          </div>
           <StudioStage
             transformation={transformation}
             busy={busy}
@@ -223,7 +285,7 @@ export function TransformationWorkspace({
             onDeleteOutput={onDeleteOutput}
             onTransformationUpdated={onConflictResolved}
           />
-        )}
+        </section>
       </main>
 
       {/* 5. Version History Modal */}

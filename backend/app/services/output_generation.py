@@ -122,12 +122,14 @@ class OutputGenerationService:
 
         output_spec = OUTPUT_SPECS[output_type]
 
+        effective_prompt = prompt or (generation_config.get("prompt") if generation_config else None)
+
         content = self.llm_provider.generate_output(
-        content_dna=content_dna,
-        output_type=output_type,
-        output_spec=output_spec,
-        user_prompt=prompt,
-        generation_config=generation_config,
+            content_dna=content_dna,
+            output_type=output_type,
+            output_spec=output_spec,
+            user_prompt=effective_prompt,
+            generation_config=generation_config,
         )
        
         return Artifact(

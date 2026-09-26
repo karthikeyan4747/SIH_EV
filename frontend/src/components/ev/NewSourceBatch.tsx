@@ -203,9 +203,9 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
       flexWrap: 'wrap',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Sparkles size={15} color="#38bdf8" />
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          ⚡ Quick Demo Scenarios:
+        <Sparkles size={15} color="var(--accent-primary)" />
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Quick Demo Scenarios:
         </span>
       </div>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -213,9 +213,9 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
           type="button"
           onClick={() => loadDemoPreset('conflicts')}
           style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            color: '#fca5a5',
+            background: 'var(--color-error-surface)',
+            border: '1px solid var(--color-error-border)',
+            color: 'var(--color-error-text)',
             padding: '4px 10px',
             borderRadius: '6px',
             fontSize: '11px',
@@ -224,15 +224,15 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
             transition: 'all 0.15s ease',
           }}
         >
-          🚨 Discrepancy & Revenue Conflict
+          Discrepancy & Revenue Conflict
         </button>
         <button
           type="button"
           onClick={() => loadDemoPreset('ev_policy')}
           style={{
-            background: 'rgba(16, 185, 129, 0.15)',
-            border: '1px solid rgba(16, 185, 129, 0.35)',
-            color: '#86efac',
+            background: 'var(--color-success-surface)',
+            border: '1px solid var(--color-success-border)',
+            color: 'var(--color-success-text)',
             padding: '4px 10px',
             borderRadius: '6px',
             fontSize: '11px',
@@ -241,15 +241,15 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
             transition: 'all 0.15s ease',
           }}
         >
-          🔋 EV Policy & Corroboration
+          EV Policy & Corroboration
         </button>
         <button
           type="button"
           onClick={() => loadDemoPreset('leadership')}
           style={{
-            background: 'rgba(56, 189, 248, 0.15)',
-            border: '1px solid rgba(56, 189, 248, 0.35)',
-            color: '#7dd3fc',
+            background: 'var(--accent-surface)',
+            border: '1px solid var(--accent-border)',
+            color: 'var(--accent-text)',
             padding: '4px 10px',
             borderRadius: '6px',
             fontSize: '11px',
@@ -258,7 +258,7 @@ export function NewSourceBatch({ busy, onTexts, onFiles, onUrl, onUnsupported }:
             transition: 'all 0.15s ease',
           }}
         >
-          👥 Relational & SIH Dispute
+          Relational & SIH Dispute
         </button>
       </div>
     </div>

@@ -6,142 +6,173 @@
    ========================================================================== */
 
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+  font-variation-settings: 'opsz' 32;
+  letter-spacing: -0.011em;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* --------------------------------------------------------------------------
-   Dark Mode (Default)
-   Deep obsidian background with multi-layered elevated charcoal surfaces
-   -------------------------------------------------------------------------- */
-:root,
-.theme-dark,
-[data-theme='dark'] {
-  --bg-root: #06090e;
-  --bg-subtle: #0b0f16;
-  --surface-card: #0f1520;
-  --surface-card-hover: #141c2b;
-  --surface-elevated: #192336;
-  --surface-sunken: #090d13;
-  --surface-input: #0b1018;
-  
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-medium: rgba(255, 255, 255, 0.13);
-  --border-hover: rgba(255, 255, 255, 0.22);
-  --border-focus: #3b82f6;
+code,
+kbd,
+samp,
+pre {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-feature-settings: 'calt' 1, 'liga' 1;
+}
 
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-inverse: #0f172a;
-
-  /* Legacy variable mappings to prevent dark-on-dark bleed from old stylesheets */
-  --text: #f8fafc;
-  --muted: #94a3b8;
-  --dim: #cbd5e1;
-  --nav-ink: #f8fafc;
-  --nav-muted: #94a3b8;
-  --page-panel: #0f1520;
-  --page-soft: #0b0f16;
-  --page-input: #0b1018;
-  --page-line: rgba(255, 255, 255, 0.12);
-  --page-highlight: rgba(59, 130, 246, 0.14);
-
-  /* Tech Cobalt Primary */
-  --accent-primary: #3b82f6;
-  --accent-primary-hover: #2563eb;
-  --accent-surface: rgba(59, 130, 246, 0.12);
-  --accent-border: rgba(59, 130, 246, 0.32);
-  --accent-text: #60a5fa;
-
-  /* Semantic Feedback */
-  --color-success: #10b981;
-  --color-success-surface: rgba(16, 185, 129, 0.12);
-  --color-success-border: rgba(16, 185, 129, 0.3);
-  --color-success-text: #34d399;
-
-  --color-warning: #f59e0b;
-  --color-warning-surface: rgba(245, 158, 11, 0.12);
-  --color-warning-border: rgba(245, 158, 11, 0.3);
-  --color-warning-text: #fbbf24;
-
-  --color-error: #ef4444;
-  --color-error-surface: rgba(239, 68, 68, 0.12);
-  --color-error-border: rgba(239, 68, 68, 0.3);
-  --color-error-text: #f87171;
-
-  /* Non-flat tactile shadows & lighting bevels */
-  --shadow-card: 0 4px 24px -2px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-elevated: 0 16px 40px -6px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --top-bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.022em;
 }
 
 /* --------------------------------------------------------------------------
-   Light Mode
-   Soft crisp alabaster with tactile white cards and crisp slate typography
+   Dark Mode (Default - GitHub Primer & Linear Obsidian Palette)
+   Deep midnight canvas (#0d1117) with elevated surfaces (#161b22, #21262d)
+   -------------------------------------------------------------------------- */
+:root,
+.theme-dark,
+[data-theme='dark'],
+.app-shell.theme-dark {
+  --bg-root: #0d1117;
+  --bg-subtle: #010409;
+  --surface-card: #161b22;
+  --surface-card-hover: #1f242c;
+  --surface-elevated: #21262d;
+  --surface-sunken: #010409;
+  --surface-input: #0d1117;
+  
+  --border-subtle: rgba(240, 246, 252, 0.1);
+  --border-medium: #30363d;
+  --border-hover: #8b949e;
+  --border-focus: #58a6ff;
+
+  --text-primary: #f0f6fc;
+  --text-secondary: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-inverse: #0d1117;
+
+  /* Legacy variable mappings */
+  --text: #f0f6fc;
+  --muted: #8b949e;
+  --dim: #c9d1d9;
+  --nav-ink: #f0f6fc;
+  --nav-muted: #8b949e;
+  --page-panel: #161b22;
+  --page-soft: #0d1117;
+  --page-input: #0d1117;
+  --page-line: #30363d;
+  --page-highlight: rgba(56, 139, 253, 0.15);
+
+  /* GitHub Primer Electric Blue Accent */
+  --accent-primary: #2f81f7;
+  --accent-primary-hover: #1f6feb;
+  --accent-surface: rgba(56, 139, 253, 0.15);
+  --accent-border: rgba(56, 139, 253, 0.4);
+  --accent-text: #58a6ff;
+
+  /* Semantic Feedback (GitHub Primer) */
+  --color-success: #238636;
+  --color-success-surface: rgba(46, 160, 67, 0.15);
+  --color-success-border: rgba(46, 160, 67, 0.4);
+  --color-success-text: #3fb950;
+
+  --color-warning: #9e6a03;
+  --color-warning-surface: rgba(187, 128, 9, 0.15);
+  --color-warning-border: rgba(187, 128, 9, 0.4);
+  --color-warning-text: #d29922;
+
+  --color-error: #da3633;
+  --color-error-surface: rgba(248, 81, 73, 0.15);
+  --color-error-border: rgba(248, 81, 73, 0.4);
+  --color-error-text: #f85149;
+
+  /* Non-flat tactile shadows & depth */
+  --shadow-card: 0 1px 3px rgba(1, 4, 9, 0.6), 0 0 0 1px #30363d;
+  --shadow-elevated: 0 8px 24px rgba(1, 4, 9, 0.8), 0 0 0 1px #30363d;
+  --top-bevel: inset 0 1px 0 0 rgba(240, 246, 252, 0.08);
+
+  /* Navigation & Sidebar tokens */
+  --nav: #010409;
+  --nav-soft: #0d1117;
+  --nav-hover: #161b22;
+  --nav-active: rgba(56, 139, 253, 0.15);
+  --nav-active-ink: #58a6ff;
+}
+
+/* --------------------------------------------------------------------------
+   Light Mode (GitHub Primer Light Palette)
+   Crisp off-white canvas (#f6f8fa) with pure white tactile cards (#ffffff)
    -------------------------------------------------------------------------- */
 .theme-light,
-[data-theme='light'] {
-  --bg-root: #f8fafc;
-  --bg-subtle: #f1f5f9;
+[data-theme='light'],
+.app-shell.theme-light {
+  --bg-root: #f6f8fa;
+  --bg-subtle: #ffffff;
   --surface-card: #ffffff;
-  --surface-card-hover: #f8fafc;
+  --surface-card-hover: #f3f4f6;
   --surface-elevated: #ffffff;
-  --surface-sunken: #f1f5f9;
+  --surface-sunken: #eff2f5;
   --surface-input: #ffffff;
 
-  --border-subtle: #e2e8f0;
-  --border-medium: #cbd5e1;
-  --border-hover: #94a3b8;
-  --border-focus: #2563eb;
+  --border-subtle: #d0d7de;
+  --border-medium: #afb8c1;
+  --border-hover: #6e7781;
+  --border-focus: #0969da;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
+  --text-primary: #1f2328;
+  --text-secondary: #424a53;
+  --text-muted: #656d76;
   --text-inverse: #ffffff;
 
   /* Legacy variable mappings */
-  --text: #0f172a;
-  --muted: #64748b;
-  --dim: #64748b;
-  --nav-ink: #0f172a;
-  --nav-muted: #64748b;
+  --text: #1f2328;
+  --muted: #656d76;
+  --dim: #424a53;
+  --nav-ink: #1f2328;
+  --nav-muted: #656d76;
   --page-panel: #ffffff;
-  --page-soft: #f8fafc;
+  --page-soft: #f6f8fa;
   --page-input: #ffffff;
-  --page-line: #e2e8f0;
-  --page-highlight: rgba(37, 99, 235, 0.08);
+  --page-line: #d0d7de;
+  --page-highlight: rgba(9, 105, 218, 0.08);
 
-  /* Royal Tech Cobalt */
-  --accent-primary: #2563eb;
-  --accent-primary-hover: #1d4ed8;
-  --accent-surface: rgba(37, 99, 235, 0.08);
-  --accent-border: rgba(37, 99, 235, 0.28);
-  --accent-text: #1d4ed8;
+  /* GitHub Primer Blue Accent */
+  --accent-primary: #0969da;
+  --accent-primary-hover: #0854ad;
+  --accent-surface: rgba(9, 105, 218, 0.08);
+  --accent-border: rgba(9, 105, 218, 0.28);
+  --accent-text: #0969da;
 
-  /* Semantic Feedback */
-  --color-success: #059669;
-  --color-success-surface: rgba(5, 150, 105, 0.08);
-  --color-success-border: rgba(5, 150, 105, 0.25);
-  --color-success-text: #047857;
+  /* Semantic Feedback (GitHub Primer) */
+  --color-success: #1a7f37;
+  --color-success-surface: rgba(26, 127, 55, 0.08);
+  --color-success-border: rgba(26, 127, 55, 0.25);
+  --color-success-text: #1a7f37;
 
-  --color-warning: #d97706;
-  --color-warning-surface: rgba(217, 119, 6, 0.08);
-  --color-warning-border: rgba(217, 119, 6, 0.25);
-  --color-warning-text: #b45309;
+  --color-warning: #9a6700;
+  --color-warning-surface: rgba(154, 103, 0, 0.08);
+  --color-warning-border: rgba(154, 103, 0, 0.25);
+  --color-warning-text: #9a6700;
 
-  --color-error: #dc2626;
-  --color-error-surface: rgba(220, 38, 38, 0.08);
-  --color-error-border: rgba(220, 38, 38, 0.25);
-  --color-error-text: #b91c1c;
+  --color-error: #cf222e;
+  --color-error-surface: rgba(207, 34, 46, 0.08);
+  --color-error-border: rgba(207, 34, 46, 0.25);
+  --color-error-text: #cf222e;
 
   /* Non-flat tactile ambient shadows */
-  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 4px 16px -2px rgba(15, 23, 42, 0.05);
-  --shadow-elevated: 0 10px 30px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 3px rgba(31, 35, 40, 0.08), 0 0 0 1px #d0d7de;
+  --shadow-elevated: 0 8px 24px rgba(31, 35, 40, 0.12), 0 0 0 1px #d0d7de;
   --top-bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+
+  /* Navigation & Sidebar tokens */
+  --nav: #ffffff;
+  --nav-soft: #f6f8fa;
+  --nav-hover: #eff2f5;
+  --nav-active: rgba(9, 105, 218, 0.08);
+  --nav-active-ink: #0969da;
 }
 
 /* Global Reset & Base */
@@ -229,13 +260,13 @@ button:disabled {
 }
 
 /* --------------------------------------------------------------------------
-   Global Dark Mode Contrast Enforcement
-   Guarantees no dark/grey text becomes invisible or awkward on dark surfaces
+   Global Dark & Light Mode Contrast Enforcement (GitHub Primer Architecture)
    -------------------------------------------------------------------------- */
 .theme-dark,
 [data-theme='dark'],
 .app-shell.theme-dark {
   color: var(--text-primary);
+  background-color: var(--bg-root);
 }
 
 .theme-dark input,
@@ -247,16 +278,16 @@ button:disabled {
 .app-shell.theme-dark input,
 .app-shell.theme-dark textarea,
 .app-shell.theme-dark select {
-  color: #f8fafc !important;
-  background-color: var(--surface-input, #0b1018) !important;
-  border-color: var(--border-medium, rgba(255, 255, 255, 0.15)) !important;
+  color: #f0f6fc !important;
+  background-color: var(--surface-input, #0d1117) !important;
+  border-color: var(--border-medium, #30363d) !important;
 }
 
 .theme-dark select option,
 [data-theme='dark'] select option,
 .app-shell.theme-dark select option {
-  color: #f8fafc !important;
-  background-color: #0f1520 !important;
+  color: #f0f6fc !important;
+  background-color: #161b22 !important;
 }
 
 .theme-dark input::placeholder,
@@ -265,7 +296,7 @@ button:disabled {
 [data-theme='dark'] textarea::placeholder,
 .app-shell.theme-dark input::placeholder,
 .app-shell.theme-dark textarea::placeholder {
-  color: #64748b !important;
+  color: #8b949e !important;
   opacity: 0.85;
 }
 
@@ -275,5 +306,101 @@ button:disabled {
 [data-theme='dark'] code,
 .app-shell.theme-dark pre,
 .app-shell.theme-dark code {
-  color: #cbd5e1 !important;
+  color: #c9d1d9 !important;
+}
+
+/* Light Mode Input & Contrast Enforcement */
+.theme-light,
+[data-theme='light'],
+.app-shell.theme-light {
+  color: var(--text-primary);
+  background-color: var(--bg-root);
+}
+
+.theme-light input,
+.theme-light textarea,
+.theme-light select,
+[data-theme='light'] input,
+[data-theme='light'] textarea,
+[data-theme='light'] select,
+.app-shell.theme-light input,
+.app-shell.theme-light textarea,
+.app-shell.theme-light select {
+  color: #1f2328 !important;
+  background-color: #ffffff !important;
+  border-color: var(--border-subtle, #d0d7de) !important;
+}
+
+.theme-light select option,
+[data-theme='light'] select option,
+.app-shell.theme-light select option {
+  color: #1f2328 !important;
+  background-color: #ffffff !important;
+}
+
+.theme-light input::placeholder,
+.theme-light textarea::placeholder,
+[data-theme='light'] input::placeholder,
+[data-theme='light'] textarea::placeholder,
+.app-shell.theme-light input::placeholder,
+.app-shell.theme-light textarea::placeholder {
+  color: #656d76 !important;
+  opacity: 0.85;
+}
+
+.theme-light pre,
+.theme-light code,
+[data-theme='light'] pre,
+[data-theme='light'] code,
+.app-shell.theme-light pre,
+.app-shell.theme-light code {
+  color: #24292f !important;
+}
+
+/* Topbar & Sidebar Shell Adapters (GitHub Primer / Linear) */
+.topbar {
+  background: var(--surface-card) !important;
+  border-bottom: 1px solid var(--border-medium) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.crumbs {
+  color: var(--text-muted) !important;
+}
+
+.crumbs strong {
+  color: var(--text-primary) !important;
+}
+
+.sync-state {
+  color: var(--text-muted) !important;
+}
+
+.sidebar {
+  background: var(--nav) !important;
+  border-right: 1px solid var(--border-medium) !important;
+}
+
+.sidebar .nav-item {
+  color: var(--nav-muted) !important;
+}
+
+.sidebar .nav-item:hover:not(:disabled) {
+  color: var(--nav-ink) !important;
+  background: var(--nav-hover) !important;
+}
+
+.sidebar .nav-item.active {
+  color: var(--nav-active-ink) !important;
+  background: var(--nav-active) !important;
+  box-shadow: inset 2px 0 0 var(--accent-primary) !important;
+}
+
+.sidebar .brand-name {
+  color: var(--text-primary) !important;
+}
+
+.sidebar .group-label {
+  color: var(--text-muted) !important;
 }

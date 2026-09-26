@@ -104,13 +104,14 @@ Identifies contradictions between ingested documents and provides automated reco
     - Replaces conflicting entries with the approved value.
     - Logs the resolution to the version audit log.
 
-### 2.5 Template Blueprint Extraction & Document Cloning Engine (`structure_extraction.py`, `output_generation.py`)
-- Reverse-engineers target documents (DOCX, PDF, PPTX) to extract stylistic and structural DNA:
-  - Typographic hierarchies (heading font families, scale ratios, line heights).
-  - Structural layout (section sequence, callout boxes, table structures).
+### 2.5 Universal Template-Based Generation & Reference Blueprint Cloner (`structure_extraction.py`, `output_generation.py`)
+- **Core Value Proposition**: Generating an output artifact from scratch is time-consuming and resource-intensive. This feature allows the user to upload a pre-existing document as a reference and generates their input in the exact same format and structure, eliminating manual formatting and radically improving efficiency.
+- **Reverse-Engineering Engine**: Reverse-engineers target reference documents (DOCX, PDF, PPTX) to extract stylistic and structural DNA:
+  - Typographic hierarchies (heading font families, scale ratios, line heights, font weights).
+  - Structural layout (section sequence, callout boxes, table structures, margins, header/footer treatments).
   - Color palettes (primary brand color, secondary accent, neutral darks/lights).
-  - Slide structures (card layouts, visual element positions, footnote placement).
-- Cloned blueprints can be saved to the workspace and applied to new deliverables.
+  - Slide structures (card layouts, visual element positions, footnote placement, speaker note formats).
+- **Zero-Manual-Formatting Synthesis**: Users select their reference blueprint and compile any active Content DNA into the exact layout, styling, and visual rhythm of the reference template. Blueprints can be persisted in the workspace for reusable, automated enterprise reporting.
 
 ### 2.6 Deliverables Studio & Multi-Format Exporter (`output_generation.py`)
 Compiles Content DNA into 7 output deliverables across 7 persona parameters:

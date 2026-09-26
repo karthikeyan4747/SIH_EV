@@ -832,11 +832,15 @@ def _deterministic_generate_output(
     audience = config.get("audience", "Executive Leadership")
     tone = config.get("tone", "Professional")
     objective = config.get("objective", "Inform")
+    user_focus = config.get("prompt")
+    meta_line = f"**Target Audience:** {audience} | **Tone:** {tone} | **Intent:** {objective}"
+    if user_focus:
+        meta_line += f" | **Focus Directive:** {user_focus}"
 
     if output_type in ("executive_summary", "executive_brief"):
         out = [
             f"# {title}: Executive Summary",
-            f"**Target Audience:** {audience} | **Tone:** {tone} | **Intent:** {objective}\n",
+            f"{meta_line}\n",
             "## 1. Executive Synthesis & Strategic Context",
             overview + "\n",
             "## 2. Key Empirical Highlights & Metrics",
@@ -1636,7 +1640,7 @@ Return ONLY valid JSON matching the ContentDNA schema.
 
         generation_config = generation_config or {}
 
-        user_prompt = user_prompt or (
+        user_prompt = user_prompt or generation_config.get("prompt") or (
             "Generate the artifact according to the output specification."
         )
 
@@ -1968,12 +1972,22 @@ FORMATTING & SYNTHESIS DIRECTIVES
 
         compact_dna = _format_dna_for_prompt(content_dna, max_chars=10000)
 
+        focus_instruction = ""
+        effective_prompt = (user_prompt or "").strip()
+        if effective_prompt and effective_prompt != "Generate the artifact according to the output specification.":
+            focus_instruction = f"""
+CRITICAL USER FOCUS DIRECTIVE:
+The user explicitly specified: "{effective_prompt}"
+You MUST strictly follow this directive (for example, if the user requested to only focus on a specific person's opinion like the CEO, a specific topic, or particular metrics, tailor the entire publication strictly to that focus). Ground every single claim exclusively in the Content DNA below.
+"""
+
         user_message = f"""CONTENT DNA:
 {compact_dna}
 
 TASK:
 Generate the requested {output_spec.get("name", output_type)}.
 Respect audience, tone, language, level of detail, communication objective, and content style.
+{focus_instruction}
 Use Content DNA as the sole factual source. Return only the final artifact.
 """
 
@@ -2714,7 +2728,7 @@ Produce a single canonical ContentDNA object. Return ONLY valid JSON.
 
         generation_config = generation_config or {}
 
-        user_prompt = user_prompt or (
+        user_prompt = user_prompt or generation_config.get("prompt") or (
             "Generate the complete artifact according to the output specification."
         )
 
@@ -3024,7 +3038,11 @@ Follow the selected:
 - communication objective
 - content style
 - output structure
-
+{f"""
+CRITICAL USER FOCUS DIRECTIVE:
+"{effective_ollama_prompt}"
+You MUST strictly follow this directive (for example, if the user requested to only focus on a specific person's opinion like the CEO, a specific topic, or particular metrics, tailor the entire publication strictly to that focus). Ground every single claim exclusively in the Content DNA.
+""" if (effective_ollama_prompt := (user_prompt or "").strip()) and effective_ollama_prompt not in ("Generate the artifact according to the output specification.", "Generate the complete artifact according to the output specification.") else ""}
 Use Content DNA as the factual foundation.
 
 Produce the COMPLETE final artifact.

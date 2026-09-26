@@ -73,27 +73,35 @@ body {
 
 .brand-mark,
 .empty-home-mark {
-  background: linear-gradient(135deg, #0f8f8c, #66c6a2);
-  color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(15, 143, 140, 0.28);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: var(--accent-surface);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-border);
+  box-shadow: none;
+  user-select: none;
 }
 
 .empty-home-mark {
-  width: 76px;
-  height: 62px;
-  object-fit: contain;
-  padding: 6px;
-  background: #ffffff;
-  border: 1px solid rgba(15, 143, 140, 0.2);
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 12px;
 }
 
 .brand-mark {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-  padding: 5px;
-  background: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
 }
 
 .brand-name {
@@ -829,117 +837,89 @@ body {
 }
 
 .app-shell.theme-dark {
-  --bg: #0b1114;
-  --panel: #121b20;
-  --elevated: #18252a;
-  --elevated-2: #162328;
-  --border: #2b3b42;
-  --border-strong: #46616a;
-  --text: #edf4f3;
-  --muted: #a2b2b4;
-  --dim: #718387;
-  --accent: #83d8c0;
-  --accent-ink: #09201d;
-  --focus-ring: rgba(131, 216, 192, 0.24);
-  --shadow-panel: 0 18px 46px rgba(0, 0, 0, 0.28);
-  --shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.2);
-  background:
-    radial-gradient(circle at 80% -10%, rgba(131, 216, 192, 0.13), transparent 35%),
-    linear-gradient(180deg, #10191d 0%, #0b1114 100%);
+  --bg: #0d1117;
+  --panel: #161b22;
+  --elevated: #21262d;
+  --elevated-2: #161b22;
+  --border: #30363d;
+  --border-strong: #8b949e;
+  --text: #f0f6fc;
+  --muted: #8b949e;
+  --dim: #c9d1d9;
+  --accent: #2f81f7;
+  --accent-ink: #ffffff;
+  --focus-ring: rgba(56, 139, 253, 0.4);
+  --shadow-panel: 0 1px 3px rgba(1, 4, 9, 0.6), 0 0 0 1px #30363d;
+  --shadow-soft: 0 8px 24px rgba(1, 4, 9, 0.8), 0 0 0 1px #30363d;
+  background: var(--bg-root);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif !important;
 }
 
 .app-shell.theme-light {
-  font-family: "DM Sans", "Segoe UI", sans-serif;
-  background: linear-gradient(180deg, #ffffff 0%, #f1f5f8 100%);
-}
-
-.app-shell.theme-aesthetic {
-  --panel: rgba(255, 253, 252, 0.94);
-  --elevated: #fff8f5;
-  --elevated-2: #f3fbf8;
-  --border: rgba(173, 116, 104, 0.28);
-  --border-strong: rgba(15, 143, 140, 0.38);
-  --text: #201821;
-  --muted: #685a6a;
-  --dim: #8d7c90;
-  --accent: #b94f70;
+  --bg: #f6f8fa;
+  --panel: #ffffff;
+  --elevated: #ffffff;
+  --elevated-2: #f6f8fa;
+  --border: #d0d7de;
+  --border-strong: #afb8c1;
+  --text: #1f2328;
+  --muted: #656d76;
+  --dim: #424a53;
+  --accent: #0969da;
   --accent-ink: #ffffff;
-  --coral: #e16455;
-  --mint: #35b79a;
-  --gold: #d99a35;
-  --focus-ring: rgba(185, 79, 112, 0.22);
-  --shadow-panel: 0 24px 58px rgba(100, 54, 74, 0.14);
-  --shadow-soft: 0 14px 32px rgba(100, 54, 74, 0.1);
-  font-family: "DM Sans", "Segoe UI", sans-serif;
-  background:
-    linear-gradient(135deg, rgba(53, 183, 154, 0.14) 0%, transparent 34%),
-    linear-gradient(225deg, rgba(185, 79, 112, 0.16) 0%, transparent 32%),
-    linear-gradient(180deg, #fffdfb 0%, #f7f0f6 46%, #eef8f5 100%);
-}
-
-.app-shell.theme-aesthetic h1,
-.app-shell.theme-aesthetic h2,
-.app-shell.theme-aesthetic h3,
-.app-shell.theme-aesthetic .transformation-title {
-  font-family: "DM Sans", "Segoe UI", sans-serif;
-  letter-spacing: 0;
-}
-
-.app-shell.theme-dark {
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  --focus-ring: rgba(9, 105, 218, 0.3);
+  --shadow-panel: 0 1px 3px rgba(31, 35, 40, 0.08), 0 0 0 1px #d0d7de;
+  --shadow-soft: 0 8px 24px rgba(31, 35, 40, 0.12), 0 0 0 1px #d0d7de;
+  background: var(--bg-root);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif !important;
 }
 
 .app-shell.theme-dark h1,
 .app-shell.theme-dark h2,
 .app-shell.theme-dark h3,
-.app-shell.theme-dark .transformation-title {
-  font-family: "IBM Plex Mono", Consolas, monospace;
-  letter-spacing: -0.03em;
-}
-
-.app-shell.theme-aesthetic .mode-options button.active {
-  background: linear-gradient(135deg, #b94f70, #e16455);
-  border-color: rgba(185, 79, 112, 0.42);
-  box-shadow: 0 12px 28px rgba(185, 79, 112, 0.22);
+.app-shell.theme-dark .transformation-title,
+.app-shell.theme-light h1,
+.app-shell.theme-light h2,
+.app-shell.theme-light h3,
+.app-shell.theme-light .transformation-title {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif !important;
+  letter-spacing: -0.015em;
 }
 
 .app-shell.theme-dark .mode-options button.active {
-  color: #071412;
-  background: #83d8c0;
-  border-color: #83d8c0;
+  color: #ffffff;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .app-shell.theme-light {
   --page-panel: #ffffff;
-  --page-soft: #f7fbfc;
+  --page-soft: #f6f8fa;
   --page-input: #ffffff;
-  --page-line: #dbe6ed;
-  --page-highlight: #e5f4f3;
-}
-
-.app-shell.theme-aesthetic {
-  --page-panel: rgba(255, 253, 252, 0.92);
-  --page-soft: rgba(255, 247, 251, 0.88);
-  --page-input: rgba(255, 255, 255, 0.96);
-  --page-line: rgba(185, 79, 112, 0.22);
-  --page-highlight: #fff0f6;
+  --page-line: #d0d7de;
+  --page-highlight: rgba(9, 105, 218, 0.08);
+  --nav: #ffffff;
+  --nav-soft: #f6f8fa;
+  --nav-ink: #1f2328;
+  --nav-muted: #656d76;
+  --nav-hover: #eff2f5;
+  --nav-active: rgba(9, 105, 218, 0.08);
+  --nav-active-ink: #0969da;
 }
 
 .app-shell.theme-dark {
-  --page-panel: #172328;
-  --page-soft: #142025;
-  --page-input: #0d1518;
-  --page-line: #2b3b42;
-  --page-highlight: rgba(131, 216, 192, 0.12);
-  --nav: #1a171f;
-  --nav-soft: #302b35;
-  --nav-ink: #ffffff;
-  --nav-muted: #ded6e4;
-  --nav-blue: #5ea2ff;
-  --nav-blue-deep: #8f7cff;
-  --nav-hover: rgba(94, 162, 255, 0.16);
-  --nav-active: linear-gradient(90deg, rgba(94, 162, 255, 0.34), rgba(143, 124, 255, 0.2));
-  --nav-active-ink: #ffffff;
+  --page-panel: #161b22;
+  --page-soft: #0d1117;
+  --page-input: #0d1117;
+  --page-line: #30363d;
+  --page-highlight: rgba(56, 139, 253, 0.15);
+  --nav: #010409;
+  --nav-soft: #0d1117;
+  --nav-ink: #f0f6fc;
+  --nav-muted: #8b949e;
+  --nav-hover: #161b22;
+  --nav-active: rgba(56, 139, 253, 0.15);
+  --nav-active-ink: #58a6ff;
 }
 
 /* Keep every Transformation surface attached to the selected mode. */
@@ -1196,12 +1176,21 @@ body {
 }
 
 .login-mark {
-  display: block;
-  width: 132px;
-  height: 100px;
-  object-fit: contain;
-  object-position: left center;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  background: var(--accent-surface);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  user-select: none;
 }
 
 .login-card h1 {
@@ -3122,11 +3111,10 @@ body {
 
 .inputs-panel > .new-source .text-form input,
 .inputs-panel > .new-source .text-form textarea {
-  color: #17212f !important;
-  background: #ffffff !important;
-  border: 1px solid #cbd8e3 !important;
+  color: var(--text-primary) !important;
+  background: var(--surface-input) !important;
+  border: 1px solid var(--border-medium) !important;
   border-radius: 10px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .inputs-panel > .new-source .text-form input {
@@ -3698,7 +3686,7 @@ body {
 
 .source-verification-heading strong {
   margin: 0;
-  color: #17212f;
+  color: var(--text-primary);
   font-size: 17px;
   font-weight: 850;
   letter-spacing: 0;
@@ -3706,7 +3694,7 @@ body {
 
 .source-verification-heading span {
   max-width: 720px;
-  color: #617084;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -3722,8 +3710,7 @@ body {
 
 .integrity-results {
   padding: 20px 24px 24px;
-  background:
-    linear-gradient(180deg, #f8fbfc 0%, #eef5f7 100%);
+  background: var(--bg-root);
 }
 
 .integrity-summary {
@@ -3739,11 +3726,11 @@ body {
   gap: 8px;
   min-height: 54px;
   padding: 12px 14px;
-  color: #65758a;
-  background: #ffffff;
-  border: 1px solid #dbe7ed;
+  color: var(--text-muted);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  box-shadow: 0 8px 18px rgba(35, 57, 77, 0.045);
+  box-shadow: var(--shadow-card);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -3751,7 +3738,7 @@ body {
 }
 
 .integrity-summary strong {
-  color: #17212f;
+  color: var(--text-primary);
   font-size: 26px;
   font-weight: 900;
   letter-spacing: 0;
@@ -3814,7 +3801,7 @@ body {
 }
 
 .integrity-claim-main strong {
-  color: #17212f;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 800;
   line-height: 1.35;
@@ -3822,7 +3809,7 @@ body {
 }
 
 .integrity-claim-main span {
-  color: #6a798d;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -3841,28 +3828,29 @@ body {
 
 .integrity-status-supported,
 .integrity-status-corroborated {
-  color: #126e66;
-  background: #e5f4f3;
+  color: var(--color-success-text);
+  background: var(--color-success-surface);
+  border: 1px solid var(--color-success-border);
 }
 
 .integrity-status-conflict {
-  color: #955014;
-  background: #fff0da;
+  color: var(--color-warning-text);
+  background: var(--color-warning-surface);
+  border: 1px solid var(--color-warning-border);
 }
 
 .integrity-status-uncertain {
-  color: #536274;
-  background: #edf3f6;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
 }
 
 .integrity-claim-details {
   display: grid;
   gap: 18px;
   padding: 22px 24px 24px 62px;
-  background:
-    linear-gradient(135deg, rgba(15, 143, 140, 0.045), transparent 38%),
-    linear-gradient(180deg, #fbfdfe, #f4f9fa);
-  border-top: 1px solid #dbe7ed;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
   animation: integrity-details-in 0.24s ease both;
 }
 
@@ -3878,14 +3866,14 @@ body {
   gap: 10px;
   min-height: 72px;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid #dbe7ed;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  box-shadow: 0 8px 16px rgba(35, 57, 77, 0.045);
+  box-shadow: var(--shadow-card);
 }
 
 .integrity-detail-row span {
-  color: #73849a;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.13em;
@@ -3893,7 +3881,7 @@ body {
 }
 
 .integrity-detail-row strong {
-  color: #17212f;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 800;
   line-height: 1.45;
@@ -3911,7 +3899,7 @@ body {
   justify-content: space-between;
   gap: 14px;
   margin: 0;
-  color: #17212f !important;
+  color: var(--text-primary) !important;
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.13em;
@@ -3920,9 +3908,9 @@ body {
 
 .integrity-evidence-heading small {
   padding: 6px 9px;
-  color: #0f7774;
-  background: #e5f4f3;
-  border: 1px solid #c7e5e3;
+  color: var(--accent-text);
+  background: var(--accent-surface);
+  border: 1px solid var(--accent-border);
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
@@ -3934,12 +3922,10 @@ body {
   display: grid;
   gap: 12px;
   padding: 16px;
-  background: #ffffff !important;
-  border: 1px solid #dbe7ed !important;
+  background: var(--surface-card) !important;
+  border: 1px solid var(--border-subtle) !important;
   border-radius: 13px;
-  box-shadow:
-    0 10px 18px rgba(35, 57, 77, 0.045),
-    inset 3px 0 #8cc9c6;
+  box-shadow: var(--shadow-card);
 }
 
 .integrity-evidence-source {
@@ -3951,16 +3937,16 @@ body {
 }
 
 .integrity-evidence-source strong {
-  color: #17212f;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 850;
 }
 
 .integrity-evidence-source span {
   padding: 4px 8px;
-  color: #607389;
-  background: #f0f6f8;
-  border: 1px solid #dbe7ed;
+  color: var(--text-secondary);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;

@@ -9,7 +9,6 @@ import {
   Trash2,
   Upload,
   X,
-  Sliders,
   Bookmark,
   ChevronDown,
   Video,
@@ -18,6 +17,8 @@ import {
   ShieldAlert,
   BarChart3,
   Presentation,
+  ArrowRight,
+  Layers,
 } from 'lucide-react'
 import type { Transformation } from '../../../types/transformation'
 import {
@@ -39,6 +40,7 @@ export type GenerationConfig = {
   detail: string
   objective: string
   style: string
+  prompt?: string
   slides?: number
   model?: string
 }
@@ -314,6 +316,12 @@ export function StudioStage({
     reader.readAsDataURL(file)
   }
 
+  const handleClearTemplateFile = () => {
+    setTemplateFileBase64(null)
+    setTemplateFileName('')
+    setTemplateFileType(null)
+  }
+
   const handleRunTemplateCloner = async () => {
     if (templateMode === 'file' && !templateFileBase64) {
       setTemplateError('Please upload a reference document first.')
@@ -361,47 +369,201 @@ export function StudioStage({
 
   return (
     <div className="studio-stage-container">
-      {/* Top Workflow & Synthesis Bar */}
-      <div className="studio-stage-toolbar tactile-card">
-        <div className="toolbar-left">
-          <span className="stage-kicker">
-            <Sliders size={13} />
-            STAGE 04 · DELIVERABLES & SYNTHESIS STUDIO
-          </span>
-          <h3>Deliverables Production & Export Studio</h3>
-          <p>
-            Synthesize multi-format verified publications grounded strictly in immutable Content DNA evidence.
-          </p>
-        </div>
+      {/* Universal Template-Based Generation - Core Novelty Workstation */}
+      <section id="template-cloner-workbench" className="template-cloner-workbench tactile-card">
+        {/* Header & Core Novelty Value Proposition */}
+        <div className="workbench-header">
+          <div className="workbench-title-area">
+            <div className="workbench-core-badge">
+              <Layers size={14} />
+              <span>CORE NOVELTY · UNIVERSAL TEMPLATE-BASED GENERATION</span>
+            </div>
+            <h3>Reference Document & Structural Template Cloner</h3>
+            <p>
+              Generating deliverables from scratch is time-consuming and resource-intensive. Upload any pre-existing document (PDF, Word, or screenshot) to deterministically extract its layout hierarchy, section structures, and formatting—then synthesize your publication in the exact same format, grounded strictly in your Content DNA.
+            </p>
+          </div>
 
-        <div className="toolbar-right-actions">
-          <button
-            type="button"
-            className="btn-template-clone"
-            onClick={() => setShowTemplateModal(true)}
-            title="Replicate an external document layout exactly"
-          >
-            <Camera size={14} />
-            <span>Clone Reference Template</span>
-          </button>
-
-          <button
-            type="button"
-            className="generate-deliverables-btn"
-            disabled={busy || selectedTypes.length === 0}
-            onClick={() => onGenerateOutputs(selectedTypes, config)}
-          >
-            <Sparkles size={14} />
-            <span>
-              {busy
-                ? 'Synthesizing Publications...'
-                : selectedWorkflow !== 'custom'
-                ? `Run Workflow (${selectedTypes.length})`
-                : `Generate Deliverables (${selectedTypes.length})`}
+          <div className="workbench-pills-row">
+            <span className="workbench-pill">
+              <Check size={12} /> Deterministic Layout Extraction
             </span>
-          </button>
+            <span className="workbench-pill">
+              <Check size={12} /> Section & Hierarchy Replication
+            </span>
+            <span className="workbench-pill">
+              <Check size={12} /> Grounded Strictly in Content DNA
+            </span>
+            <span className="workbench-pill">
+              <Check size={12} /> Zero Manual Redesign
+            </span>
+          </div>
         </div>
-      </div>
+
+        {/* Interactive Workspace Grid */}
+        <div className="workbench-interactive-grid">
+          {/* Left Column: Reference Ingestion (Dropzone / Text Area) */}
+          <div className="workbench-input-pane">
+            <div className="workbench-mode-tabs">
+              <button
+                type="button"
+                className={`workbench-tab ${templateMode === 'file' ? 'active' : ''}`}
+                onClick={() => setTemplateMode('file')}
+              >
+                <Upload size={14} />
+                <span>Upload Reference Document (PDF / DOCX / Image)</span>
+              </button>
+              <button
+                type="button"
+                className={`workbench-tab ${templateMode === 'text' ? 'active' : ''}`}
+                onClick={() => setTemplateMode('text')}
+              >
+                <FileText size={14} />
+                <span>Paste Layout Text / Markdown</span>
+              </button>
+            </div>
+
+            {templateMode === 'file' ? (
+              <div
+                className={`workbench-dropzone ${templateFileBase64 ? 'has-file' : ''}`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleTemplateFileUpload(e.dataTransfer.files[0])
+                  }
+                }}
+              >
+                <input
+                  type="file"
+                  id="template-workbench-file-input"
+                  className="workbench-file-input"
+                  accept=".pdf,.docx,.doc,image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleTemplateFileUpload(e.target.files[0])
+                    }
+                  }}
+                />
+                {templateFileName ? (
+                  <div className="workbench-file-card">
+                    <div className="file-card-icon">
+                      <FileText size={32} />
+                    </div>
+                    <div className="file-card-meta">
+                      <div className="file-card-title-row">
+                        <strong className="file-name">{templateFileName}</strong>
+                        <span className="file-type-pill">{templateFileType?.toUpperCase() || 'DOCUMENT'}</span>
+                      </div>
+                      <span className="file-status">Blueprint ready for deterministic layout extraction</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="file-change-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleClearTemplateFile()
+                      }}
+                    >
+                      Remove File
+                    </button>
+                  </div>
+                ) : (
+                  <label htmlFor="template-workbench-file-input" className="dropzone-label">
+                    <div className="dropzone-icon-circle">
+                      <Upload size={28} />
+                    </div>
+                    <strong className="dropzone-prompt">Drop reference document here or click to browse</strong>
+                    <span className="dropzone-sub">Upload an existing report, memo, briefing sheet, or template</span>
+                    <div className="dropzone-supported-tags">
+                      <span>PDF Documents</span>
+                      <span>Word (.docx)</span>
+                      <span>Layout Screenshots (PNG, JPG)</span>
+                    </div>
+                  </label>
+                )}
+              </div>
+            ) : (
+              <div className="workbench-textarea-container">
+                <textarea
+                  className="workbench-textarea"
+                  rows={8}
+                  placeholder={`Paste reference template structure or markdown layout...
+Example:
+# [Report Title]
+## Executive Summary (3 bullet points)
+## Market Comparison Table [Quarter | Metric | Variance]
+## Strategic Recommendations & Callouts`}
+                  value={templateText}
+                  onChange={(e) => setTemplateText(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Template Configuration & Synthesis Action */}
+          <div className="workbench-config-pane">
+            <div className="workbench-fields">
+              <div className="workbench-field">
+                <label htmlFor="workbench-template-name">
+                  <span>Deliverable Identifier / Name</span>
+                  <small>Output title for cloned deliverable</small>
+                </label>
+                <input
+                  id="workbench-template-name"
+                  type="text"
+                  className="workbench-input"
+                  placeholder="e.g. Q4 Executive Board Brief, Global Clinical Review"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+              </div>
+
+              <div className="workbench-field">
+                <label htmlFor="workbench-template-prompt">
+                  <span>Focus Objective & Persona Alignment <small>(Optional)</small></span>
+                  <small>Prioritize specific Content DNA dimensions</small>
+                </label>
+                <input
+                  id="workbench-template-prompt"
+                  type="text"
+                  className="workbench-input"
+                  placeholder="e.g. Focus on financial comparison, executive takeaways, and risk metrics"
+                  value={templatePrompt}
+                  onChange={(e) => setTemplatePrompt(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {templateError && (
+              <div className="workbench-error-banner" role="alert">
+                <ShieldAlert size={14} />
+                <span>{templateError}</span>
+              </div>
+            )}
+
+            <div className="workbench-action-footer">
+              <button
+                type="button"
+                className="workbench-clone-btn primary"
+                onClick={handleRunTemplateCloner}
+                disabled={templateGenerating}
+              >
+                <Camera size={18} />
+                <span>
+                  {templateGenerating
+                    ? 'Extracting Layout & Synthesizing Deliverable...'
+                    : 'Clone Reference Template & Synthesize Deliverable'}
+                </span>
+                {!templateGenerating && <ArrowRight size={16} />}
+              </button>
+              <span className="workbench-guarantee-note">
+                Strict Zero-Hallucination: Generated output is verified against your source Content DNA.
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Main Studio Two-Column Grid */}
       <div className="studio-main-grid">
@@ -659,14 +821,70 @@ export function StudioStage({
                 <ChevronDown size={14} className="select-chevron" />
               </div>
             </div>
+
+            {/* Custom Steering Prompt / Focus Directive */}
+            <div className="steering-prompt-section" style={{ gridColumn: '1 / -1', marginTop: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                <label htmlFor="deck-steering-prompt" style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Focus Prompt / Steering Instructions <small style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</small>
+                </label>
+              </div>
+              <textarea
+                id="deck-steering-prompt"
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  background: 'var(--surface-sunken)',
+                  border: '1px solid var(--border-medium)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  lineHeight: '1.5',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+                placeholder="e.g. 'Only make a post about the CEO\'s opinion', 'Focus solely on risk indicators and market impact'"
+                value={config.prompt || ''}
+                onChange={(e) => handleParamChange('prompt', e.target.value)}
+              />
+              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                Content DNA guarantees zero hallucination while steering directly to your custom prompt.
+              </span>
+            </div>
+
+            {/* Action: Generate Deliverables */}
+            <div className="deck-action-footer" style={{ marginTop: '20px' }}>
+              <button
+                type="button"
+                className="generate-deliverables-btn"
+                style={{ width: '100%', padding: '12px 18px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                disabled={busy || selectedTypes.length === 0}
+                onClick={() => onGenerateOutputs(selectedTypes, config)}
+              >
+                <Sparkles size={15} />
+                <span>
+                  {busy
+                    ? 'Generating Deliverables...'
+                    : selectedWorkflow !== 'custom'
+                    ? `Run Workflow (${selectedTypes.length})`
+                    : `Generate Deliverables (${selectedTypes.length})`}
+                </span>
+              </button>
+            </div>
           </div>
         </section>
 
         {/* Right Column: Generated Deliverables Library */}
         <section className="studio-artifacts-deck tactile-card">
-          <div className="deck-header">
-            <div>
-              <h4>Generated Deliverables ({transformation.outputs.length})</h4>
+          <div className="deliverables-deck-header">
+            <div className="deck-header-info">
+              <div className="deck-header-title-row">
+                <h4>Generated Deliverables</h4>
+                <span className="deliverables-count-chip">
+                  {transformation.outputs.length} {transformation.outputs.length === 1 ? 'Deliverable' : 'Deliverables'}
+                </span>
+              </div>
               <p>
                 Verified publications presented in print-ready PDF format grounded in synthesized Content DNA.
               </p>
@@ -681,12 +899,28 @@ export function StudioStage({
 
           {transformation.outputs.length === 0 && !busy ? (
             <div className="studio-empty-deliverables">
-              <Sparkles size={34} />
+              <div className="empty-deliverables-icon-box">
+                <FileText size={26} />
+              </div>
               <h4>No deliverables generated yet</h4>
               <p>
-                Configure your deliverable formats and parameters on the left, then click{' '}
-                <strong>"Generate Deliverables"</strong> to produce your print-ready publications.
+                Configure your deliverable formats and persona parameters on the left, then click{' '}
+                <strong>"Generate Deliverables"</strong> to produce verified publications.
               </p>
+              <div className="empty-deliverables-steps">
+                <div className="empty-step-item">
+                  <span className="empty-step-num">1</span>
+                  <span>Select formats (e.g. Executive Summary, Presentation)</span>
+                </div>
+                <div className="empty-step-item">
+                  <span className="empty-step-num">2</span>
+                  <span>Set tone, detail level, and target audience</span>
+                </div>
+                <div className="empty-step-item">
+                  <span className="empty-step-num">3</span>
+                  <span>Generate output or clone from a reference template</span>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="artifacts-stream">

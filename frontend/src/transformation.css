@@ -75,10 +75,10 @@
   right: 0;
   z-index: 100;
   min-width: 220px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-medium);
   border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-elevated);
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -94,13 +94,13 @@
   background: transparent;
   border: none;
   border-radius: 5px;
-  color: #f1f5f9;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.12s ease;
 }
 .download-menu-dropdown .download-option:hover {
-  background: #1e293b;
-  color: #38bdf8;
+  background: var(--surface-card-hover);
+  color: var(--accent-text);
 }
 .download-menu-dropdown .download-option.default-option {
   background: rgba(56, 189, 248, 0.06);

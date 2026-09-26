@@ -6,7 +6,6 @@ import {
   Moon,
   Sun,
   History,
-  Sparkles,
 } from 'lucide-react'
 import { ModelTelemetryBadge } from '../model/ModelTelemetryBadge'
 import type { Transformation } from '../../types/transformation'
@@ -28,7 +27,6 @@ export function WorkspaceHeader({
   onThemeToggle,
   onRename,
   onOpenVersions,
-  onGenerateQuick,
 }: WorkspaceHeaderProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [titleValue, setTitleValue] = useState(transformation.title)
@@ -107,18 +105,6 @@ export function WorkspaceHeader({
       <div className="workspace-header-actions">
         {/* Model Quota & Telemetry */}
         <ModelTelemetryBadge />
-
-        {/* Quick Deliverable Button */}
-        {onGenerateQuick && (
-          <button
-            type="button"
-            className="header-action-btn primary"
-            onClick={onGenerateQuick}
-          >
-            <Sparkles size={14} />
-            <span>Studio</span>
-          </button>
-        )}
 
         {/* Crisp Light/Dark Mode Switcher */}
         <button

@@ -478,8 +478,9 @@ export function ConflictResolutionPanel({
                       Change Selection
                     </button>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#86efac', opacity: 0.9, marginTop: '8px' }}>
-                    ✓ Stale conflicting claims removed. Authoritative fact updated in Semantic Lineage Graph.
+                  <div style={{ fontSize: '11px', color: 'var(--color-success-text, #3fb950)', opacity: 0.9, marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Check size={13} />
+                    <span>Stale conflicting claims removed. Authoritative fact updated in Semantic Lineage Graph.</span>
                   </div>
                 </div>
               ) : (

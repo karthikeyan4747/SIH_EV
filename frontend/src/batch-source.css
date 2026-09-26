@@ -1,5 +1,5 @@
 .batch-text-form { gap: 14px; }
-.text-draft { display: grid; gap: 14px; padding: 15px; background: #0d1014; border: 1px solid #2a3039; border-radius: 6px; }
+.text-draft { display: grid; gap: 14px; padding: 15px; background: var(--surface-sunken); border: 1px solid var(--border-medium); border-radius: 6px; }
 .draft-heading { display: flex; align-items: center; justify-content: space-between; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
 .icon-action { display: grid; place-items: center; padding: 5px; color: var(--muted); background: transparent; border: 0; border-radius: 4px; }
 .icon-action:hover { color: var(--danger); background: #2a171b; }

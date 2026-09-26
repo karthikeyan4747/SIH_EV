@@ -67,13 +67,7 @@ export function SidebarDemo() {
                 label: "Manu Arora",
                 href: "#",
                 icon: (
-                  <img
-                    src="https://assets.aceternity.com/manu.png"
-                    className="h-7 w-7 shrink-0 rounded-full"
-                    width={50}
-                    height={50}
-                    alt="Avatar"
-                  />
+                  <IconUserBolt className="h-6 w-6 shrink-0 text-neutral-500 dark:text-neutral-400" />
                 ),
               }}
             />

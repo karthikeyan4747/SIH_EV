@@ -310,12 +310,12 @@ export function VersionHistoryModal({
                               <div className="change-tags-row">
                                 {changes.toneChanged && (
                                   <span className="change-tag">
-                                    Tone: <strong>{changes.toneChanged.from}</strong> ➔ <strong>{changes.toneChanged.to}</strong>
+                                    Tone: <strong>{changes.toneChanged.from}</strong> → <strong>{changes.toneChanged.to}</strong>
                                   </span>
                                 )}
                                 {changes.audienceChanged && (
                                   <span className="change-tag">
-                                    Audience: <strong>{changes.audienceChanged.from}</strong> ➔ <strong>{changes.audienceChanged.to}</strong>
+                                    Audience: <strong>{changes.audienceChanged.from}</strong> → <strong>{changes.audienceChanged.to}</strong>
                                   </span>
                                 )}
                               </div>

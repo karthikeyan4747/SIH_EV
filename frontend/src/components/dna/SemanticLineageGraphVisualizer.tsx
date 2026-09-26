@@ -581,7 +581,7 @@ export function SemanticLineageGraphVisualizer({
     return {
       activeNodeIds: nodeIds,
       activeEdgeIds: edgeIds,
-      lineageBreadcrumb: parts.join(' ➔ '),
+      lineageBreadcrumb: parts.join(' → '),
     }
   }, [hoveredNodeId, edges, nodes])
 
@@ -876,12 +876,12 @@ export function SemanticLineageGraphVisualizer({
         {/* Scroll / Zoom Activation Notifications */}
         {showScrollHint && !isCanvasActive && (
           <div className="lineage-zoom-hint-banner">
-            <span>💡 Click canvas to enable pan & zoom, or hold <strong>Ctrl / ⌘</strong> while scrolling</span>
+            <span>Click canvas to enable pan & zoom, or hold <strong>Ctrl / Cmd</strong> while scrolling</span>
           </div>
         )}
         {isCanvasActive && !fullscreen && (
           <div className="lineage-zoom-hint-banner active-mode">
-            <span>⚡ Interactive Canvas Active • Drag or Arrow Keys to Pan • Ctrl+Scroll to Zoom</span>
+            <span>Interactive Canvas Active • Drag or Arrow Keys to Pan • Ctrl+Scroll to Zoom</span>
           </div>
         )}
         <svg

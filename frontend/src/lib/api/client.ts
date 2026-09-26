@@ -317,6 +317,7 @@ export type GenerationConfig = {
   detail: string
   objective: string
   style: string
+  prompt?: string
 }
 
 export function generateTransformationOutputs(
