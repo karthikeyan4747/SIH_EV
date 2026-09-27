@@ -61,24 +61,10 @@ npm run build
 
 ---
 
-## 3. Production Deployment
-
-### Container Deployment (Docker + Nginx)
-
-The frontend includes a multi-stage `Dockerfile` and optimized `nginx.conf`:
-
-```bash
-# Build the image with backend API URL
-docker build --build-arg VITE_API_BASE_URL=https://sih-ev-backend.onrender.com -t sih-ev-frontend .
-
-# Run container on port 80 (or 5173)
-docker run --rm -p 5173:80 sih-ev-frontend
-```
-
-### Cloud Deployment (Vercel)
+## 3. Cloud Deployment (Vercel)
 
 The repository is pre-configured with `vercel.json`:
-1. Connect the repository to Vercel.
+1. Connect the repository to [Vercel](https://vercel.com/).
 2. Select Root Directory as `frontend`.
 3. Set Framework Preset to `Vite`.
 4. Add environment variable:

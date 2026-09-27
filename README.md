@@ -5,11 +5,54 @@
 [![Node.js: 18+](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-61DAFB.svg)](https://react.dev/)
-[![Docker](https://img.shields.io/badge/Containers-Docker%20Compose-2496ED.svg)](https://www.docker.com/)
 
-EV is an enterprise content transformation platform designed to ingest multi-format unstructured sources, synthesize a deterministic and editable canonical knowledge layer called **Content DNA**, detect and resolve cross-source factual contradictions, and generate brand-aligned, publication-ready deliverables with strict source provenance and blueprint layout cloning.
+EV is an enterprise content transformation platform designed to ingest multi-format unstructured sources, synthesize a deterministic and editable canonical knowledge layer called **Content DNA**, detect and resolve cross-source factual contradictions, and generate publication-ready deliverables with strict source provenance and blueprint layout cloning.
 
 Developed for the Smart India Hackathon (Problem Statement 26154).
+
+---
+
+## Quick Setup (Run in 2 Minutes)
+
+### 1. Local Development Setup
+
+#### Backend (Terminal 1)
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate    # On Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cp .env.example .env                                  # (Optional) Add your GROQ_API_KEY
+uvicorn app.main:app --reload --port 8000
+```
+- **API Base URL**: `http://localhost:8000`
+- **Interactive Swagger Docs**: `http://localhost:8000/docs`
+- **Health Check**: `http://localhost:8000/health`
+
+#### Frontend (Terminal 2)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+- **Web UI**: [http://localhost:5173](http://localhost:5173)
+
+---
+
+### 2. Production Cloud Deployment (Render + Vercel)
+
+- **Backend (Render Web Service)**:
+  1. Connect this repo to [Render](https://dashboard.render.com/).
+  2. Set **Root Directory**: `backend`, **Build Command**: `pip install -r requirements.txt`, **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+  3. Set Environment Variables:
+     - `LLM_PROVIDER=groq`
+     - `GROQ_API_KEY=gsk_your_key_here` (or `GROQ_API_KEYS=key1,key2` for rotation)
+     - `GROQ_MODEL=qwen/qwen3.8-27b`
+     - `ALLOWED_ORIGINS=*`
+- **Frontend (Vercel)**:
+  1. Import this repo into [Vercel](https://vercel.com/).
+  2. Set **Root Directory**: `frontend`, **Framework**: `Vite`.
+  3. Add Environment Variable: `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`.
+  4. Deploy. (SPA routing rewrites are pre-configured in `vercel.json`).
 
 ---
 
@@ -18,21 +61,17 @@ Developed for the Smart India Hackathon (Problem Statement 26154).
 1. [Key Innovations & Novel Architecture](#key-innovations--novel-architecture)
 2. [Platform Architecture](#platform-architecture)
 3. [Core Subsystems](#core-subsystems)
-4. [Deployment & Quickstart](#deployment--quickstart)
-   - [Option 1: Production Cloud Deployment (Render + Vercel)](#option-1-production-cloud-deployment-render--vercel)
-   - [Option 2: Containerized Deployment (Docker Compose)](#option-2-containerized-deployment-docker-compose)
-   - [Option 3: Local Bare-Metal Setup](#option-3-local-bare-metal-setup)
-5. [Environment Variables Reference](#environment-variables-reference)
-6. [REST API Documentation](#rest-api-documentation)
-7. [Automated Verification & Testing](#automated-verification--testing)
-8. [Directory Structure](#directory-structure)
-9. [License](#license)
+4. [Environment Variables Reference](#environment-variables-reference)
+5. [REST API Documentation](#rest-api-documentation)
+6. [Automated Verification & Testing](#automated-verification--testing)
+7. [Directory Structure](#directory-structure)
+8. [License](#license)
 
 ---
 
 ## Key Innovations & Novel Architecture
 
-Traditional generative AI workflows pass raw unstructured source text directly into large language model (LLM) prompts. This direct ingestion causes significant issues in enterprise environments:
+Traditional generative AI workflows pass raw unstructured source text directly into LLM prompts. In enterprise applications, this produces severe issues:
 - **Hallucination & Drift**: The model extrapolates beyond factual boundaries because it lacks an explicit factual schema.
 - **Lost Lineage**: Generated reports cannot trace specific sentences back to the source document, page, or timestamp.
 - **Unchecked Contradictions**: When two input documents disagree (e.g., conflicting revenue figures or dates), models either silently invent a number or hallucinate an arbitrary reconciliation.
@@ -54,7 +93,7 @@ Rather than translating sources directly into deliverables, EV normalizes all in
 ### 2. Reference Template-Based Generation (Layout Blueprint Cloning)
 The core novelty of the generation engine is **Layout Blueprint Cloning**:
 - Users upload any existing document format—such as a corporate Word document (`.docx`), a formatted PDF (`.pdf`), or a screenshot/image of an executive slide.
-- EV extracts the visual and hierarchical structure (header typography, column layouts, table structures, callout callouts, and slide themes) via multi-modal vision and structural parsers.
+- EV extracts the visual and hierarchical structure (header typography, column layouts, table structures, callout boxes, and slide themes) via multi-modal vision and structural parsers.
 - The engine then synthesizes an entirely new deliverable that matches the uploaded blueprint's styling while populating it exclusively with facts from the active workspace's Content DNA.
 
 ### 3. Prompt-Steered Synthesis
@@ -143,166 +182,6 @@ Every modification—whether an ingested source, a manual field edit, or a confl
 - Built with an interactive 2D SVG canvas.
 - Dynamically renders relationship edges connecting raw sources to extracted evidence, Content DNA nodes, and generated deliverables.
 - Features smooth viewport panning, focus-based scroll zooming, node filtering, and detailed inspection drawers.
-
----
-
-## Deployment & Quickstart
-
-### Option 1: Production Cloud Deployment (Render + Vercel)
-
-This architecture hosts the FastAPI backend on **Render** (as a Docker Web Service or Python native service) and the React frontend on **Vercel**.
-
-#### Step 1: Deploy Backend to Render
-
-1. Log in to the [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Web Service**.
-2. Connect your GitHub repository (`SIH_EV`).
-3. Set the following configuration:
-   - **Name**: `sih-ev-backend`
-   - **Region**: `Oregon (US West)` or preferred region
-   - **Root Directory**: `backend`
-   - **Environment**: `Python` (or `Docker` using `backend/Dockerfile`)
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Under **Environment Variables**, configure:
-   ```env
-   PYTHON_VERSION=3.11.9
-   LLM_PROVIDER=groq
-   GROQ_API_KEY=gsk_your_groq_api_key_here
-   GROQ_API_KEYS=gsk_key1,gsk_key2,gsk_key3
-   GROQ_MODEL=qwen/qwen3.8-27b
-   ALLOWED_ORIGINS=*
-   ```
-5. Click **Create Web Service**. Once deployed, copy your service URL (e.g., `https://sih-ev-backend.onrender.com`).
-6. Verify deployment by visiting `https://sih-ev-backend.onrender.com/health` (should return `{"status":"ok"}`).
-
-#### Step 2: Deploy Frontend to Vercel
-
-1. Log in to the [Vercel Dashboard](https://vercel.com/) and click **Add New...** -> **Project**.
-2. Import the `SIH_EV` repository.
-3. Configure the project settings:
-   - **Framework Preset**: `Vite`
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-4. Under **Environment Variables**, add:
-   ```env
-   VITE_API_BASE_URL=https://sih-ev-backend.onrender.com
-   ```
-5. Click **Deploy**. Vercel will build the frontend and provide your live production URL (e.g., `https://sih-ev.vercel.app`).
-
-> **Note**: Both `vercel.json` (at root) and `frontend/vercel.json` are pre-configured with SPA route rewrites (`/(.*) -> /index.html`) so refreshing on deep URLs works seamlessly.
-
----
-
-### Option 2: Containerized Deployment (Docker Compose)
-
-Launch the entire stack (FastAPI backend + Nginx frontend) with a single command:
-
-#### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose installed.
-
-#### Quickstart
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/karthikeyan4747/SIH_EV.git
-   cd SIH_EV
-   ```
-
-2. Create an environment file `.env` at the project root (or set keys directly):
-   ```env
-   LLM_PROVIDER=groq
-   GROQ_API_KEY=your_groq_api_key_here
-   GROQ_MODEL=qwen/qwen3.8-27b
-   VITE_API_BASE_URL=http://localhost:8000
-   ```
-
-3. Build and start the containers:
-   ```bash
-   docker compose up --build
-   ```
-
-4. Access the applications:
-   - **Frontend UI**: [http://localhost:5173](http://localhost:5173)
-   - **Backend API & Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-   - **Healthcheck**: [http://localhost:8000/health](http://localhost:8000/health)
-
-To run in the background:
-```bash
-docker compose up -d
-```
-
-To stop containers:
-```bash
-docker compose down
-```
-
----
-
-### Option 3: Local Bare-Metal Setup
-
-#### Prerequisites
-- **Python**: Version 3.12 or higher
-- **Node.js**: Version 18.0.0 or higher (`npm` / `pnpm`)
-- **FFmpeg**: Required for audio/video source transcription (`brew install ffmpeg` on macOS, `apt install ffmpeg` on Ubuntu)
-
-#### 1. Backend Setup
-
-```bash
-cd backend
-
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate       # On Windows: .venv\Scripts\Activate.ps1
-
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-```
-
-Edit `backend/.env`:
-```env
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=qwen/qwen3.8-27b
-PORT=8000
-ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-```
-
-Start the FastAPI development server:
-```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-The API will be available at `http://127.0.0.1:8000`.
-
-#### 2. Frontend Setup
-
-In a new terminal window:
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Configure environment variables
-cp .env.example .env
-```
-
-Ensure `frontend/.env` points to your backend:
-```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
-
-Start the Vite development server:
-```bash
-npm run dev
-```
-
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173) in your browser.
 
 ---
 
@@ -408,7 +287,6 @@ npm run build
 ```
 SIH_EV/
 ├── README.md                           # Master project documentation
-├── docker-compose.yml                  # Unified multi-container Docker Compose spec
 ├── render.yaml                         # Render Infrastructure-as-Code blueprint
 ├── vercel.json                         # Root Vercel SPA routing configuration
 ├── backend/
@@ -422,7 +300,6 @@ SIH_EV/
 │   │   └── services/                   # LLM engine, chunking, integrity, and cloner
 │   ├── tests/                          # Pytest automated test suite (78 tests)
 │   ├── requirements.txt                # Python backend dependencies
-│   ├── Dockerfile                      # Production container configuration
 │   └── .env.example                    # Backend environment variable template
 └── frontend/
     ├── src/
@@ -435,8 +312,6 @@ SIH_EV/
     │   │   ├── api/                    # Typed API client with auto rehydration
     │   │   └── export/                 # PPTX, DOCX, and PDF export handlers
     │   └── types/                      # TypeScript domain definitions
-    ├── nginx.conf                      # Nginx production configuration with SPA fallback
-    ├── Dockerfile                      # Multi-stage Docker build configuration
     ├── package.json                    # Node dependencies and build scripts
     ├── vite.config.ts                  # Vite build configuration
     └── .env.example                    # Frontend environment variable template

@@ -90,16 +90,7 @@ pytest -v
 
 ---
 
-## 3. Production Deployment
-
-### Docker Container
-
-```bash
-docker build -t sih-ev-backend .
-docker run --rm -p 8000:8000 --env-file .env sih-ev-backend
-```
-
-### Cloud Deployment (Render)
+## 3. Cloud Deployment (Render)
 
 The repository includes a ready-to-deploy `render.yaml` specification:
 1. Connect this repository to Render as a Web Service.
