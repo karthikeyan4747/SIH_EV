@@ -12,92 +12,115 @@ export function parsePresentationMarkdown(markdown: string): ParsedSlide[] {
     return []
   }
 
-  // Split by markdown horizontal rules or slide headers
-  const rawSections = markdown.split(/(?:^|\n)(?:---|\*{3}|_{3})(?:\n|$)/g)
-  const slides: ParsedSlide[] = []
+  // Standardize line breaks
+  const normalized = markdown.replace(/\r\n/g, '\n').trim()
 
+  // Try splitting by standard slide horizontal dividers (---, ***, ___)
+  let rawChunks = normalized.split(/\n\s*(?:---+|\*\*\*+|___+)\s*\n/g)
+
+  // If no horizontal dividers or only 1 chunk, try splitting by slide headers
+  if (rawChunks.length <= 1) {
+    const slideHeaderRegex = /(?=^#{1,3}\s*Slide\s*\d+)/gim
+    const splitByHeader = normalized.split(slideHeaderRegex)
+    if (splitByHeader.length > 1) {
+      rawChunks = splitByHeader
+    }
+  }
+
+  const slides: ParsedSlide[] = []
   let slideCounter = 1
 
-  for (const raw of rawSections) {
-    const trimmed = raw.trim()
-    if (!trimmed) continue
+  for (const raw of rawChunks) {
+    const chunk = raw.trim()
+    if (!chunk) continue
 
-    // If section contains multiple '### Slide' headers, split them
-    const subSections = trimmed.split(/(?=(?:###|##|#)\s*Slide\s*\d+)/gi)
+    // Remove any leading markdown dividers
+    const cleanChunk = chunk.replace(/^(?:---+|\*\*\*+|___+)\s*/, '').trim()
+    if (!cleanChunk) continue
 
-    for (const sub of subSections) {
-      const chunk = sub.trim()
-      if (!chunk) continue
+    const lines = cleanChunk.split('\n')
+    let title = ''
+    let visualDirection = ''
+    let speakerNotes = ''
+    const bullets: string[] = []
+    const paragraphs: string[] = []
 
-      let title = `Slide ${slideCounter}`
-      let visualDirection = ''
-      let speakerNotes = ''
-      const bullets: string[] = []
-      const paragraphs: string[] = []
+    let inSpeakerNotes = false
 
-      const lines = chunk.split('\n')
-      let inSpeakerNotes = false
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim()
-        if (!line) continue
-
-        // Check for slide title (e.g., "### Slide 1: Title" or "# Title")
-        const titleMatch = line.match(/^(?:###|##|#)?\s*(?:Slide\s*\d+\s*:?\s*)?(.+)$/i)
-        if (i === 0 && titleMatch && !line.startsWith('-') && !line.startsWith('•') && !line.startsWith('**')) {
-          title = titleMatch[1].replace(/^[#\s*]+|[#\s*]+$/g, '').trim() || title
+      // Detect slide title from the first non-bullet line
+      if (!title) {
+        const slideTitleMatch = line.match(/^#{1,3}\s*(?:Slide\s*\d+\s*:\s*)?(.+)$/i)
+        if (slideTitleMatch && !line.startsWith('-') && !line.startsWith('•') && !line.startsWith('* ')) {
+          title = slideTitleMatch[1].replace(/^[#\s*]+|[#\s*]+$/g, '').trim()
           continue
         }
+      }
 
-        // Check for Speaker Notes header
-        if (/^(?:\*\*)?Speaker Notes(?:\*\*)?:?/i.test(line)) {
-          inSpeakerNotes = true
-          const noteInline = line.replace(/^(?:\*\*)?Speaker Notes(?:\*\*)?:?/i, '').trim()
-          if (noteInline) {
-            speakerNotes += (speakerNotes ? ' ' : '') + noteInline
-          }
-          continue
+      // Speaker Notes section
+      if (/^(?:#{1,4}\s*)?(?:\*\*)?Speaker Notes(?:\*\*)?:?/i.test(line)) {
+        inSpeakerNotes = true
+        const noteInline = line.replace(/^(?:#{1,4}\s*)?(?:\*\*)?Speaker Notes(?:\*\*)?:?/i, '').trim()
+        if (noteInline) {
+          speakerNotes += (speakerNotes ? ' ' : '') + noteInline
         }
+        continue
+      }
 
-        if (inSpeakerNotes) {
-          speakerNotes += (speakerNotes ? ' ' : '') + line.replace(/^\*+|\*+$/g, '').trim()
-          continue
+      if (inSpeakerNotes) {
+        speakerNotes += (speakerNotes ? ' ' : '') + line.replace(/^\*+|\*+$/g, '').trim()
+        continue
+      }
+
+      // Visual Direction line
+      if (/^(?:#{1,4}\s*)?(?:\*\*)?Visual Direction(?:\*\*)?:?/i.test(line)) {
+        visualDirection = line.replace(/^(?:#{1,4}\s*)?(?:\*\*)?Visual Direction(?:\*\*)?:?/i, '').trim()
+        continue
+      }
+
+      // Slide Bullets header (skip header label)
+      if (/^(?:#{1,4}\s*)?(?:\*\*)?Slide Bullets(?:\*\*)?:?/i.test(line)) {
+        continue
+      }
+
+      // Bullet points
+      if (line.startsWith('- ') || line.startsWith('• ') || line.startsWith('* ')) {
+        const bText = line.replace(/^[-•*]\s+/, '').trim()
+        if (bText) {
+          bullets.push(bText)
         }
+        continue
+      }
 
-        // Check for Visual Direction
-        if (/^(?:\*\*)?Visual Direction(?:\*\*)?:?/i.test(line)) {
-          visualDirection = line.replace(/^(?:\*\*)?Visual Direction(?:\*\*)?:?/i, '').trim()
-          continue
-        }
+      // Numbered bullets (e.g. 1. Point)
+      const numMatch = line.match(/^\d+\.\s+(.+)$/)
+      if (numMatch) {
+        bullets.push(numMatch[1].trim())
+        continue
+      }
 
-        // Check for Slide Bullets header (ignore the header line itself)
-        if (/^(?:\*\*)?Slide Bullets(?:\*\*)?:?/i.test(line)) {
-          continue
-        }
-
-        // Check for Bullet points
-        if (line.startsWith('- ') || line.startsWith('• ') || line.startsWith('* ')) {
-          const bulletText = line.replace(/^[-•*]\s+/, '').trim()
-          if (bulletText) {
-            bullets.push(bulletText)
-          }
-          continue
-        }
-
-        // Regular paragraph text
+      // Regular paragraph text
+      if (!line.startsWith('#')) {
         paragraphs.push(line)
       }
+    }
 
-      if (title || bullets.length > 0 || paragraphs.length > 0) {
-        slides.push({
-          number: slideCounter++,
-          title: title.replace(/^Slide\s*\d+\s*:\s*/i, '').trim() || `Slide ${slideCounter - 1}`,
-          visualDirection: visualDirection || undefined,
-          bullets,
-          paragraphs,
-          speakerNotes: speakerNotes || undefined,
-        })
-      }
+    // Skip preamble chunks that don't have bullets or slide indicators
+    const isPreamble = !visualDirection && !speakerNotes && bullets.length === 0 && paragraphs.length <= 1 && !cleanChunk.toLowerCase().includes('slide')
+    if (isPreamble) continue
+
+    if (title || bullets.length > 0 || paragraphs.length > 0) {
+      slides.push({
+        number: slideCounter++,
+        title: title || `Slide ${slideCounter - 1}`,
+        visualDirection: visualDirection || undefined,
+        bullets,
+        paragraphs,
+        speakerNotes: speakerNotes || undefined,
+      })
     }
   }
 

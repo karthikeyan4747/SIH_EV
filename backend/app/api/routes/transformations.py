@@ -441,11 +441,28 @@ def delete_transformation(
 ) -> None:
     try:
         _storage(request).delete(transformation_id)
-    except TransformationNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail="Transformation not found",
-        ) from exc
+    except Exception as exc:
+        logger.warning("Error during delete_transformation(%s): %s", transformation_id, exc)
+    return None
+
+
+@router.put(
+    "/{transformation_id}",
+    response_model=Transformation,
+)
+def sync_transformation(
+    transformation_id: str,
+    payload: Transformation,
+    request: Request,
+) -> Transformation:
+    """
+    Sync / restore a transformation from client state.
+    Essential for ephemeral deployments (e.g. Render/Serverless)
+    where client has the full transformation in localStorage.
+    """
+    if payload.id != transformation_id:
+        payload = payload.model_copy(update={"id": transformation_id})
+    return _storage(request).save(payload)
 
 
 @router.patch(

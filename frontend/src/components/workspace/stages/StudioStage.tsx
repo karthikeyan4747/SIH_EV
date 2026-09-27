@@ -31,6 +31,7 @@ import {
 import { OutputsSkeleton } from '../../ui/Skeleton'
 import { WorkflowSaveModal } from '../WorkflowSaveModal'
 import { DocumentPdfViewer } from '../DocumentPdfViewer'
+import { SlideDeckViewer } from '../SlideDeckViewer'
 import { ArtifactDownloadDropdown } from '../ArtifactDownloadDropdown'
 
 export type GenerationConfig = {
@@ -648,29 +649,36 @@ Example:
           {selectedTypes.includes('presentation') && (
             <div className="slides-stepper-box tactile-card">
               <div className="stepper-header">
-                <span className="stepper-label">Number of Presentation Slides (1–10)</span>
+                <span className="stepper-label">Number of Presentation Slides (1–15)</span>
                 <strong className="stepper-count">{config.slides || 7} Slides</strong>
               </div>
               <input
                 type="range"
                 min="1"
-                max="10"
+                max="15"
                 step="1"
                 value={config.slides || 7}
                 onChange={(e) => handleParamChange('slides', Number(e.target.value))}
                 className="slides-range-slider"
               />
-              <div className="slides-slider-ticks">
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4</span>
-                <span>5</span>
-                <span>6</span>
-                <span>7</span>
-                <span>8</span>
-                <span>9</span>
-                <span>10</span>
+              <div className="slides-presets-row">
+                <span className="presets-label">Presets:</span>
+                {[
+                  { count: 3, label: '3 (Exec)' },
+                  { count: 5, label: '5 (Standard)' },
+                  { count: 7, label: '7 (Briefing)' },
+                  { count: 10, label: '10 (Deep Dive)' },
+                  { count: 12, label: '12 (Full)' },
+                ].map((p) => (
+                  <button
+                    key={p.count}
+                    type="button"
+                    className={`btn-slide-preset ${config.slides === p.count ? 'active' : ''}`}
+                    onClick={() => handleParamChange('slides', p.count)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -986,13 +994,21 @@ Example:
                       </div>
                     </div>
 
-                    {/* PDF Document Viewport (Replaces raw text dump) */}
+                    {/* Viewport: Interactive Slide Deck for Presentation, Document PDF for others */}
                     <div className="deliverable-pdf-container">
-                      <DocumentPdfViewer
-                        title={transformation.title}
-                        content={artifact.content}
-                        artifactType={artifact.type}
-                      />
+                      {artifact.type === 'presentation' ? (
+                        <SlideDeckViewer
+                          title={transformation.title}
+                          content={artifact.content}
+                          artifactType={artifact.type}
+                        />
+                      ) : (
+                        <DocumentPdfViewer
+                          title={transformation.title}
+                          content={artifact.content}
+                          artifactType={artifact.type}
+                        />
+                      )}
                     </div>
 
                     {/* Action Bar with Multi-Format Downloader */}

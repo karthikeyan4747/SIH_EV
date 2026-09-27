@@ -66,6 +66,26 @@ class LocalTransformationStorage:
     def __init__(self, path: str) -> None:
         self.path = Path(path)
         self._lock = Lock()
+        self._ensure_seeded()
+
+    def _ensure_seeded(self) -> None:
+        try:
+            if not self.path.exists() or self.path.stat().st_size == 0:
+                seed_locations = [
+                    Path(__file__).parent.parent / "data" / "seed_transformations.json",
+                    Path(__file__).parent.parent.parent / "data" / "transformations.json",
+                    Path("backend/app/data/seed_transformations.json"),
+                    Path("data/transformations.json"),
+                ]
+                for seed in seed_locations:
+                    if seed.exists() and seed.stat().st_size > 0:
+                        self.path.parent.mkdir(parents=True, exist_ok=True)
+                        import shutil
+                        shutil.copy(seed, self.path)
+                        logger.info("Auto-seeded transformation storage from %s", seed)
+                        break
+        except Exception as e:
+            logger.warning("Could not auto-seed transformation storage: %s", e)
 
     def _read(self) -> dict[str, Transformation]:
         if not self.path.exists():
@@ -122,13 +142,41 @@ class LocalTransformationStorage:
         with self._lock:
             record = self._read().get(transformation_id)
         if record is None:
+            # Check seed file as secondary fallback in case disk was cleared
+            try:
+                seed_locations = [
+                    Path(__file__).parent.parent / "data" / "seed_transformations.json",
+                    Path(__file__).parent.parent.parent / "data" / "transformations.json",
+                    Path("backend/app/data/seed_transformations.json"),
+                ]
+                for seed_path in seed_locations:
+                    if seed_path.exists() and seed_path.stat().st_size > 0:
+                        seed_data = json.loads(seed_path.read_text(encoding="utf-8"))
+                        if isinstance(seed_data, dict) and transformation_id in seed_data:
+                            raw_record = seed_data[transformation_id]
+                            record = Transformation.model_validate(raw_record)
+                            self.save(record)
+                            return record
+            except Exception as e:
+                logger.debug("Seed fallback lookup failed: %s", e)
             raise TransformationNotFoundError(transformation_id)
         return record
 
     def delete(self, transformation_id: str) -> None:
         with self._lock:
-            records = self._read()
-            if transformation_id not in records:
-                raise TransformationNotFoundError(transformation_id)
-            del records[transformation_id]
-            self._write(records)
+            if not self.path.exists():
+                return
+            try:
+                raw_data = json.loads(self.path.read_text(encoding="utf-8"))
+            except Exception:
+                raw_data = {}
+
+            if isinstance(raw_data, dict) and transformation_id in raw_data:
+                del raw_data[transformation_id]
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                temporary_path = self.path.with_suffix(".tmp")
+                temporary_path.write_text(
+                    json.dumps(raw_data, indent=2),
+                    encoding="utf-8",
+                )
+                temporary_path.replace(self.path)

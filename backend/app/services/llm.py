@@ -827,7 +827,10 @@ def _deterministic_generate_output(
     techs = content_dna.entities.technologies
     findings = content_dna.findings.key_findings
     risks = content_dna.findings.risks
-    recommendations = content_dna.findings.recommendations
+    recommendations = (
+        getattr(content_dna, "recommendations", None)
+        and getattr(content_dna.recommendations, "recommendations", None)
+    ) or getattr(content_dna.findings, "recommendations", []) or []
 
     audience = config.get("audience", "Executive Leadership")
     tone = config.get("tone", "Professional")
@@ -941,7 +944,7 @@ What strategies is your team using to operationalize these insights?
 
     elif output_type in ("presentation", "slide_deck"):
         num_slides = int((generation_config or {}).get("slides") or (generation_config or {}).get("slide_count") or 7)
-        num_slides = max(1, min(10, num_slides))
+        num_slides = max(1, min(25, num_slides))
 
         possible_slides = [
             f"""### Slide 1: {title}
@@ -1046,7 +1049,27 @@ Speaker Notes:
 Thank you for your attention. I am now delighted to take any questions and discuss next steps."""
         ]
 
-        selected_slides = possible_slides[:num_slides]
+        closing_slide = possible_slides[-1]
+        if num_slides == 1:
+            selected_slides = [possible_slides[0]]
+        elif num_slides <= len(possible_slides):
+            selected_slides = possible_slides[: num_slides - 1] + [closing_slide]
+        else:
+            selected_slides = list(possible_slides[:-1])
+            for ext in range(len(possible_slides), num_slides):
+                selected_slides.append(
+                    f"""### Slide {ext}: Strategic Deep-Dive {ext - len(possible_slides) + 1}
+Visual Direction: Evidentiary detail card with source-grounded domain metrics.
+Slide Bullets:
+- Specific verified claims and factual findings from source DNA
+- In-depth operational analysis and stakeholder impact
+- High-integrity traceability maintained to source documents
+
+Speaker Notes:
+This slide expands our strategic review with additional evidentiary support directly verified against Content DNA."""
+                )
+            selected_slides.append(closing_slide)
+
         formatted_slides = []
         for idx, slide_text in enumerate(selected_slides, start=1):
             fixed = re.sub(r"^### Slide \d+:", f"### Slide {idx}:", slide_text)
@@ -1180,6 +1203,67 @@ def _clean_output_text(output_type: str, text: str) -> str:
             cleaned = cleaned[:277] + "..."
 
     return cleaned.strip()
+
+
+def _enforce_presentation_slide_count(markdown_text: str, target_slides: int) -> str:
+    """Ensure the presentation markdown contains exactly target_slides slides.
+
+    Prunes excess slides if the LLM generated more than requested, and standardizes
+    slide formatting and numbering from 1 to target_slides.
+    """
+    if not markdown_text or target_slides <= 0:
+        return markdown_text
+
+    normalized = markdown_text.replace("\r\n", "\n").strip()
+
+    # Split by horizontal rules
+    chunks = re.split(r"\n\s*(?:---+|\*\*\*+|___+)\s*\n", normalized)
+    if len(chunks) <= 1:
+        header_splits = re.split(r"(?=(?:^|\n)#{1,3}\s*Slide\s*\d+)", normalized, flags=re.IGNORECASE)
+        if len(header_splits) > 1:
+            chunks = header_splits
+
+    slide_chunks: list[str] = []
+    preamble = ""
+
+    for chunk in chunks:
+        trimmed = chunk.strip().lstrip("-").strip()
+        if not trimmed:
+            continue
+        if (
+            re.search(r"#{1,3}\s*Slide\s*\d+", trimmed, re.IGNORECASE)
+            or "Slide Bullets:" in trimmed
+            or "Speaker Notes:" in trimmed
+        ):
+            slide_chunks.append(trimmed)
+        else:
+            if not slide_chunks and not preamble:
+                preamble = trimmed
+
+    if not slide_chunks:
+        return markdown_text
+
+    if len(slide_chunks) > target_slides:
+        slide_chunks = slide_chunks[:target_slides]
+
+    renumbered_slides = []
+    for idx, schunk in enumerate(slide_chunks, start=1):
+        fixed = re.sub(
+            r"^#{1,3}\s*Slide\s*\d+\s*:\s*",
+            f"### Slide {idx}: ",
+            schunk,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+        if not re.search(r"^### Slide \d+:", fixed):
+            fixed = re.sub(r"^#{1,3}\s*", f"### Slide {idx}: ", fixed)
+        renumbered_slides.append(fixed)
+
+    result_parts = []
+    if preamble:
+        result_parts.append(preamble)
+    result_parts.append("---\n" + "\n---\n".join(renumbered_slides))
+    return "\n\n".join(result_parts).strip()
+
 
 
 def _extract_blueprint_from_text(template_text: str) -> dict:
@@ -1640,6 +1724,13 @@ Return ONLY valid JSON matching the ContentDNA schema.
 
         generation_config = generation_config or {}
 
+        requested_slides = int(
+            generation_config.get("slides")
+            or generation_config.get("slide_count")
+            or 7
+        )
+        requested_slides = max(1, min(25, requested_slides))
+
         user_prompt = user_prompt or generation_config.get("prompt") or (
             "Generate the artifact according to the output specification."
         )
@@ -1746,7 +1837,12 @@ Return ONLY the single final tweet ready for immediate posting.
 
             "presentation": f"""
 EXECUTIVE PRESENTATION DECK SPECIFICATION:
-Generate a complete, presentation-ready slide deck outline with exactly {max(1, min(10, int((generation_config or {}).get('slides') or (generation_config or {}).get('slide_count') or 7)))} structured slides.
+Generate a complete, presentation-ready slide deck outline with EXACTLY {requested_slides} structured slides.
+
+STRICT SLIDE COUNT CONSTRAINT:
+You MUST generate EXACTLY {requested_slides} slides (no more, no fewer).
+Do NOT generate fewer than {requested_slides} slides.
+Do NOT generate more than {requested_slides} slides (stop immediately after slide {requested_slides}).
 Each slide must contain high-signal content, visual layout directions, and spoken presenter notes.
 
 For EVERY slide provide:
@@ -2021,10 +2117,16 @@ Use Content DNA as the sole factual source. Return only the final artifact.
 
                 if isinstance(raw_content, str) and raw_content.strip():
                     logger.info("LLM output generated successfully: output_type=%s", output_type)
-                    return raw_content.strip()
+                    res = raw_content.strip()
+                    if output_type in ("presentation", "slide_deck"):
+                        res = _enforce_presentation_slide_count(res, requested_slides)
+                    return res
 
             logger.warning("Groq returned empty output for %s; using deterministic DNA synthesis fallback", output_type)
-            return _deterministic_generate_output(content_dna, output_type, output_spec, generation_config)
+            res = _deterministic_generate_output(content_dna, output_type, output_spec, generation_config)
+            if output_type in ("presentation", "slide_deck"):
+                res = _enforce_presentation_slide_count(res, requested_slides)
+            return res
 
         except Exception as exc:
             logger.warning(
@@ -2033,7 +2135,10 @@ Use Content DNA as the sole factual source. Return only the final artifact.
                 output_type,
                 exc,
             )
-            return _deterministic_generate_output(content_dna, output_type, output_spec, generation_config)
+            res = _deterministic_generate_output(content_dna, output_type, output_spec, generation_config)
+            if output_type in ("presentation", "slide_deck"):
+                res = _enforce_presentation_slide_count(res, requested_slides)
+            return res
 
     def extract_layout_blueprint(
         self,
@@ -2728,6 +2833,13 @@ Produce a single canonical ContentDNA object. Return ONLY valid JSON.
 
         generation_config = generation_config or {}
 
+        requested_slides = int(
+            generation_config.get("slides")
+            or generation_config.get("slide_count")
+            or 7
+        )
+        requested_slides = max(1, min(25, requested_slides))
+
         user_prompt = user_prompt or generation_config.get("prompt") or (
             "Generate the complete artifact according to the output specification."
         )
@@ -2826,7 +2938,13 @@ Return ONLY the single final tweet ready for immediate posting.
 
             "presentation": f"""
 EXECUTIVE PRESENTATION DECK SPECIFICATION:
-Generate a complete, presentation-ready slide deck script with exactly {max(1, min(10, int((generation_config or {}).get('slides') or (generation_config or {}).get('slide_count') or 7)))} structured slides.
+Generate a complete, presentation-ready slide deck script with EXACTLY {requested_slides} structured slides.
+
+STRICT SLIDE COUNT CONSTRAINT:
+You MUST generate EXACTLY {requested_slides} slides (no more, no fewer).
+Do NOT generate fewer than {requested_slides} slides.
+Do NOT generate more than {requested_slides} slides (stop immediately after slide {requested_slides}).
+Each slide must contain high-signal content, visual layout directions, and spoken presenter notes.
 
 For EVERY slide provide:
 ---
@@ -3077,12 +3195,18 @@ Produce the COMPLETE final artifact.
                 output_type,
                 exc,
             )
-            return _clean_output_text(output_type, _deterministic_generate_output(content_dna, output_type, output_spec, generation_config))
+            res = _clean_output_text(output_type, _deterministic_generate_output(content_dna, output_type, output_spec, generation_config))
+            if output_type in ("presentation", "slide_deck"):
+                res = _enforce_presentation_slide_count(res, requested_slides)
+            return res
 
         content = getattr(getattr(response, "message", None), "content", None)
         if not isinstance(content, str) or not content.strip():
             logger.warning("Local LLM returned empty output for %s; using deterministic fallback", output_type)
-            return _clean_output_text(output_type, _deterministic_generate_output(content_dna, output_type, output_spec, generation_config))
+            res = _clean_output_text(output_type, _deterministic_generate_output(content_dna, output_type, output_spec, generation_config))
+            if output_type in ("presentation", "slide_deck"):
+                res = _enforce_presentation_slide_count(res, requested_slides)
+            return res
 
         logger.info(
             "Local LLM output generated successfully: model=%s output_type=%s",
@@ -3090,7 +3214,10 @@ Produce the COMPLETE final artifact.
             output_type,
         )
 
-        return _clean_output_text(output_type, content)
+        res = _clean_output_text(output_type, content)
+        if output_type in ("presentation", "slide_deck"):
+            res = _enforce_presentation_slide_count(res, requested_slides)
+        return res
 
     def extract_layout_blueprint(
         self,

@@ -60,6 +60,11 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    // For DELETE requests, a 404 indicates the item is already absent (idempotent success)
+    if (options?.method === 'DELETE' && response.status === 404) {
+      return undefined as T
+    }
+
     let detail = 'The request could not be completed.'
 
     try {
@@ -158,9 +163,21 @@ export function deleteTransformation(
   transformationId: string,
 ) {
   return request<void>(
-    `/api/v1/transformations/${transformationId}`,
+    `/api/v1/transformations/${encodeURIComponent(transformationId.trim())}`,
     {
       method: 'DELETE',
+    },
+  )
+}
+
+export function syncTransformation(
+  transformation: Transformation,
+) {
+  return request<Transformation>(
+    `/api/v1/transformations/${encodeURIComponent(transformation.id.trim())}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(transformation),
     },
   )
 }

@@ -22,6 +22,7 @@ import {
   removeTransformationSource,
   renameTransformation,
   restoreTransformationVersion,
+  syncTransformation,
 } from './lib/api/client'
 import type { ContentDNAPatch, SourceType } from './types/content'
 import type { Transformation } from './types/transformation'
@@ -77,6 +78,8 @@ function App() {
     try {
       if (transformations.length > 0) {
         window.localStorage.setItem('ev-recent-transformations', JSON.stringify(transformations))
+      } else {
+        window.localStorage.removeItem('ev-recent-transformations')
       }
     } catch (e) {
       console.warn('Unable to persist transformations to localStorage', e)
@@ -100,22 +103,39 @@ function App() {
     async function init() {
       try {
         const response = await listTransformations()
-        if (response.transformations && response.transformations.length > 0) {
-          setTransformations((current) => {
-            const map = new Map<string, Transformation>()
-            current.forEach((t) => map.set(t.id, t))
-            response.transformations.forEach((t) => map.set(t.id, t))
-            const merged = Array.from(map.values()).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+        const serverItems = Array.isArray(response.transformations) ? response.transformations : []
+        const serverMap = new Map<string, Transformation>()
+        serverItems.forEach((t) => serverMap.set(t.id, t))
+
+        // Check if there are local transformations that the server doesn't have yet
+        // (e.g. ephemeral server rebooted or new deployment on Render)
+        const missingOnServer = transformations.filter((t) => !serverMap.has(t.id))
+        if (missingOnServer.length > 0) {
+          for (const missing of missingOnServer) {
             try {
-              window.localStorage.setItem('ev-recent-transformations', JSON.stringify(merged))
-            } catch {}
-            return merged
-          })
-          setActiveId((current) => {
-            const exists = response.transformations.some((t) => t.id === current)
-            return exists ? current : (current || response.transformations[0]?.id || null)
-          })
+              const restored = await syncTransformation(missing)
+              serverMap.set(restored.id, restored)
+            } catch (err) {
+              serverMap.set(missing.id, missing)
+            }
+          }
         }
+
+        const merged = Array.from(serverMap.values()).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+        setTransformations(merged)
+
+        try {
+          if (merged.length > 0) {
+            window.localStorage.setItem('ev-recent-transformations', JSON.stringify(merged))
+          } else {
+            window.localStorage.removeItem('ev-recent-transformations')
+          }
+        } catch {}
+
+        setActiveId((current) => {
+          const exists = merged.some((t) => t.id === current)
+          return exists ? current : (merged[0]?.id || null)
+        })
       } catch (cause) {
         console.warn('Backend currently offline or unreachable; using local storage cached transformations:', cause)
       }
@@ -172,12 +192,24 @@ function App() {
     setSaveState('saved')
     setView('workspace')
     setMobileNav(false)
+    setActiveId(id)
+
+    const localItem = transformations.find((item) => item.id === id)
+
     try {
       const item = await getTransformation(id)
       replaceTransformation(item)
-      setActiveId(id)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to restore this transformation.')
+      if (localItem) {
+        try {
+          const synced = await syncTransformation(localItem)
+          replaceTransformation(synced)
+        } catch {
+          console.warn('Unable to sync local transformation to backend; displaying local cached version.')
+        }
+      } else {
+        setError(cause instanceof Error ? cause.message : 'Unable to restore this transformation.')
+      }
     }
   }
 
@@ -342,11 +374,25 @@ function App() {
     setBusy(true)
     setError('')
     try {
-      await deleteTransformation(id)
+      try {
+        await deleteTransformation(id)
+      } catch (cause) {
+        console.warn('Backend delete notification failed or already removed:', cause)
+      }
+
       setDeleteTargetId(null)
       setTransformations((items) => {
         const remaining = items.filter((item) => item.id !== id)
-        setActiveId((current) => current === id ? remaining[0]?.id || null : current)
+        setActiveId((current) => (current === id ? remaining[0]?.id || null : current))
+        try {
+          if (remaining.length > 0) {
+            window.localStorage.setItem('ev-recent-transformations', JSON.stringify(remaining))
+          } else {
+            window.localStorage.removeItem('ev-recent-transformations')
+          }
+        } catch (e) {
+          console.warn('Unable to persist remaining transformations to localStorage:', e)
+        }
         return remaining
       })
       setSaveState('saved')
@@ -477,7 +523,7 @@ function App() {
 }
 
 function DeleteConfirmation({ target, busy, onCancel, onConfirm }: { target?: Transformation; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  if (!target) return null
+  const displayTitle = target?.title || 'this transformation'
 
   return createPortal(
     <div className="delete-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel() }}>
@@ -485,7 +531,7 @@ function DeleteConfirmation({ target, busy, onCancel, onConfirm }: { target?: Tr
         <div className="delete-modal-icon"><Trash2 size={18} /></div>
         <div className="delete-modal-copy">
           <h2 id="delete-transformation-title">Delete transformation?</h2>
-          <p>Are you sure you want to delete <strong>{target.title}</strong>?</p>
+          <p>Are you sure you want to delete <strong>{displayTitle}</strong>?</p>
         </div>
         <div className="delete-modal-actions">
           <button type="button" className="delete-cancel-button" onClick={onCancel} disabled={busy}>Cancel</button>
@@ -623,7 +669,15 @@ function Sidebar({
                 <span className="nav-label">{item.title}</span>
                 <small>{item.sources.length}</small>
               </button>
-              <button className="delete-transformation" aria-label={`Delete ${item.title}`} title="Delete transformation" onClick={() => onDelete(item.id)}>
+              <button
+                className="delete-transformation"
+                aria-label={`Delete ${item.title}`}
+                title="Delete transformation"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(item.id)
+                }}
+              >
                 <Trash2 size={14} />
               </button>
             </div>

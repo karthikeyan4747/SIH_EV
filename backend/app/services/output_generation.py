@@ -120,7 +120,42 @@ class OutputGenerationService:
         if output_type not in OUTPUT_SPECS:
             raise ValueError(f"Unsupported output type: {output_type}")
 
-        output_spec = OUTPUT_SPECS[output_type]
+        output_spec = dict(OUTPUT_SPECS[output_type])
+
+        if output_type == "presentation":
+            cfg = generation_config or {}
+            requested_slides = int(cfg.get("slides") or cfg.get("slide_count") or 7)
+            requested_slides = max(1, min(25, requested_slides))
+
+            base_topics = [
+                "Executive Title & Strategic Briefing",
+                "Strategic Context & Operational Background",
+                "Key Metrics & Verified Achievements",
+                "Core Technical Architecture & Capabilities",
+                "Core Findings & Operational Analysis",
+                "Strategic Recommendations & Action Plan",
+                "Implementation Roadmap & Milestones",
+                "Organizational Impact & Stakeholder Value",
+                "Risk Management, Security & Compliance",
+                "Summary & Executive Q&A",
+            ]
+            if requested_slides <= len(base_topics):
+                if requested_slides == 1:
+                    custom_structure = ["Executive Briefing Slide"]
+                elif requested_slides == 2:
+                    custom_structure = ["Executive Title & Briefing", "Summary, Metrics & Takeaways"]
+                else:
+                    custom_structure = base_topics[: requested_slides - 1] + [base_topics[-1]]
+            else:
+                custom_structure = list(base_topics[:-1])
+                for extra in range(len(base_topics), requested_slides):
+                    custom_structure.append(f"Strategic Deep-Dive {extra - len(base_topics) + 1}")
+                custom_structure.append(base_topics[-1])
+
+            output_spec["structure"] = [
+                f"Slide {idx + 1}: {title}"
+                for idx, title in enumerate(custom_structure)
+            ]
 
         effective_prompt = prompt or (generation_config.get("prompt") if generation_config else None)
 
