@@ -70,8 +70,8 @@ export function TransformationWorkspace({
   // Version History Modal
   const [showVersionsModal, setShowVersionsModal] = useState(false)
 
-  // Guided Tutorial Tour State (Starts closed so screen is clean)
-  const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+  // Guided Tutorial Tour State (Starts open so evaluators immediately notice the guide)
+  const [isTutorialOpen, setIsTutorialOpen] = useState(true)
   const [dnaViewMode, setDnaViewMode] = useState<
     'lineage' | 'helix' | 'inspector' | 'versions'
   >('lineage')

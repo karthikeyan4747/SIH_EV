@@ -357,8 +357,8 @@ export function GuidedTutorialWidget({
     if (rect.width > 0 && rect.height > 0) {
       setTargetRect(rect)
       const cardEl = cardRef.current
-      const width = cardEl?.offsetWidth || 390
-      const height = cardEl?.offsetHeight || 220
+      const width = cardEl?.offsetWidth || 480
+      const height = cardEl?.offsetHeight || 260
       const pos = getAttachedPosition(
         rect,
         width,
@@ -582,9 +582,9 @@ export function GuidedTutorialWidget({
   // Fallback position if element is temporarily mounting
   const activeCardPos: CardPosition = cardPos || {
     top: 120,
-    left: Math.max(16, window.innerWidth - 420),
+    left: Math.max(16, window.innerWidth - 510),
     placement: 'bottom',
-    arrowLeft: 190,
+    arrowLeft: 240,
   }
 
   if (typeof document === 'undefined') return null
@@ -655,14 +655,14 @@ export function GuidedTutorialWidget({
           title="Drag to reposition · Double-click to re-anchor to element"
         >
           <div className="tour-guide-header-left">
-            <GripHorizontal size={14} className="tour-drag-handle-icon" />
+            <GripHorizontal size={16} className="tour-drag-handle-icon" />
             <span className="tour-guide-badge">{activeStep.badge}</span>
             <span className="tour-guide-counter">
               Step {currentIdx + 1} of {TOUR_STEPS.length}
             </span>
             {isCurrentCompleted && (
               <span className="tour-guide-done-chip">
-                <CheckCircle2 size={11} />
+                <CheckCircle2 size={13} />
                 <span>Done</span>
               </span>
             )}
@@ -676,7 +676,7 @@ export function GuidedTutorialWidget({
               title="Minimize to corner"
               aria-label="Minimize walkthrough"
             >
-              <ChevronDown size={14} />
+              <ChevronDown size={16} />
             </button>
             <button
               type="button"
@@ -685,7 +685,7 @@ export function GuidedTutorialWidget({
               title="Exit walkthrough (Esc)"
               aria-label="Exit walkthrough"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -703,14 +703,14 @@ export function GuidedTutorialWidget({
           >
             {isCurrentCompleted ? (
               <>
-                <CheckCircle2 size={14} />
+                <CheckCircle2 size={17} />
                 <span>Trigger Again</span>
               </>
             ) : (
               <>
-                <ActionIcon size={14} />
+                <ActionIcon size={17} />
                 <span>{activeStep.actionLabel}</span>
-                <ArrowRight size={13} />
+                <ArrowRight size={16} />
               </>
             )}
           </button>
