@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 import type { ContentDNAPatch, SourceType } from '../../types/content'
 import type { Transformation, SourceIntegrity } from '../../types/transformation'
-import { analyzeSourceIntegrity } from '../../lib/api/client'
+import { analyzeSourceIntegrity, resolveTransformationConflict } from '../../lib/api/client'
 
 import { WorkspaceHeader } from '../workspace/WorkspaceHeader'
 import { StageNavigation, type WorkspaceStage } from '../workspace/StageNavigation'
@@ -11,6 +11,7 @@ import { ContentDNAStage } from '../workspace/stages/ContentDNAStage'
 import { IntegrityStage } from '../workspace/stages/IntegrityStage'
 import { StudioStage, type GenerationConfig } from '../workspace/stages/StudioStage'
 import { VersionHistoryModal } from '../workspace/VersionHistoryModal'
+import { GuidedTutorialWidget } from '../workspace/GuidedTutorialWidget'
 import '../workspace/workspace.css'
 
 export type { GenerationConfig }
@@ -69,6 +70,12 @@ export function TransformationWorkspace({
   // Version History Modal
   const [showVersionsModal, setShowVersionsModal] = useState(false)
 
+  // Guided Tutorial Tour State (Starts closed so screen is clean)
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+  const [dnaViewMode, setDnaViewMode] = useState<
+    'lineage' | 'helix' | 'inspector' | 'versions'
+  >('lineage')
+
   // DNA Stale Prompt
   const [dnaChangedPrompt, setDnaChangedPrompt] = useState<{
     open: boolean
@@ -115,6 +122,51 @@ export function TransformationWorkspace({
       })
     }
   }
+
+  async function handleQuickResolveConflict() {
+    try {
+      const updated = await resolveTransformationConflict(
+        transformation.id,
+        'conflict-energy-density-01',
+        {
+          decision: 'accept_source_b',
+          selected_claim_id: 'claim-density-supplier',
+          final_value: '285',
+        },
+      )
+      setIntegrity(updated.source_integrity ?? null)
+      onConflictResolved(updated)
+      setDnaChangedPrompt({
+        open: true,
+        reason: 'Resolved cell energy density to 285 Wh/kg. Content DNA sanitized into Version 5.',
+      })
+    } catch (e) {
+      console.error('Failed to resolve conflict:', e)
+    }
+  }
+
+  const handleQuickLoadPresets = () => {
+    const btn = document.querySelector<HTMLButtonElement>('.preset-load-all-btn')
+    if (btn) {
+      btn.click()
+    }
+  }
+
+  const [hasClonedBlueprint, setHasClonedBlueprint] = useState(false)
+
+  const handleQuickCloneBlueprint = useCallback(() => {
+    setActiveStage('studio')
+    scrollToSection('section-studio')
+    setHasClonedBlueprint(true)
+    setTimeout(() => {
+      const btn = document.querySelector<HTMLButtonElement>(
+        '#tour-btn-clone-template, .blueprint-run-btn'
+      )
+      if (btn) {
+        btn.click()
+      }
+    }, 150)
+  }, [])
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId)
@@ -164,6 +216,8 @@ export function TransformationWorkspace({
         onThemeToggle={onThemeToggle}
         onRename={onRename}
         onOpenVersions={() => setShowVersionsModal(true)}
+        onToggleTutorial={() => setIsTutorialOpen((prev) => !prev)}
+        isTutorialOpen={isTutorialOpen}
       />
 
       {/* 2. Persistent 4-Stage Stepper Quick-Jump Dock */}
@@ -235,6 +289,8 @@ export function TransformationWorkspace({
             transformation={transformation}
             dna={transformation.content_dna ?? null}
             busy={busy}
+            viewMode={dnaViewMode}
+            onViewModeChange={setDnaViewMode}
             onPatch={handlePatch}
             onRestoreVersion={onRestoreVersion}
             onProceedToIntegrity={() => handleSelectStage('integrity')}
@@ -284,6 +340,7 @@ export function TransformationWorkspace({
             onGenerateOutputs={onGenerateOutputs}
             onDeleteOutput={onDeleteOutput}
             onTransformationUpdated={onConflictResolved}
+            onClonedBlueprintSuccess={() => setHasClonedBlueprint(true)}
           />
         </section>
       </main>
@@ -297,6 +354,26 @@ export function TransformationWorkspace({
           onRestoreVersion={onRestoreVersion}
         />
       )}
+
+      {/* 6. Guided Interactive Tutorial Widget */}
+      <GuidedTutorialWidget
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        onOpen={() => setIsTutorialOpen(true)}
+        activeStage={activeStage}
+        onSelectStage={handleSelectStage}
+        dnaViewMode={dnaViewMode}
+        onDnaViewModeChange={setDnaViewMode}
+        onOpenVersionsModal={() => setShowVersionsModal(true)}
+        sourceCount={transformation.sources?.length || 0}
+        conflictsResolved={activeConflicts.length === 0 && (integrity?.resolutions?.length || 0) > 0}
+        hasOutputs={(transformation.outputs?.length || 0) > 0}
+        isVersionModalOpen={showVersionsModal}
+        hasClonedBlueprint={hasClonedBlueprint || Boolean(transformation.outputs?.some((o) => o.metadata?.cloned_from_reference))}
+        onQuickResolveConflict={handleQuickResolveConflict}
+        onQuickLoadPresets={handleQuickLoadPresets}
+        onQuickCloneBlueprint={handleQuickCloneBlueprint}
+      />
     </div>
   )
 }

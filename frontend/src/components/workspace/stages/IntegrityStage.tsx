@@ -149,16 +149,31 @@ export function IntegrityStage({
             </div>
           </div>
 
-          {/* Conflict Resolution Deck (Minimized by default) */}
-          {conflicts.length > 0 && (
-            <div className="conflict-resolution-wrapper">
+          {/* Conflict Resolution Deck */}
+          {conflicts.length > 0 ? (
+            <div className="conflict-resolution-wrapper" id="tour-conflict-panel">
               <ConflictResolutionPanel
                 transformationId={transformation.id}
                 conflicts={conflicts}
                 claims={claims}
-                initialExpanded={false}
+                initialExpanded={true}
                 onResolved={onConflictResolved}
               />
+            </div>
+          ) : (
+            <div className="conflict-resolution-wrapper resolved-state" id="tour-conflict-panel">
+              <div className="conflict-all-resolved-card tactile-card">
+                <div className="resolved-card-icon">
+                  <CheckCircle2 size={22} style={{ color: '#34d399' }} />
+                </div>
+                <div className="resolved-card-content">
+                  <span className="resolved-tag">DISPUTE RESOLVED</span>
+                  <h5>Cell Energy Density Conflict Resolved</h5>
+                  <p>
+                    Conflicting claim of 310 Wh/kg sanitized. Authoritative density established at 285 Wh/kg backed by verified cell test log evidence. Content DNA Version 5 committed to history.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -246,7 +261,7 @@ export function IntegrityStage({
                                   <blockquote key={i} className="claim-quote">
                                     "{ev.supporting_excerpt || 'Excerpt verified'}"
                                     {ev.page !== null && ev.page !== undefined && (
-                                      <span className="page-citation"> — Page {ev.page}</span>
+                                      <span className="page-citation"> (Page {ev.page})</span>
                                     )}
                                     {ev.source_reference && (
                                       <span className="source-ref"> ({ev.source_reference})</span>

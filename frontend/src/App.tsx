@@ -23,6 +23,7 @@ import {
   renameTransformation,
   restoreTransformationVersion,
   syncTransformation,
+  resetConflictState,
 } from './lib/api/client'
 import type { ContentDNAPatch, SourceType } from './types/content'
 import type { Transformation } from './types/transformation'
@@ -45,7 +46,13 @@ function App() {
   const [transformations, setTransformations] = useState<Transformation[]>(() => {
     try {
       const saved = window.localStorage.getItem('ev-recent-transformations')
-      return saved ? JSON.parse(saved) : []
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: Transformation) => resetConflictState(item))
+        }
+      }
+      return []
     } catch {
       return []
     }

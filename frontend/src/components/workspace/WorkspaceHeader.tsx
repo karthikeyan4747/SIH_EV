@@ -6,6 +6,8 @@ import {
   Moon,
   Sun,
   History,
+  Sparkles,
+  X,
 } from 'lucide-react'
 import { ModelTelemetryBadge } from '../model/ModelTelemetryBadge'
 import type { Transformation } from '../../types/transformation'
@@ -18,6 +20,8 @@ interface WorkspaceHeaderProps {
   onRename: (title: string) => void
   onOpenVersions?: () => void
   onGenerateQuick?: () => void
+  onToggleTutorial?: () => void
+  isTutorialOpen?: boolean
 }
 
 export function WorkspaceHeader({
@@ -27,6 +31,8 @@ export function WorkspaceHeader({
   onThemeToggle,
   onRename,
   onOpenVersions,
+  onToggleTutorial,
+  isTutorialOpen = false,
 }: WorkspaceHeaderProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [titleValue, setTitleValue] = useState(transformation.title)
@@ -103,6 +109,27 @@ export function WorkspaceHeader({
       </div>
 
       <div className="workspace-header-actions">
+        {onToggleTutorial && (
+          <button
+            type="button"
+            className={`tutorial-toggle-header-btn ${isTutorialOpen ? 'active' : ''}`}
+            onClick={onToggleTutorial}
+            title={isTutorialOpen ? 'Exit guided tour (Esc)' : 'Start interactive guided tour'}
+          >
+            {isTutorialOpen ? (
+              <>
+                <X size={13} style={{ color: '#f87171' }} />
+                <span>Exit Tour</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={13} style={{ color: '#38bdf8' }} />
+                <span>Guided Tour</span>
+              </>
+            )}
+          </button>
+        )}
+
         {/* Model Quota & Telemetry */}
         <ModelTelemetryBadge />
 
