@@ -1,6 +1,4 @@
 {
-  "buildCommand": "cd demo-app && npm install && npm run build",
-  "outputDirectory": "demo-app/dist",
   "framework": "vite",
   "rewrites": [
     {
