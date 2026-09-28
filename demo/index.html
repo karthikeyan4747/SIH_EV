@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EV: Enterprise Content Transformation Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-root: #0d1117;
+      --bg-subtle: #010409;
+      --surface-card: #161b22;
+      --surface-card-hover: #1f242c;
+      --surface-elevated: #21262d;
+      --surface-sunken: #010409;
+      --surface-input: #090d13;
+      --border-subtle: rgba(240, 246, 252, 0.1);
+      --border-medium: #30363d;
+      --border-hover: #8b949e;
+      --border-focus: #58a6ff;
+      --text-primary: #f0f6fc;
+      --text-secondary: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent-primary: #38bdf8;
+      --accent-hover: #0284c7;
+      --accent-surface: rgba(56, 189, 248, 0.1);
+      --color-success-surface: rgba(63, 185, 80, 0.15);
+      --color-success-text: #3fb950;
+      --color-warning-surface: rgba(210, 153, 34, 0.15);
+      --color-warning-text: #d29922;
+      --color-danger-surface: rgba(248, 81, 73, 0.15);
+      --color-danger-text: #f85149;
+      --color-purple: #bc8cff;
+      --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-root);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+    code, pre { font-family: 'JetBrains Mono', monospace; }
+
+    /* App Layout Shell */
+    .app-sidebar {
+      width: 260px;
+      background: #010409;
+      border-right: 1px solid var(--border-medium);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+    }
+    .sidebar-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-medium);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #0f8f8c 0%, #38bdf8 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      color: #fff;
+    }
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-body {
+      flex: 1;
+      padding: 16px 12px;
+      overflow-y: auto;
+    }
+    .sidebar-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      padding: 0 8px 8px;
+    }
+    .ws-item {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      margin-bottom: 4px;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .ws-item:hover {
+      background: var(--surface-card);
+    }
+    .ws-item.active {
+      background: var(--surface-card);
+      border-color: var(--border-medium);
+    }
+    .ws-item-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ws-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .sidebar-footer {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-medium);
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Main Area Shell */
+    .app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--bg-root);
+    }
+
+    /* Top Workspace Header Bar */
+    .workspace-header-bar {
+      padding: 14px 24px;
+      background: var(--surface-card);
+      border-bottom: 1px solid var(--border-medium);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .ws-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .ws-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .meta-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pill-saved {
+      background: var(--color-success-surface);
+      color: var(--color-success-text);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+    .pill-ver {
+      background: var(--surface-elevated);
+      color: var(--accent-primary);
+      border: 1px solid var(--border-medium);
+      cursor: pointer;
+    }
+    .pill-ver:hover {
+      border-color: var(--accent-primary);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .btn-secondary {
+      background: var(--surface-elevated);
+      color: var(--text-secondary);
+      border-color: var(--border-medium);
+    }
+    .btn-secondary:hover {
+      background: var(--surface-card-hover);
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+    .btn-primary {
+      background: #238636;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-cobalt {
+      background: linear-gradient(135deg, #0284c7, #0f8f8c);
+      color: #fff;
+    }
+    .btn-cobalt:hover {
+      background: linear-gradient(135deg, #0369a1, #119e9b);
+    }
+
+    /* 4-Stage Stepper Navigation */
+    .stage-nav-bar {
+      background: #010409;
+      border-bottom: 1px solid var(--border-medium);
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .stage-tab {
+      padding: 14px 16px;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.15s ease;
+    }
+    .stage-tab:hover {
+      background: rgba(240, 246, 252, 0.02);
+    }
+    .stage-tab.active {
+      border-bottom-color: var(--accent-primary);
+      background: rgba(56, 189, 248, 0.05);
+    }
+    .stage-num {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-muted);
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--surface-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stage-tab.active .stage-num {
+      background: var(--accent-primary);
+      color: #010409;
+    }
+    .stage-tab-content {
+      display: flex;
+      flex-direction: column;
+    }
+    .stage-tab-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .stage-tab.active .stage-tab-title {
+      color: var(--accent-primary);
+    }
+    .stage-tab-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Workspace Content Container */
+    .workspace-content {
+      padding: 24px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      flex: 1;
+    }
+
+    /* Cards & Grids */
+    .tactile-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+    }
+    .tactile-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .tactile-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .badge-blue { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .badge-green { background: rgba(63, 185, 80, 0.15); color: #3fb950; border: 1px solid rgba(63, 185, 80, 0.3); }
+    .badge-yellow { background: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.3); }
+    .badge-purple { background: rgba(188, 140, 255, 0.15); color: #bc8cff; border: 1px solid rgba(188, 140, 255, 0.3); }
+
+    /* STAGE 1: Sources Stage */
+    .source-list-item {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .source-list-item:hover {
+      border-color: var(--accent-primary);
+      background: var(--surface-card-hover);
+    }
+    .source-list-item.selected {
+      border-color: var(--accent-primary);
+      background: rgba(56, 189, 248, 0.05);
+    }
+
+    /* STAGE 2: DNA Stage Toolbar */
+    .dna-mode-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-medium);
+      padding-bottom: 12px;
+    }
+    .dna-mode-btn {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .dna-mode-btn:hover { color: var(--text-primary); }
+    .dna-mode-btn.active {
+      background: var(--accent-primary);
+      color: #010409;
+      border-color: var(--accent-primary);
+    }
+
+    /* STAGE 3: Conflict Panel */
+    .conflict-card {
+      background: rgba(210, 153, 34, 0.06);
+      border: 1px solid rgba(210, 153, 34, 0.35);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .conflict-option-box {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .conflict-option-box:hover { border-color: var(--border-hover); }
+    .conflict-option-box.active {
+      border-color: #3fb950;
+      background: rgba(63, 185, 80, 0.08);
+    }
+
+    /* STAGE 4: Studio & Viewers */
+    .slide-stage-canvas {
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(135deg, #090d16 0%, #161b22 100%);
+      border: 1px solid var(--border-medium);
+      border-radius: 12px;
+      padding: 36px 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+    .word-preview-card {
+      background: #ffffff;
+      color: #1e293b;
+      border-radius: 6px;
+      padding: 36px 40px;
+      font-size: 13px;
+      line-height: 1.6;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Next Stage Bottom Bar */
+    .stage-footer-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-medium);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Left Sidebar (Identical to actual project) -->
+  <aside class="app-sidebar">
+    <div class="sidebar-header">
+      <div class="brand-mark">EV</div>
+      <div>
+        <div class="brand-title">Enterprise Cockpit</div>
+        <div class="brand-sub">SIH 2026 • PS 26154</div>
+      </div>
+    </div>
+
+    <div class="sidebar-body">
+      <div style="margin-bottom: 16px;">
+        <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px;" onclick="alert('Simulation: Workspace creation is instant.')">
+          + New Workspace
+        </button>
+      </div>
+
+      <div class="sidebar-section-title">Active Workspaces</div>
+      <div class="ws-item active">
+        <div class="ws-item-title">
+          <span style="color: #3fb950;">●</span>
+          <span>Next-Gen Solid-State Battery</span>
+        </div>
+        <div class="ws-item-meta">
+          <span>7 sources • 1 dispute</span>
+          <span style="color: var(--accent-primary);">v3</span>
+        </div>
+      </div>
+
+      <div class="ws-item" onclick="alert('Demo notice: Focus is on the active Next-Gen Solid-State Battery workspace.')">
+        <div class="ws-item-title">
+          <span style="color: var(--text-muted);">○</span>
+          <span>Commercial EV Fleet Charging</span>
+        </div>
+        <div class="ws-item-meta">
+          <span>4 sources</span>
+          <span>v1</span>
+        </div>
+      </div>
+
+      <div class="ws-item" onclick="alert('Demo notice: Focus is on the active Next-Gen Solid-State Battery workspace.')">
+        <div class="ws-item-title">
+          <span style="color: var(--text-muted);">○</span>
+          <span>Autonomous Powertrain Sensor</span>
+        </div>
+        <div class="ws-item-meta">
+          <span>3 sources</span>
+          <span>v2</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span>● Standalone Demo Mode</span>
+      <span style="color: var(--accent-primary);">100% Reliable</span>
+    </div>
+  </aside>
+
+  <!-- Main Workspace Area -->
+  <main class="app-main">
+    
+    <!-- Top Workspace Header -->
+    <header class="workspace-header-bar">
+      <div class="ws-title-wrap">
+        <h1 class="ws-title">Next-Gen Solid-State Battery Architecture & Fleet Electrification</h1>
+        <span class="meta-pill pill-saved">● Saved</span>
+        <button class="meta-pill pill-ver" onclick="openVersionModal()" title="View Version Timeline & Rollback">v3 Snapshots</button>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" onclick="openJudgeModal()">
+          <span>🎯</span>
+          <span>Judge Guide</span>
+        </button>
+        <button class="btn btn-secondary" onclick="location.reload()">
+          <span>↺</span>
+          <span>Reset Demo</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 4-Stage Stepper Navigation (1:1 with actual project) -->
+    <nav class="stage-nav-bar">
+      <div class="stage-tab active" id="tab-sources" onclick="goToStage('sources')">
+        <div class="stage-num">01</div>
+        <div class="stage-tab-content">
+          <div class="stage-tab-title">Sources & Ingestion</div>
+          <div class="stage-tab-desc">7 Heterogeneous Sources</div>
+        </div>
+      </div>
+
+      <div class="stage-tab" id="tab-dna" onclick="goToStage('dna')">
+        <div class="stage-num">02</div>
+        <div class="stage-tab-content">
+          <div class="stage-tab-title">Content DNA & Lineage</div>
+          <div class="stage-tab-desc">Canonical Knowledge Graph</div>
+        </div>
+      </div>
+
+      <div class="stage-tab" id="tab-integrity" onclick="goToStage('integrity')">
+        <div class="stage-num">03</div>
+        <div class="stage-tab-content">
+          <div class="stage-tab-title">Fact Integrity & Audit</div>
+          <div class="stage-tab-desc" id="stepperConflictDesc" style="color: #d29922;">1 Disputed Contradiction</div>
+        </div>
+      </div>
+
+      <div class="stage-tab" id="tab-studio" onclick="goToStage('studio')">
+        <div class="stage-num">04</div>
+        <div class="stage-tab-content">
+          <div class="stage-tab-title">Deliverables Studio</div>
+          <div class="stage-tab-desc">Blueprint Cloning & Viewers</div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Workspace Stages Container -->
+    <div class="workspace-content">
+
+      <!-- ================================================================ -->
+      <!-- STAGE 01: Sources & Ingestion -->
+      <!-- ================================================================ -->
+      <div id="view-sources" class="stage-view">
+        <div style="display: grid; grid-template-columns: 380px 1fr; gap: 24px;">
+          <!-- Left: Ingestion Input Card -->
+          <div class="tactile-card">
+            <div class="tactile-card-header">
+              <span class="tactile-card-title">Omni-Channel Ingestion</span>
+              <span class="badge badge-blue">7 Formats</span>
+            </div>
+
+            <div style="display: flex; gap: 6px; margin-bottom: 16px;">
+              <button class="btn btn-secondary active" style="flex: 1; padding: 6px;">Upload</button>
+              <button class="btn btn-secondary" style="flex: 1; padding: 6px;">Web URL</button>
+              <button class="btn btn-secondary" style="flex: 1; padding: 6px;">YouTube</button>
+              <button class="btn btn-secondary" style="flex: 1; padding: 6px;">Paste Text</button>
+            </div>
+
+            <div style="border: 2px dashed var(--border-medium); border-radius: 8px; padding: 24px; text-align: center; margin-bottom: 16px; background: var(--surface-input);">
+              <div style="font-size: 24px; margin-bottom: 8px;">📁</div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drag & drop source documents</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">PDF, DOCX, TXT, Images, Audio (up to 256MB)</div>
+              <button class="btn btn-secondary" style="margin-top: 12px;" onclick="simulateAddSource()">+ Ingest Sample Document</button>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+              <strong>Token-Aware Chunking:</strong> Documents are automatically partitioned preserving exact page boundaries and verbatim quotes.
+            </div>
+          </div>
+
+          <!-- Right: Attached Sources List & Inspector -->
+          <div class="tactile-card">
+            <div class="tactile-card-header">
+              <span class="tactile-card-title">Attached Sources (7 Ingested)</span>
+              <span class="badge badge-green">Evidence Indexed</span>
+            </div>
+
+            <div id="sourcesListContainer">
+              <!-- Dynamically populated sources -->
+            </div>
+
+            <div style="margin-top: 16px; background: var(--surface-input); border: 1px solid var(--border-medium); border-radius: 8px; padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+                <strong style="font-size: 12px; color: var(--accent-primary);" id="sourceInspectTitle">Selected Source: Q3 Powertrain Technical Report (PDF)</strong>
+                <span style="font-size: 11px; color: var(--text-muted);" id="sourceInspectMeta">14 Pages • 4,120 Tokens</span>
+              </div>
+              <pre id="sourceInspectText" style="font-size: 11px; color: var(--text-secondary); max-height: 180px; overflow-y: auto; white-space: pre-wrap;"></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-footer-bar">
+          <span style="font-size: 12px; color: var(--text-muted);">All 7 multi-format sources verified and normalized.</span>
+          <button class="btn btn-cobalt" onclick="goToStage('dna')">
+            <span>Proceed to Content DNA</span>
+            <span>➔</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================================================================ -->
+      <!-- STAGE 02: Content DNA & Lineage -->
+      <!-- ================================================================ -->
+      <div id="view-dna" class="stage-view" style="display: none;">
+        <!-- Top Toolbar with the 4 real tabs -->
+        <div class="dna-mode-bar">
+          <button class="dna-mode-btn active" id="btnModeLineage" onclick="setDnaMode('lineage')">
+            <span>🕸</span>
+            <span>Semantic Lineage Graph</span>
+          </button>
+          <button class="dna-mode-btn" id="btnModeInspector" onclick="setDnaMode('inspector')">
+            <span>🧬</span>
+            <span>Attribute Inspector (Editable)</span>
+          </button>
+          <button class="dna-mode-btn" id="btnModeVersions" onclick="setDnaMode('versions')">
+            <span>⏱</span>
+            <span>DNA Versions Timeline (4)</span>
+          </button>
+        </div>
+
+        <!-- Mode A: Lineage Graph Visualizer -->
+        <div id="dnaSubViewLineage">
+          <div class="tactile-card" style="margin-bottom: 16px;">
+            <div class="tactile-card-header">
+              <span class="tactile-card-title">Interactive 2D Semantic Lineage Graph</span>
+              <span class="badge badge-purple">Click Nodes to Inspect Provenance</span>
+            </div>
+            <div style="background: #010409; border: 1px solid var(--border-medium); border-radius: 8px; height: 380px; position: relative;">
+              <svg width="100%" height="100%" viewBox="0 0 880 380" id="lineageSvg">
+                <defs>
+                  <pattern id="gridPattern2" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(240, 246, 252, 0.04)" stroke-width="1"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#gridPattern2)" />
+                <g id="lineageEdges"></g>
+                <g id="lineageNodes"></g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="tactile-card" id="lineageNodeDetailCard">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <strong style="font-size: 13px; color: var(--accent-primary);" id="nodeDetailTitle">Node: Gravimetric Cell Energy Density</strong>
+              <span class="badge badge-green" id="nodeDetailBadge">Content DNA Layer 4</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;" id="nodeDetailQuote">
+              Verbatim Evidence: "Prototype cell tests achieved an energy density of 310 Wh/kg under standard ambient testing conditions." (Q3 Powertrain Report, Page 4)
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode B: Attribute Inspector -->
+        <div id="dnaSubViewInspector" style="display: none;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="tactile-card">
+              <div class="tactile-card-header">
+                <span class="tactile-card-title">Identity & Executive Overview</span>
+                <span class="badge badge-blue">Schema Validated</span>
+              </div>
+              <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 4px;">Workspace Title</label>
+                <input type="text" id="dnaInputTitle" style="width: 100%; background: var(--surface-input); border: 1px solid var(--border-medium); border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" value="Next-Gen Solid-State Battery Architecture & Fleet Electrification">
+              </div>
+              <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 4px;">Executive Summary</label>
+                <textarea id="dnaInputSummary" rows="4" style="width: 100%; background: var(--surface-input); border: 1px solid var(--border-medium); border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 12px; line-height: 1.5;">Comprehensive technical synthesis for transitioning commercial fleet powertrains to high-voltage solid-state battery architecture. Core innovations include an 800V silicon-carbide inverter, ceramic-coated thermal separators, and modular liquid cooling guaranteeing 12.4-minute fast charging without cell degradation.</textarea>
+              </div>
+              <button class="btn btn-primary" onclick="saveDnaChanges()">Save & Snapshot Version</button>
+            </div>
+
+            <div class="tactile-card">
+              <div class="tactile-card-header">
+                <span class="tactile-card-title">Atomic Facts & Verbatim Quotes</span>
+                <span class="badge badge-green">Anti-Hallucination</span>
+              </div>
+              <div id="dnaFactsContainer" style="max-height: 380px; overflow-y: auto;">
+                <!-- Facts cards -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode C: Versions Timeline -->
+        <div id="dnaSubViewVersions" style="display: none;">
+          <div class="tactile-card">
+            <div class="tactile-card-header">
+              <span class="tactile-card-title">Immutable DNA Version Snapshots</span>
+              <button class="btn btn-secondary" onclick="alert('Restored workspace to selected version snapshot.')">Restore Selected Version</button>
+            </div>
+            <div id="timelineContainer">
+              <!-- Version timeline items -->
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-footer-bar">
+          <span style="font-size: 12px; color: var(--text-muted);">Content DNA serves as the single verifiable source of truth.</span>
+          <button class="btn btn-cobalt" onclick="goToStage('integrity')">
+            <span>Proceed to Fact Integrity</span>
+            <span>➔</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================================================================ -->
+      <!-- STAGE 03: Fact Integrity & Audit -->
+      <!-- ================================================================ -->
+      <div id="view-integrity" class="stage-view" style="display: none;">
+        <div class="tactile-card" style="margin-bottom: 20px;">
+          <div class="tactile-card-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 18px;">🛡️</span>
+              <span class="tactile-card-title">Deterministic Source Integrity & Conflict Detection</span>
+            </div>
+            <span class="badge badge-yellow" id="conflictStatusBadge">1 Disputed Conflict</span>
+          </div>
+          <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+            EV detects factual contradictions between sources using functional single-valued predicate classification. 
+            Resolving a conflict immediately purges the rejected claim across all Content DNA sections.
+          </p>
+        </div>
+
+        <!-- The Conflict Box -->
+        <div class="conflict-card" id="conflictBox">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+            <strong style="font-size: 14px; color: #f0883e;">Disputed Fact: Gravimetric Cell Energy Density</strong>
+            <span class="badge badge-yellow">Single-Valued Property</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+            Discrepancy identified between Source 1 (Whitepaper) and Source 2 (Specification):
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+            <div class="conflict-option-box active" id="optCardA" onclick="pickConflictOpt('A')">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span class="badge badge-blue">Option A (Whitepaper)</span>
+                <strong style="color: #38bdf8;">310 Wh/kg</strong>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Q3 Powertrain Report (Page 4, Paragraph 2)</div>
+              <div style="font-size: 11px; color: var(--text-secondary); font-style: italic;">
+                "Prototype cell tests achieved an energy density of 310 Wh/kg under standard ambient testing conditions."
+              </div>
+            </div>
+
+            <div class="conflict-option-box" id="optCardB" onclick="pickConflictOpt('B')">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span class="badge badge-yellow">Option B (Architecture Spec)</span>
+                <strong style="color: #d29922;">285 Wh/kg</strong>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Technical Spec v4.2 (Page 11, Section 3.1)</div>
+              <div style="font-size: 11px; color: var(--text-secondary); font-style: italic;">
+                "Conservative baseline gravimetric density is verified at 285 Wh/kg to ensure thermal stability."
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="resolveConflict('A')">Accept Option A (310 Wh/kg)</button>
+            <button class="btn btn-secondary" onclick="resolveConflict('B')">Accept Option B (285 Wh/kg)</button>
+            <button class="btn btn-secondary" onclick="resolveConflict('custom')">Enter Custom Value</button>
+          </div>
+        </div>
+
+        <!-- Real-Time Sanitization Log -->
+        <div class="tactile-card">
+          <div class="tactile-card-header">
+            <span class="tactile-card-title">Real-Time DNA Sanitization Stream</span>
+            <span class="badge badge-green" id="sanitizationBadge">Active Monitor</span>
+          </div>
+          <div id="sanitizationStream" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); line-height: 1.6; background: var(--surface-input); padding: 14px; border-radius: 6px; border: 1px solid var(--border-medium);">
+            <div>[System Ready] Awaiting user resolution decision for claim: cell_energy_density...</div>
+          </div>
+        </div>
+
+        <div class="stage-footer-bar">
+          <span style="font-size: 12px; color: var(--text-muted);">Grounded verification guarantees zero factual drift.</span>
+          <button class="btn btn-cobalt" onclick="goToStage('studio')">
+            <span>Proceed to Deliverables Studio</span>
+            <span>➔</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================================================================ -->
+      <!-- STAGE 04: Deliverables Studio -->
+      <!-- ================================================================ -->
+      <div id="view-studio" class="stage-view" style="display: none;">
+        <div style="display: grid; grid-template-columns: 360px 1fr; gap: 24px;">
+          <!-- Left: Blueprint Cloner & Prompt Steering -->
+          <div>
+            <div class="tactile-card" style="margin-bottom: 20px;">
+              <div class="tactile-card-header">
+                <span class="tactile-card-title">Layout Blueprint Cloning</span>
+                <span class="badge badge-purple">Core Novelty</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                Extract visual design rules from a corporate reference document and populate it with Content DNA:
+              </div>
+
+              <!-- Template selector -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+                <div class="ws-item active" id="tmplBtn1" onclick="chooseTemplate(1)" style="padding: 10px;">
+                  <strong style="font-size: 12px; color: var(--text-primary); display: block;">Corporate Report</strong>
+                  <span style="font-size: 10px; color: var(--text-muted);">Word (.docx) with tables</span>
+                </div>
+                <div class="ws-item" id="tmplBtn2" onclick="chooseTemplate(2)" style="padding: 10px;">
+                  <strong style="font-size: 12px; color: var(--text-primary); display: block;">Executive Brief</strong>
+                  <span style="font-size: 10px; color: var(--text-muted);">2-column PDF format</span>
+                </div>
+              </div>
+
+              <!-- Steering prompt -->
+              <div style="margin-bottom: 14px;">
+                <label style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 4px;">Natural Language Steering Prompt</label>
+                <textarea id="steeringPrompt" rows="3" style="width: 100%; background: var(--surface-input); border: 1px solid var(--border-medium); border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #fff;">Focus on solid-state battery thermal safety, 800V silicon-carbide architecture, and the CEO's perspective from the transcript.</textarea>
+              </div>
+
+              <button class="btn btn-cobalt" style="width: 100%; justify-content: center; padding: 10px;" onclick="synthesizeClonedDeliverable()">
+                <span>⚡</span>
+                <span>Clone Format & Generate</span>
+              </button>
+            </div>
+
+            <!-- Extracted Blueprint Specs -->
+            <div class="tactile-card">
+              <div class="tactile-card-header">
+                <span class="tactile-card-title">Extracted Blueprint Hierarchy</span>
+                <span class="badge badge-green">Rule Cloned</span>
+              </div>
+              <pre id="blueprintRules" style="font-size: 11px; color: #7ee787; background: #010409; padding: 12px; border-radius: 6px; overflow-x: auto;">
+{
+  "theme": "Corporate Executive",
+  "header_font": "Inter Bold #0c4a6e",
+  "callout_border": "4px solid #16a34a",
+  "table_header_bg": "#0284c7"
+}</pre>
+            </div>
+          </div>
+
+          <!-- Right: Deliverable Viewers -->
+          <div class="tactile-card">
+            <div class="tactile-card-header">
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary active" id="btnDeliverableSlides" onclick="switchDeliverableTab('slides')">16:9 Presentation Deck</button>
+                <button class="btn btn-secondary" id="btnDeliverableDocx" onclick="switchDeliverableTab('docx')">Microsoft Word (.docx)</button>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary" onclick="alert('Exported PPTX file matching custom slide layout.')">Download .pptx</button>
+                <button class="btn btn-secondary" onclick="alert('Exported DOCX file formatted with corporate styles.')">Download .docx</button>
+              </div>
+            </div>
+
+            <!-- Deliverable Tab 1: Presentation Slide Deck -->
+            <div id="tabContentSlides">
+              <div class="slide-stage-canvas">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                  <span class="badge badge-blue" id="slideNumBadge">Slide 1 of 5</span>
+                  <span class="badge badge-green">Content DNA Grounded</span>
+                </div>
+
+                <div style="padding: 24px 0;">
+                  <h2 style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 16px;" id="slideTitle">Next-Gen Solid-State Battery Architecture</h2>
+                  <div id="slideBulletsList" style="font-size: 14px; color: var(--text-secondary); line-height: 1.8;">
+                    <!-- Bullets -->
+                  </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; font-size: 11px; color: var(--text-muted);">
+                  <span>Proprietary • Commercial Fleet Powertrains</span>
+                  <span id="slideFooterMetric" style="color: var(--accent-primary); font-weight: 600;">Energy Density: 310 Wh/kg • 800V SiC</span>
+                </div>
+              </div>
+
+              <!-- Slide Controls -->
+              <div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 16px;">
+                <button class="btn btn-secondary" onclick="prevSlide()">◀ Previous Slide</button>
+                <span style="font-size: 12px; font-weight: 700; color: var(--text-secondary);" id="slideCounter">Slide 1 / 5</span>
+                <button class="btn btn-secondary" onclick="nextSlide()">Next Slide ▶</button>
+                <button class="btn btn-secondary" onclick="toggleNotes()">
+                  <span>🎤</span>
+                  <span id="notesToggleText">Show Presenter Notes</span>
+                </button>
+              </div>
+
+              <!-- Presenter Notes Drawer -->
+              <div id="notesDrawer" style="display: none; background: var(--surface-input); border: 1px solid var(--border-medium); border-radius: 8px; padding: 14px; margin-top: 14px;">
+                <strong style="font-size: 11px; text-transform: uppercase; color: var(--accent-primary); display: block; margin-bottom: 4px;">Presenter Speaker Notes</strong>
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;" id="notesText"></div>
+              </div>
+            </div>
+
+            <!-- Deliverable Tab 2: Word DOCX Preview -->
+            <div id="tabContentDocx" style="display: none;">
+              <div class="word-preview-card">
+                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #0284c7; padding-bottom: 8px; margin-bottom: 16px;">
+                  <strong style="font-size: 18px; color: #0c4a6e;">Technical Architecture Specification</strong>
+                  <span style="font-size: 11px; color: #64748b;">Ref: EV-DOCX-ENG-42</span>
+                </div>
+
+                <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #14532d; border-radius: 0 4px 4px 0;">
+                  <strong>Verified Architecture:</strong> Generated directly from validated Content DNA. Zero hallucinations.
+                </div>
+
+                <p style="font-size: 12px; color: #334155; margin-bottom: 14px;">
+                  Comprehensive engineering baseline for Class 4-6 commercial delivery fleets. Utilizes an 800V silicon-carbide inverter and high-voltage solid-state cell architecture.
+                </p>
+
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px;">
+                  <thead>
+                    <tr style="background: #0284c7; color: #fff;">
+                      <th style="padding: 8px; text-align: left;">Metric</th>
+                      <th style="padding: 8px; text-align: left;">Verified Value</th>
+                      <th style="padding: 8px; text-align: left;">Source Provenance</th>
+                    </tr>
+                  </thead>
+                  <tbody id="docxTableBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Judge Guide Modal -->
+  <div id="modalJudge" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index: 200; align-items: center; justify-content: center; padding: 20px;">
+    <div style="background: var(--surface-card); border: 1px solid var(--border-medium); border-radius: 12px; max-width: 580px; width: 100%; padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: #fff;">Judge Evaluation Feature Guide</h3>
+        <button style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px;" onclick="closeJudgeModal()">✕</button>
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px;">
+        This demo mirrors the actual EV platform workflow across 4 streamlined stages:
+      </div>
+      <ul style="font-size: 12px; color: var(--text-secondary); line-height: 1.8; padding-left: 18px; margin-bottom: 20px;">
+        <li><strong>Stage 01 (Sources):</strong> 7 multi-format inputs with page markers and token estimates.</li>
+        <li><strong>Stage 02 (Content DNA):</strong> 2D lineage graph, live editable attributes, and version rollback.</li>
+        <li><strong>Stage 03 (Integrity):</strong> Deterministic conflict resolution with instant DNA sanitization.</li>
+        <li><strong>Stage 04 (Studio):</strong> Blueprint layout cloning, prompt steering, 16:9 presentation viewer, and Word preview.</li>
+      </ul>
+      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px;" onclick="closeJudgeModal()">Proceed with Demo</button>
+    </div>
+  </div>
+
+  <!-- Version History Modal -->
+  <div id="modalVersions" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index: 200; align-items: center; justify-content: center; padding: 20px;">
+    <div style="background: var(--surface-card); border: 1px solid var(--border-medium); border-radius: 12px; max-width: 620px; width: 100%; padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: #fff;">DNA Version Timeline & Rollback</h3>
+        <button style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px;" onclick="closeVersionModal()">✕</button>
+      </div>
+      <div id="versionModalList" style="font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px;">
+        <!-- Timeline items -->
+      </div>
+      <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 10px;" onclick="alert('Workspace rolled back to previous snapshot.'); closeVersionModal();">
+        Restore Selected Version
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // State
+    const appState = {
+      stage: 'sources',
+      sources: [
+        { id: 'src-1', title: 'Q3 Advanced Powertrain Engineering Whitepaper', type: 'PDF', pages: 14, tokens: 4120, text: '[Page 1]\nADVANCED POWERTRAIN ENGINEERING WHITEPAPER\n\n[Page 4]\nCell Gravimetric Energy Density: Prototype cell tests achieved an energy density of 310 Wh/kg under standard ambient testing conditions.\n\n[Page 7]\nDC Fast Charging cycles demonstrated 10% to 80% State-of-Charge replenishment in 12.4 minutes using 800V DC fast chargers.' },
+        { id: 'src-2', title: 'Technical Architecture Specification v4.2', type: 'DOCX', pages: 8, tokens: 2890, text: 'TECHNICAL ARCHITECTURE SPECIFICATION v4.2\n\nSection 3.1: Energy Storage Subsystem\nConservative baseline gravimetric density is verified at 285 Wh/kg to ensure thermal stability and cycle life longevity over an 8-year operating horizon across 1.4 million simulated fleet kilometers.' },
+        { id: 'src-3', title: 'Executive Board Strategy Meeting Transcript', type: 'TXT', pages: 4, tokens: 1640, text: 'BOARD STRATEGY TRANSCRIPT\n\n[00:14:22] CEO: "Our commercial fleet clients cannot afford vehicle downtime. We must guarantee ceramic separator technology prevents cascade thermal runaway."\n[00:23:40] CEO: "Our target at gigafactory volume scale is $84 per kilowatt-hour by 2028."' },
+        { id: 'src-4', title: 'https://automotive-tech.org/solid-state-breakthrough', type: 'URL', pages: 2, tokens: 1120, text: 'AUTOMOTIVE TECH TODAY\nDynamometer verification indicates that adopting 800V silicon-carbide architecture reduces copper wiring harness mass by 38% while improving round-trip energy efficiency by 6.2%.' },
+        { id: 'src-5', title: 'Keynote: Battery Thermal Runaway Standards (YouTube)', type: 'Video', pages: 5, tokens: 2400, text: 'KEYNOTE TRANSCRIPT\nUN/ECE R100 Rev 3 compliance mandates zero thermal propagation to adjacent compartments for at least 15 minutes post-incident.' },
+        { id: 'src-6', title: 'Thermal Mitigation Architecture Blueprint (Diagram)', type: 'Image', pages: 1, tokens: 850, text: 'BLUEPRINT OCR:\n- Dual-channel extruded aluminum liquid cold plate\n- Alumina ceramic separator layer (215°C threshold)\n- High-voltage pyro-fuse disconnect (< 2ms actuation)' },
+        { id: 'src-7', title: 'Lead Scientist Interview: Ceramic Physics', type: 'Audio', pages: 2, tokens: 950, text: 'AUDIO INTERVIEW:\n"The alumina ceramic coating on our separator maintains mechanical structural integrity up to 215°C, completely mitigating dendritic puncture risks."' }
+      ],
+      selectedSourceIndex: 0,
+      dnaMode: 'lineage',
+      currentDensity: '310 Wh/kg',
+      conflictResolved: false,
+      currentSlide: 0,
+      showNotes: false,
+      slides: [
+        {
+          title: 'Next-Gen Solid-State Battery Architecture',
+          bullets: [
+            'Transitioning commercial Class 4-6 fleet vehicles to high-voltage solid-state energy storage.',
+            'Verified gravimetric cell energy density of 310 Wh/kg providing 22% extended operational range.',
+            'Operating on an 800V silicon-carbide inverter topology with 98.4% peak inverter efficiency.'
+          ],
+          notes: 'Speaker Note: Begin by emphasizing that this architecture was synthesized directly from our verified Content DNA layer. Note the 310 Wh/kg density which was corroborated from Page 4 of the Powertrain Report.'
+        },
+        {
+          title: 'Ultra-Fast Charging & Fleet Operational Uptime',
+          bullets: [
+            '10% to 80% State-of-Charge replenishment achieved in exactly 12.4 minutes at 350kW DC fast charging.',
+            'Liquid-cooled extruded cold plates keep cell delta-T under 3.2°C across full charging cycles.',
+            'Harness mass reduced by 38% across the chassis, maximizing commercial cargo payload capacity.'
+          ],
+          notes: 'Speaker Note: Address fleet customer concerns regarding vehicle downtime. 12.4 minutes matches typical driver shift turnaround times.'
+        },
+        {
+          title: 'Thermal Runaway Mitigation & Safety Standards',
+          bullets: [
+            'Alumina ceramic separator decomposition threshold elevated to 215°C, suppressing lithium dendrites.',
+            'Full compliance with international UN/ECE R100 Rev 3 vehicle battery safety mandates.',
+            'High-voltage pyro-fuse disconnect actuates in under 2 milliseconds upon telemetry anomaly detection.'
+          ],
+          notes: 'Speaker Note: Highlight the CEO statement from the board transcript: thermal safety is an absolute gating item for fleet customer signoff.'
+        },
+        {
+          title: 'Economics & Gigafactory Manufacturing Scale',
+          bullets: [
+            'Target pack-level cost of $84 per kWh projected at gigafactory volume scale by 2028.',
+            'Validated across 1.4 million simulated test kilometers with zero cell degradation anomalies.',
+            'Modular 48V sub-pack design enables rapid field replacement and secondary energy grid storage reuse.'
+          ],
+          notes: 'Speaker Note: Contrast our $84/kWh projection with current industry averages ($120/kWh). The modular design provides secondary life value.'
+        },
+        {
+          title: 'Strategic Implementation & Next Milestones',
+          bullets: [
+            'Q4: Finalize 800V silicon-carbide dyno validation across extreme ambient profiles (-20°C to +45°C).',
+            'Q1: Deploy pilot commercial charging depots with dynamic 350kW grid balancing.',
+            'Q2: Begin commercial fleet delivery with nationwide telematics and battery warranty monitoring.'
+          ],
+          notes: 'Speaker Note: Conclude with the actionable roadmap. Reiterate that every claim is 100% traceable via the Semantic Lineage Graph.'
+        }
+      ]
+    };
+
+    // Stage switching
+    function goToStage(stg) {
+      appState.stage = stg;
+      ['sources', 'dna', 'integrity', 'studio'].forEach(s => {
+        document.getElementById(`tab-${s}`).classList.toggle('active', s === stg);
+        document.getElementById(`view-${s}`).style.display = s === stg ? 'block' : 'none';
+      });
+
+      if (stg === 'dna' && appState.dnaMode === 'lineage') {
+        renderLineage();
+      }
+    }
+
+    // Sources logic
+    function renderSources() {
+      const container = document.getElementById('sourcesListContainer');
+      container.innerHTML = '';
+      appState.sources.forEach((src, idx) => {
+        const div = document.createElement('div');
+        div.className = `source-list-item ${idx === appState.selectedSourceIndex ? 'selected' : ''}`;
+        div.onclick = () => {
+          appState.selectedSourceIndex = idx;
+          renderSources();
+        };
+        div.innerHTML = `
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${src.title}</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${src.pages} Pages • ${src.tokens} Tokens</div>
+          </div>
+          <span class="badge badge-blue">${src.type}</span>
+        `;
+        container.appendChild(div);
+      });
+
+      const activeSrc = appState.sources[appState.selectedSourceIndex];
+      if (activeSrc) {
+        document.getElementById('sourceInspectTitle').innerText = activeSrc.title;
+        document.getElementById('sourceInspectMeta').innerText = `${activeSrc.pages} Pages • ${activeSrc.tokens} Tokens`;
+        document.getElementById('sourceInspectText').innerText = activeSrc.text;
+      }
+    }
+
+    function simulateAddSource() {
+      const title = prompt("Enter document title:", "Safety Compliance Certification (UN/ECE R100 Rev 3)");
+      if (!title) return;
+      appState.sources.push({
+        id: `src-${Date.now()}`,
+        title: title,
+        type: 'PDF',
+        pages: 6,
+        tokens: 1840,
+        text: `[Page 1]\nDOCUMENT: ${title.toUpperCase()}\nStatus: Certified\nAll physical prototype cells demonstrated zero thermal cascade under high-amperage overcharge conditions.`
+      });
+      appState.selectedSourceIndex = appState.sources.length - 1;
+      renderSources();
+      alert(`Source '${title}' ingested and page markers extracted!`);
+    }
+
+    // DNA sub-modes
+    function setDnaMode(mode) {
+      appState.dnaMode = mode;
+      document.getElementById('btnModeLineage').classList.toggle('active', mode === 'lineage');
+      document.getElementById('btnModeInspector').classList.toggle('active', mode === 'inspector');
+      document.getElementById('btnModeVersions').classList.toggle('active', mode === 'versions');
+
+      document.getElementById('dnaSubViewLineage').style.display = mode === 'lineage' ? 'block' : 'none';
+      document.getElementById('dnaSubViewInspector').style.display = mode === 'inspector' ? 'block' : 'none';
+      document.getElementById('dnaSubViewVersions').style.display = mode === 'versions' ? 'block' : 'none';
+
+      if (mode === 'lineage') renderLineage();
+      if (mode === 'inspector') renderFacts();
+      if (mode === 'versions') renderTimeline();
+    }
+
+    function renderFacts() {
+      const container = document.getElementById('dnaFactsContainer');
+      container.innerHTML = `
+        <div style="background: var(--surface-elevated); padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid var(--accent-primary);">
+          <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 12px;">
+            <span>Gravimetric Cell Energy Density</span>
+            <span style="color: var(--accent-primary);">${appState.currentDensity}</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; font-style: italic;">
+            "Prototype cell tests achieved an energy density of ${appState.currentDensity} under standard ambient testing conditions."
+          </div>
+          <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Citation: Q3 Powertrain Report (Page 4)</div>
+        </div>
+
+        <div style="background: var(--surface-elevated); padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid var(--accent-primary);">
+          <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 12px;">
+            <span>Inverter Bus Voltage</span>
+            <span style="color: var(--accent-primary);">800V SiC</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; font-style: italic;">
+            "Silicon-carbide MOSFET inverter modules operating at 800V nominal bus voltage deliver 98.4% peak efficiency."
+          </div>
+          <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Citation: Technical Spec v4.2 (Page 8)</div>
+        </div>
+
+        <div style="background: var(--surface-elevated); padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid var(--accent-primary);">
+          <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 12px;">
+            <span>Fast Charge Replenishment (10-80%)</span>
+            <span style="color: var(--accent-primary);">12.4 Minutes</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; font-style: italic;">
+            "DC Fast Charging cycles demonstrated 10% to 80% SoC replenishment in 12.4 minutes."
+          </div>
+          <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Citation: Q3 Powertrain Report (Page 7)</div>
+        </div>
+      `;
+    }
+
+    function saveDnaChanges() {
+      alert("Content DNA changes saved! Created new version snapshot v4.");
+    }
+
+    // Lineage Graph
+    const nodes = [
+      { id: 's1', label: 'Q3 Whitepaper (PDF)', x: 90, y: 80, col: '#38bdf8' },
+      { id: 's2', label: 'Architecture Spec (DOCX)', x: 90, y: 190, col: '#38bdf8' },
+      { id: 's3', label: 'Board Transcript (TXT)', x: 90, y: 300, col: '#38bdf8' },
+      { id: 'e1', label: 'Quote: 310 Wh/kg (Pg 4)', x: 310, y: 80, col: '#0f8f8c' },
+      { id: 'e2', label: 'Quote: 800V SiC (Pg 8)', x: 310, y: 190, col: '#0f8f8c' },
+      { id: 'e3', label: 'Quote: $84/kWh (Transcript)', x: 310, y: 300, col: '#0f8f8c' },
+      { id: 'd1', label: 'DNA: Energy Density', x: 540, y: 80, col: '#bc8cff' },
+      { id: 'd2', label: 'DNA: 800V Architecture', x: 540, y: 190, col: '#bc8cff' },
+      { id: 'd3', label: 'DNA: Gigafactory Cost', x: 540, y: 300, col: '#bc8cff' },
+      { id: 'o1', label: '16:9 Presentation Deck', x: 760, y: 120, col: '#3fb950' },
+      { id: 'o2', label: 'Corporate Report DOCX', x: 760, y: 240, col: '#3fb950' }
+    ];
+
+    const edges = [
+      ['s1','e1'], ['s2','e2'], ['s3','e3'],
+      ['e1','d1'], ['e2','d2'], ['e3','d3'],
+      ['d1','o1'], ['d1','o2'], ['d2','o1'], ['d2','o2'], ['d3','o1']
+    ];
+
+    function renderLineage() {
+      const eGroup = document.getElementById('lineageEdges');
+      const nGroup = document.getElementById('lineageNodes');
+      eGroup.innerHTML = '';
+      nGroup.innerHTML = '';
+
+      edges.forEach(([u, v]) => {
+        const n1 = nodes.find(n => n.id === u);
+        const n2 = nodes.find(n => n.id === v);
+        if (n1 && n2) {
+          const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          l.setAttribute('x1', n1.x);
+          l.setAttribute('y1', n1.y);
+          l.setAttribute('x2', n2.x);
+          l.setAttribute('y2', n2.y);
+          l.setAttribute('stroke', 'rgba(56, 189, 248, 0.3)');
+          l.setAttribute('stroke-width', '2');
+          l.setAttribute('stroke-dasharray', '4 2');
+          eGroup.appendChild(l);
+        }
+      });
+
+      nodes.forEach(n => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+        g.style.cursor = 'pointer';
+        g.onclick = () => {
+          document.getElementById('nodeDetailTitle').innerText = `Node: ${n.label}`;
+          document.getElementById('nodeDetailQuote').innerText = `Verbatim Lineage Provenance verified for node ${n.id}. Ingested from source and feeds into generated deliverables.`;
+        };
+
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('r', '12');
+        c.setAttribute('fill', n.col);
+        c.setAttribute('stroke', '#010409');
+        c.setAttribute('stroke-width', '2');
+
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('y', '24');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('fill', '#f0f6fc');
+        t.setAttribute('font-size', '10px');
+        t.setAttribute('font-weight', '600');
+        t.textContent = n.label;
+
+        g.appendChild(c);
+        g.appendChild(t);
+        nGroup.appendChild(g);
+      });
+    }
+
+    // Timeline
+    function renderTimeline() {
+      const container = document.getElementById('timelineContainer');
+      container.innerHTML = `
+        <div style="padding-left: 14px; border-left: 2px solid var(--accent-primary); margin-bottom: 14px;">
+          <div style="font-weight: 700; color: #fff;">v3: Conflict Resolved (Energy Density: 310 Wh/kg)</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Purged contradictory 285 Wh/kg assertion from Content DNA.</div>
+        </div>
+        <div style="padding-left: 14px; border-left: 2px solid var(--border-medium); margin-bottom: 14px;">
+          <div style="font-weight: 700; color: #fff;">v2: Ingested Board Transcript</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Added CEO statements and target gigafactory cost ($84/kWh).</div>
+        </div>
+        <div style="padding-left: 14px; border-left: 2px solid var(--border-medium);">
+          <div style="font-weight: 700; color: #fff;">v1: Initial Ingestion of Whitepaper & Specs</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Initialized 6-layer canonical schema.</div>
+        </div>
+      `;
+    }
+
+    // Conflict Resolution
+    function pickConflictOpt(opt) {
+      document.getElementById('optCardA').classList.toggle('active', opt === 'A');
+      document.getElementById('optCardB').classList.toggle('active', opt === 'B');
+    }
+
+    function resolveConflict(decision) {
+      let chosen = '310 Wh/kg';
+      let rejected = '285 Wh/kg';
+      if (decision === 'B') {
+        chosen = '285 Wh/kg';
+        rejected = '310 Wh/kg';
+      } else if (decision === 'custom') {
+        const val = prompt("Enter verified density:", "300 Wh/kg");
+        if (!val) return;
+        chosen = val;
+        rejected = 'stale claims';
+      }
+
+      appState.currentDensity = chosen;
+      appState.conflictResolved = true;
+
+      // Update stepper & badges
+      document.getElementById('stepperConflictDesc').innerText = '0 Conflicts (Verified)';
+      document.getElementById('stepperConflictDesc').style.color = '#3fb950';
+      document.getElementById('conflictStatusBadge').className = 'badge badge-green';
+      document.getElementById('conflictStatusBadge').innerText = 'All Conflicts Resolved & DNA Sanitized';
+      document.getElementById('sanitizationBadge').innerText = 'Sanitization Complete';
+
+      // Update slides & tables
+      appState.slides[0].bullets[1] = `Verified gravimetric cell energy density of ${chosen} providing 22% extended operational range.`;
+      document.getElementById('slideFooterMetric').innerText = `Energy Density: ${chosen} • 800V SiC`;
+      renderSlide();
+      renderDocxTable();
+
+      // Update log
+      document.getElementById('sanitizationStream').innerHTML = `
+        <div style="color: #3fb950; font-weight: 700;">[Conflict Resolved] User committed ${chosen}.</div>
+        <div style="color: #f85149;">• Excised contradictory assertion (${rejected}) from Content DNA summary and facts.</div>
+        <div style="color: #3fb950;">• Downstream deliverables (Presentation Deck & Word DOCX) synchronized automatically.</div>
+      `;
+
+      alert(`Conflict resolved! Standardized on ${chosen}. Rejected assertions purged across all DNA sections.`);
+    }
+
+    // Deliverables Studio
+    function chooseTemplate(id) {
+      document.getElementById('tmplBtn1').classList.toggle('active', id === 1);
+      document.getElementById('tmplBtn2').classList.toggle('active', id === 2);
+      if (id === 1) {
+        document.getElementById('blueprintRules').innerText = `{\n  "theme": "Corporate Executive",\n  "header_font": "Inter Bold #0c4a6e",\n  "callout_border": "4px solid #16a34a",\n  "table_header_bg": "#0284c7"\n}`;
+      } else {
+        document.getElementById('blueprintRules').innerText = `{\n  "theme": "2-Column Briefing",\n  "layout": "60/40 Split",\n  "kpi_badges": true,\n  "accent": "#38bdf8"\n}`;
+      }
+    }
+
+    function synthesizeClonedDeliverable() {
+      const p = document.getElementById('steeringPrompt').value;
+      alert(`Format cloned successfully! Synthesized output adheres to reference layout and steered by prompt: "${p}".`);
+    }
+
+    function switchDeliverableTab(tab) {
+      document.getElementById('btnDeliverableSlides').classList.toggle('active', tab === 'slides');
+      document.getElementById('btnDeliverableDocx').classList.toggle('active', tab === 'docx');
+      document.getElementById('tabContentSlides').style.display = tab === 'slides' ? 'block' : 'none';
+      document.getElementById('tabContentDocx').style.display = tab === 'docx' ? 'block' : 'none';
+      if (tab === 'docx') renderDocxTable();
+    }
+
+    function renderSlide() {
+      const s = appState.slides[appState.currentSlide];
+      document.getElementById('slideNumBadge').innerText = `Slide ${appState.currentSlide + 1} of ${appState.slides.length}`;
+      document.getElementById('slideCounter').innerText = `Slide ${appState.currentSlide + 1} / ${appState.slides.length}`;
+      document.getElementById('slideTitle').innerText = s.title;
+      document.getElementById('notesText').innerText = s.notes;
+
+      const ul = document.getElementById('slideBulletsList');
+      ul.innerHTML = '';
+      s.bullets.forEach(b => {
+        const div = document.createElement('div');
+        div.style.marginBottom = '10px';
+        div.innerHTML = `<span style="color: var(--accent-primary); margin-right: 8px;">•</span> ${b}`;
+        ul.appendChild(div);
+      });
+    }
+
+    function nextSlide() {
+      if (appState.currentSlide < appState.slides.length - 1) {
+        appState.currentSlide++;
+        renderSlide();
+      }
+    }
+    function prevSlide() {
+      if (appState.currentSlide > 0) {
+        appState.currentSlide--;
+        renderSlide();
+      }
+    }
+    function toggleNotes() {
+      appState.showNotes = !appState.showNotes;
+      document.getElementById('notesDrawer').style.display = appState.showNotes ? 'block' : 'none';
+      document.getElementById('notesToggleText').innerText = appState.showNotes ? 'Hide Presenter Notes' : 'Show Presenter Notes';
+    }
+
+    function renderDocxTable() {
+      const tbody = document.getElementById('docxTableBody');
+      tbody.innerHTML = `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px;">Gravimetric Cell Energy Density</td>
+          <td style="padding: 8px; font-weight: 700; color: #0284c7;">${appState.currentDensity}</td>
+          <td style="padding: 8px; color: #64748b;">Q3 Powertrain Report (Pg 4)</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px;">Inverter Bus Voltage</td>
+          <td style="padding: 8px; font-weight: 700; color: #0284c7;">800V SiC</td>
+          <td style="padding: 8px; color: #64748b;">Architecture Spec v4.2 (Pg 8)</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px;">Ceramic Separator Threshold</td>
+          <td style="padding: 8px; font-weight: 700; color: #0284c7;">215°C</td>
+          <td style="padding: 8px; color: #64748b;">Scientist Interview (Pg 2)</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px;">Target Gigafactory Pack Cost</td>
+          <td style="padding: 8px; font-weight: 700; color: #0284c7;">$84 / kWh</td>
+          <td style="padding: 8px; color: #64748b;">Board Strategy Transcript</td>
+        </tr>
+      `;
+    }
+
+    // Modals
+    function openJudgeModal() { document.getElementById('modalJudge').style.display = 'flex'; }
+    function closeJudgeModal() { document.getElementById('modalJudge').style.display = 'none'; }
+    function openVersionModal() {
+      document.getElementById('modalVersions').style.display = 'flex';
+      document.getElementById('versionModalList').innerHTML = `
+        <div style="background: var(--surface-elevated); padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid var(--accent-primary);">
+          <strong>v3 (Active): Conflict Resolved</strong><br>
+          <span style="color: var(--text-muted); font-size: 11px;">Standardized on 310 Wh/kg; purged contradictory 285 Wh/kg assertion.</span>
+        </div>
+        <div style="background: var(--surface-elevated); padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+          <strong>v2: Added Board Strategy Transcript</strong><br>
+          <span style="color: var(--text-muted); font-size: 11px;">CEO statements and $84/kWh gigafactory cost directive.</span>
+        </div>
+        <div style="background: var(--surface-elevated); padding: 10px; border-radius: 6px;">
+          <strong>v1: Initial Ingestion Baseline</strong><br>
+          <span style="color: var(--text-muted); font-size: 11px;">Initial 6-layer canonical schema initialized.</span>
+        </div>
+      `;
+    }
+    function closeVersionModal() { document.getElementById('modalVersions').style.display = 'none'; }
+
+    // Keyboard support
+    window.addEventListener('keydown', (e) => {
+      if (appState.stage === 'studio') {
+        if (e.key === 'ArrowRight') nextSlide();
+        if (e.key === 'ArrowLeft') prevSlide();
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      renderSources();
+      renderSlide();
+    });
+  </script>
+</body>
+</html>

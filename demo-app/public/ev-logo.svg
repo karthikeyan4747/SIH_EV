@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-labelledby="title desc">
+  <title id="title">EV workspace logo</title>
+  <desc id="desc">Blue and violet EV logo with connected technology nodes</desc>
+  <defs>
+    <linearGradient id="ev-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11a9e8" />
+      <stop offset="0.55" stop-color="#193fd1" />
+      <stop offset="1" stop-color="#7b16e8" />
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#ev-gradient)" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="5" d="M62 50C90 14 145 6 188 28" />
+    <path stroke-width="5" d="M58 190c25 34 75 44 119 22" />
+    <path stroke-width="4" d="M32 82h42l18 18h27M20 111h52l16 16h31M38 145h39l17-17h25M56 169h39l19-19h17" />
+    <path stroke-width="3" d="M232 86l35 19 18 34-15 43-38 22-39-18-14-40 18-35zM232 86l-19 60 22 58M267 105l-54 41 57-7-22 65M285 139l-72 7M270 182l-57-36" />
+  </g>
+  <g fill="url(#ev-gradient)">
+    <circle cx="188" cy="28" r="7" /><circle cx="177" cy="212" r="7" />
+    <circle cx="32" cy="82" r="5" /><circle cx="20" cy="111" r="5" /><circle cx="38" cy="145" r="5" /><circle cx="56" cy="169" r="5" />
+    <circle cx="232" cy="86" r="7" /><circle cx="267" cy="105" r="7" /><circle cx="285" cy="139" r="7" /><circle cx="270" cy="182" r="7" /><circle cx="232" cy="204" r="7" /><circle cx="193" cy="186" r="7" /><circle cx="179" cy="146" r="7" /><circle cx="197" cy="111" r="7" /><circle cx="213" cy="146" r="8" /><circle cx="270" cy="139" r="7" />
+  </g>
+  <path fill="url(#ev-gradient)" d="M90 58h44l13 27h-42v15h50l-12 27h-38v17h51l14 27H90z" />
+  <path fill="url(#ev-gradient)" d="M149 128h22l13 25 30-67h27l-45 100h-22z" />
+</svg>

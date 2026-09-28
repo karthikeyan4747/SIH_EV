@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Content DNA Structure Demo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #050b1f;
+        color: #e8f7ff;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .demo-frame {
+        width: min(1040px, calc(100vw - 40px));
+        aspect-ratio: 1.08;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(69, 160, 255, 0.22);
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(13, 196, 255, 0.16), transparent 22%),
+          radial-gradient(circle at 50% 64%, rgba(27, 91, 220, 0.12), transparent 24%),
+          linear-gradient(145deg, #0b3260 0%, #071b47 46%, #051230 100%);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+      }
+
+      .demo-frame::before {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(83, 177, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(83, 177, 255, 0.045) 1px, transparent 1px);
+        background-size: 36px 36px;
+        content: "";
+      }
+
+      .demo-frame::after {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 22% 20%, rgba(83, 194, 255, 0.16), transparent 2px),
+          radial-gradient(circle at 82% 24%, rgba(83, 194, 255, 0.14), transparent 2px),
+          radial-gradient(circle at 17% 62%, rgba(83, 194, 255, 0.14), transparent 2px),
+          radial-gradient(circle at 76% 74%, rgba(83, 194, 255, 0.16), transparent 2px);
+        opacity: 0.9;
+        content: "";
+      }
+
+      .demo-title {
+        position: absolute;
+        top: 34px;
+        left: 42px;
+        z-index: 4;
+      }
+
+      .demo-title span {
+        display: block;
+        color: #5bd9ff;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 2.4px;
+        text-transform: uppercase;
+      }
+
+      .demo-title strong {
+        display: block;
+        margin-top: 7px;
+        color: #f2fbff;
+        font-size: 34px;
+        letter-spacing: 0;
+      }
+
+      svg {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        width: 100%;
+        height: 100%;
+      }
+
+      .circuit-line {
+        fill: none;
+        stroke: rgba(38, 190, 255, 0.38);
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2;
+      }
+
+      .circuit-line.faint {
+        stroke: rgba(38, 190, 255, 0.18);
+      }
+
+      .circuit-dot {
+        fill: #dff8ff;
+        filter: drop-shadow(0 0 7px #20cfff);
+      }
+
+      .helix-backbone {
+        fill: none;
+        stroke-linecap: round;
+        stroke-width: 12;
+        filter: url(#dnaGlow);
+      }
+
+      .helix-left {
+        stroke: url(#leftBackbone);
+      }
+
+      .helix-right {
+        stroke: url(#rightBackbone);
+      }
+
+      .helix-shadow {
+        fill: none;
+        stroke: rgba(1, 8, 24, 0.66);
+        stroke-linecap: round;
+        stroke-width: 16;
+      }
+
+      .base-pair {
+        stroke-linecap: round;
+        stroke-width: 4.8;
+        filter: drop-shadow(0 0 8px rgba(27, 218, 255, 0.42));
+      }
+
+      .base-pair.back {
+        opacity: 0.28;
+      }
+
+      .base-cyan {
+        stroke: #19d9ff;
+      }
+
+      .base-blue {
+        stroke: #318bff;
+      }
+
+      .bond {
+        stroke: rgba(205, 242, 255, 0.72);
+        stroke-dasharray: 3 4;
+        stroke-width: 2;
+      }
+
+      .phosphate {
+        fill: #0b2556;
+        stroke-width: 3;
+        filter:
+          drop-shadow(0 0 7px currentColor)
+          drop-shadow(0 0 15px currentColor);
+      }
+
+      .phosphate.front {
+        color: #1bdfff;
+        stroke: #1bdfff;
+      }
+
+      .phosphate.back {
+        color: #356cff;
+        stroke: #356cff;
+        opacity: 0.42;
+      }
+
+      .backbone-highlight {
+        fill: none;
+        stroke: rgba(234, 250, 255, 0.62);
+        stroke-linecap: round;
+        stroke-width: 2.2;
+        opacity: 0.56;
+      }
+
+      .caption {
+        position: absolute;
+        right: 36px;
+        bottom: 28px;
+        z-index: 4;
+        width: 248px;
+        padding: 16px 18px;
+        border: 1px solid rgba(76, 198, 255, 0.28);
+        border-radius: 14px;
+        background: rgba(3, 15, 38, 0.58);
+        box-shadow: 0 0 34px rgba(15, 196, 255, 0.12);
+        backdrop-filter: blur(16px);
+      }
+
+      .caption strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .caption p {
+        margin: 7px 0 0;
+        color: #8fb9d4;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="demo-frame" aria-label="DNA structure UI demo">
+      <div class="demo-title">
+        <span>Demo preview</span>
+        <strong>Content DNA</strong>
+      </div>
+
+      <svg viewBox="0 0 1000 920" role="img" aria-label="Blue digital DNA structure over circuit lines">
+        <defs>
+          <linearGradient id="leftBackbone" x1="360" x2="650" y1="40" y2="880" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#0ee6ff" />
+            <stop offset="0.48" stop-color="#24a7ff" />
+            <stop offset="1" stop-color="#0de2ff" />
+          </linearGradient>
+          <linearGradient id="rightBackbone" x1="640" x2="350" y1="40" y2="880" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#56a9ff" />
+            <stop offset="0.46" stop-color="#0cd9ff" />
+            <stop offset="1" stop-color="#436dff" />
+          </linearGradient>
+          <filter id="dnaGlow">
+            <feGaussianBlur stdDeviation="4.2" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        <g class="circuits">
+          <path class="circuit-line" d="M42 172 H190 l42 42 h148" />
+          <path class="circuit-line faint" d="M0 255 H172 l55 -55 h105" />
+          <path class="circuit-line" d="M44 344 H236 l58 44 h86" />
+          <path class="circuit-line faint" d="M0 510 H260 l52 -48 h72" />
+          <path class="circuit-line" d="M36 650 H214 l72 -70 h96" />
+          <path class="circuit-line faint" d="M130 788 H304 l70 -72 h70" />
+          <path class="circuit-line" d="M958 175 H810 l-48 48 H622" />
+          <path class="circuit-line faint" d="M1000 286 H812 l-45 -42 H640" />
+          <path class="circuit-line" d="M960 392 H784 l-54 48 H622" />
+          <path class="circuit-line faint" d="M1000 524 H748 l-48 -48 H618" />
+          <path class="circuit-line" d="M948 668 H776 l-76 -76 H620" />
+          <path class="circuit-line faint" d="M868 802 H708 l-78 -78 H560" />
+          <circle class="circuit-dot" cx="190" cy="172" r="5" />
+          <circle class="circuit-dot" cx="236" cy="344" r="4" />
+          <circle class="circuit-dot" cx="304" cy="788" r="4" />
+          <circle class="circuit-dot" cx="810" cy="175" r="5" />
+          <circle class="circuit-dot" cx="784" cy="392" r="4" />
+          <circle class="circuit-dot" cx="708" cy="802" r="4" />
+        </g>
+
+        <g class="dna">
+          <g class="base-rungs">
+            <line class="base-pair back base-cyan" x1="392" y1="126" x2="608" y2="126" />
+            <line class="bond" x1="486" y1="126" x2="514" y2="126" />
+            <line class="base-pair base-blue" x1="346" y1="194" x2="654" y2="194" />
+            <line class="bond" x1="486" y1="194" x2="514" y2="194" />
+            <line class="base-pair base-cyan" x1="376" y1="262" x2="624" y2="262" />
+            <line class="bond" x1="486" y1="262" x2="514" y2="262" />
+            <line class="base-pair back base-blue" x1="430" y1="330" x2="570" y2="330" />
+            <line class="bond" x1="486" y1="330" x2="514" y2="330" />
+            <line class="base-pair back base-cyan" x1="430" y1="398" x2="570" y2="398" />
+            <line class="bond" x1="486" y1="398" x2="514" y2="398" />
+            <line class="base-pair base-blue" x1="374" y1="466" x2="626" y2="466" />
+            <line class="bond" x1="486" y1="466" x2="514" y2="466" />
+            <line class="base-pair base-cyan" x1="346" y1="534" x2="654" y2="534" />
+            <line class="bond" x1="486" y1="534" x2="514" y2="534" />
+            <line class="base-pair back base-blue" x1="392" y1="602" x2="608" y2="602" />
+            <line class="bond" x1="486" y1="602" x2="514" y2="602" />
+            <line class="base-pair back base-cyan" x1="438" y1="670" x2="562" y2="670" />
+            <line class="bond" x1="486" y1="670" x2="514" y2="670" />
+            <line class="base-pair base-blue" x1="376" y1="738" x2="624" y2="738" />
+            <line class="bond" x1="486" y1="738" x2="514" y2="738" />
+            <line class="base-pair base-cyan" x1="348" y1="806" x2="652" y2="806" />
+            <line class="bond" x1="486" y1="806" x2="514" y2="806" />
+          </g>
+
+          <path class="helix-shadow" d="M390 58 C740 170, 260 286, 610 410 C260 542, 738 658, 390 862" />
+          <path class="helix-shadow" d="M610 58 C260 170, 740 286, 390 410 C740 542, 262 658, 610 862" />
+          <path class="helix-backbone helix-left" d="M390 58 C740 170, 260 286, 610 410 C260 542, 738 658, 390 862" />
+          <path class="helix-backbone helix-right" d="M610 58 C260 170, 740 286, 390 410 C740 542, 262 658, 610 862" />
+          <path class="backbone-highlight" d="M370 64 C690 174, 286 290, 588 408 C292 540, 700 660, 374 856" />
+          <path class="backbone-highlight" d="M588 64 C294 174, 714 290, 410 410 C708 540, 296 660, 588 856" />
+
+          <circle class="phosphate back" cx="392" cy="126" r="12" />
+          <circle class="phosphate front" cx="608" cy="126" r="12" />
+          <circle class="phosphate front" cx="346" cy="194" r="12" />
+          <circle class="phosphate front" cx="654" cy="194" r="12" />
+          <circle class="phosphate front" cx="376" cy="262" r="12" />
+          <circle class="phosphate front" cx="624" cy="262" r="12" />
+          <circle class="phosphate back" cx="430" cy="330" r="12" />
+          <circle class="phosphate back" cx="570" cy="330" r="12" />
+          <circle class="phosphate back" cx="430" cy="398" r="12" />
+          <circle class="phosphate back" cx="570" cy="398" r="12" />
+          <circle class="phosphate front" cx="374" cy="466" r="12" />
+          <circle class="phosphate front" cx="626" cy="466" r="12" />
+          <circle class="phosphate front" cx="346" cy="534" r="12" />
+          <circle class="phosphate front" cx="654" cy="534" r="12" />
+          <circle class="phosphate back" cx="392" cy="602" r="12" />
+          <circle class="phosphate back" cx="608" cy="602" r="12" />
+          <circle class="phosphate back" cx="438" cy="670" r="12" />
+          <circle class="phosphate back" cx="562" cy="670" r="12" />
+          <circle class="phosphate front" cx="376" cy="738" r="12" />
+          <circle class="phosphate front" cx="624" cy="738" r="12" />
+          <circle class="phosphate front" cx="348" cy="806" r="12" />
+          <circle class="phosphate front" cx="652" cy="806" r="12" />
+        </g>
+      </svg>
+
+      <aside class="caption">
+        <strong>Digital DNA structure</strong>
+        <p>Centered cyan double helix with circuit branches for the Content DNA module preview.</p>
+      </aside>
+    </main>
+  </body>
+</html>
