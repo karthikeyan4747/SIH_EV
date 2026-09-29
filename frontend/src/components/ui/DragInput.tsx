@@ -120,7 +120,7 @@ export function DragInput(props: DragInputProps) {
           input?.onChange?.(event)
         }
       } catch {
-        // Not a text file: nothing to populate
+        // Not a text file — nothing to populate
       }
     },
     [onDropFiles, rawFiles, as, textarea, input],

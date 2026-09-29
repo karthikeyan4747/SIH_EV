@@ -4,13 +4,11 @@ import {
   ChevronDown,
   ChevronUp,
   GitCompareArrows,
-  RotateCcw,
   UserRound,
 } from 'lucide-react'
 
 import {
   resolveTransformationConflict,
-  resetTransformationConflict,
 } from '../../lib/api/client'
 import { DragInput } from '../ui/DragInput'
 
@@ -195,67 +193,6 @@ export function ConflictResolutionPanel({
     }
   }
 
-  async function handleResetConflict(conflictId: string) {
-    try {
-      setLoading((current) => ({
-        ...current,
-        [conflictId]: true,
-      }))
-      setErrors((current) => ({
-        ...current,
-        [conflictId]: '',
-      }))
-
-      const updatedTransformation = await resetTransformationConflict(
-        transformationId,
-        conflictId,
-      )
-
-      setSelected((current) => ({
-        ...current,
-        [conflictId]: '',
-      }))
-      setCustomValues((current) => ({
-        ...current,
-        [conflictId]: '',
-      }))
-      setResolved((current) => ({
-        ...current,
-        [conflictId]: false,
-      }))
-
-      onResolved(updatedTransformation)
-    } catch (error) {
-      console.error('Failed to reset conflict:', error)
-      setErrors((current) => ({
-        ...current,
-        [conflictId]:
-          error instanceof Error
-            ? error.message
-            : 'Could not reset this conflict.',
-      }))
-    } finally {
-      setLoading((current) => ({
-        ...current,
-        [conflictId]: false,
-      }))
-    }
-  }
-
-  async function handleResetAllConflicts() {
-    try {
-      const updatedTransformation = await resetTransformationConflict(
-        transformationId,
-      )
-      setSelected({})
-      setCustomValues({})
-      setResolved({})
-      onResolved(updatedTransformation)
-    } catch (error) {
-      console.error('Failed to reset all conflicts:', error)
-    }
-  }
-
   if (!conflicts.length) {
     return (
       <section className="conflict-resolution-panel">
@@ -325,50 +262,22 @@ export function ConflictResolutionPanel({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
           {resolvedCount > 0 && (
-            <>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 10px',
-                  borderRadius: '999px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  background: 'rgba(34, 197, 94, 0.12)',
-                  color: '#86efac',
-                  border: '1px solid rgba(34, 197, 94, 0.25)',
-                }}
-              >
-                <Check size={12} /> {resolvedCount} Resolved
-              </span>
-              <button
-                type="button"
-                className="reset-conflicts-btn"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  background: 'rgba(255, 170, 80, 0.1)',
-                  color: '#fdba74',
-                  border: '1px solid rgba(255, 170, 80, 0.3)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void handleResetAllConflicts()
-                }}
-                title="Reset conflict back to unresolved state"
-              >
-                <RotateCcw size={12} />
-                <span>Reset Conflict State</span>
-              </button>
-            </>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 600,
+                background: 'rgba(34, 197, 94, 0.12)',
+                color: '#86efac',
+                border: '1px solid rgba(34, 197, 94, 0.25)',
+              }}
+            >
+              <Check size={12} /> {resolvedCount} Resolved
+            </span>
           )}
 
           <span className="conflict-count">
@@ -563,10 +472,10 @@ export function ConflictResolutionPanel({
                         transition: 'all 0.15s ease',
                       }}
                       onClick={() => {
-                        void handleResetConflict(conflict.conflict_id)
+                        setResolved((curr) => ({ ...curr, [conflict.conflict_id]: false }))
                       }}
                     >
-                      Reopen Conflict / Change Selection
+                      Change Selection
                     </button>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--color-success-text, #3fb950)', opacity: 0.9, marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>

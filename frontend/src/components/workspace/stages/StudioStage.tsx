@@ -19,9 +19,6 @@ import {
   Presentation,
   ArrowRight,
   Layers,
-  CheckCircle2,
-  Terminal,
-  Layout,
 } from 'lucide-react'
 import type { Transformation } from '../../../types/transformation'
 import {
@@ -119,42 +116,12 @@ const STYLES = [
   'News',
 ]
 
-const RAW_UNSTYLED_DATA = {
-  title: 'Solid-State Battery Fleet Architecture Telemetry',
-  streamId: 'STREAM-DNA-LAYER-3-METRICS',
-  sourceAudit: 'Fraunhofer ISE Audit Confirmed',
-  rawLines: [
-    '[INGESTED SOURCE STREAM · CONTENT DNA]',
-    'Cell Chemistry: Solid-State NMC811 Lithium-Metal',
-    'Gravimetric Energy Density: 285 Wh/kg (Supplier Audit Confirmed)',
-    'DC Fast-Charging Duration: 12.4 minutes (10% to 80% State of Charge)',
-    'Inverter Electric Efficiency: 99.2% (800V Silicon Carbide Inverter)',
-    'Dynamic Crash Deceleration: 65 G (FMVSS 305 Structural FEA)',
-    'Pack Manufacturing Run-Rate: $84/kWh (at 100 GWh Annual Scale)',
-    'Commercial Fleet Operating Range: 540 km WLTP (4.2-ton Cargo Van)',
-    'Diesel Total Cost Parity: 26 Months Payback Horizon',
-    'Thermal Mitigation: Dual-ceramic barrier suppresses propagation',
-  ],
-  metrics: [
-    { label: 'CELL DENSITY', value: '285 Wh/kg', sub: 'Solid-State NMC811', change: '+14% vs Gen-1' },
-    { label: 'CHARGE TURNAROUND', value: '12.4 min', sub: '10% to 80% SoC', change: 'Exceeds Target' },
-    { label: 'INVERTER EFFICIENCY', value: '99.2%', sub: '800V SiC Inverter', change: 'Bench Validated' },
-    { label: 'PACK PRODUCTION COST', value: '$84/kWh', sub: '100 GWh Run-rate', change: 'On Track' },
-  ],
-  takeaways: [
-    'Commercial Fleet Operating Range: 540 km WLTP validated on 4.2-ton commercial delivery vans.',
-    'Diesel Total Cost Parity: Achieves full financial parity in 26 months against diesel fleet baseline.',
-    'Dynamic Crash Deceleration: 65 G deceleration withstood under FMVSS 305 with dual-ceramic barrier suppression.',
-  ],
-}
-
 interface StudioStageProps {
   transformation: Transformation
   busy: boolean
   onGenerateOutputs: (types: string[], config: GenerationConfig) => void
   onDeleteOutput?: (outputId: string) => void
   onTransformationUpdated?: (updated: Transformation) => void
-  onClonedBlueprintSuccess?: () => void
 }
 
 export function StudioStage({
@@ -163,7 +130,6 @@ export function StudioStage({
   onGenerateOutputs,
   onDeleteOutput,
   onTransformationUpdated,
-  onClonedBlueprintSuccess,
 }: StudioStageProps) {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([
     'executive_summary',
@@ -192,8 +158,7 @@ export function StudioStage({
 
   // Template Modal State
   const [showTemplateModal, setShowTemplateModal] = useState(false)
-  const [templateMode, setTemplateMode] = useState<'blueprint' | 'file' | 'text'>('blueprint')
-  const [hasClonedBlueprint, setHasClonedBlueprint] = useState(false)
+  const [templateMode, setTemplateMode] = useState<'file' | 'text'>('file')
   const [templateFileBase64, setTemplateFileBase64] = useState<string | null>(null)
   const [templateFileName, setTemplateFileName] = useState('')
   const [templateFileType, setTemplateFileType] = useState<'pdf' | 'docx' | 'image' | 'text' | null>(null)
@@ -203,30 +168,6 @@ export function StudioStage({
   const [templateGenerating, setTemplateGenerating] = useState(false)
   const [templateError, setTemplateError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
-
-  const handleCloneBlueprint = async () => {
-    setTemplateGenerating(true)
-    setTemplateError('')
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 450))
-
-      const updated = await generateFromTemplate(transformation.id, {
-        template_name: 'Executive KPI Briefing (Cloned Blueprint)',
-        template_file_name: 'executive_kpi_blueprint_template.png',
-        template_text: 'Executive KPI Briefing Format with 4 stat cards and summary takeaways',
-        user_prompt: 'Cloned visual cards, typography, and layout from reference executive template.',
-      })
-
-      setHasClonedBlueprint(true)
-      onTransformationUpdated?.(updated)
-      onClonedBlueprintSuccess?.()
-    } catch (err: any) {
-      setTemplateError(err?.message || 'Failed to clone blueprint.')
-    } finally {
-      setTemplateGenerating(false)
-    }
-  }
 
   useEffect(() => {
     let isMounted = true
@@ -430,10 +371,7 @@ export function StudioStage({
   return (
     <div className="studio-stage-container">
       {/* Universal Template-Based Generation - Core Novelty Workstation */}
-      <section
-        id="tour-template-cloner"
-        className="template-cloner-workbench tactile-card"
-      >
+      <section id="template-cloner-workbench" className="template-cloner-workbench tactile-card">
         {/* Header & Core Novelty Value Proposition */}
         <div className="workbench-header">
           <div className="workbench-title-area">
@@ -443,7 +381,7 @@ export function StudioStage({
             </div>
             <h3>Reference Document & Structural Template Cloner</h3>
             <p>
-              Generating deliverables from scratch is time-consuming and resource-intensive. Provide any reference design template (a styled page or corporate layout) to extract its layout hierarchy, and synthesize your publication in that exact design and format, populated strictly with your unstyled raw Content DNA.
+              Generating deliverables from scratch is time-consuming and resource-intensive. Upload any pre-existing document (PDF, Word, or screenshot) to deterministically extract its layout hierarchy, section structures, and formatting—then synthesize your publication in the exact same format, grounded strictly in your Content DNA.
             </p>
           </div>
 
@@ -452,398 +390,180 @@ export function StudioStage({
               <Check size={12} /> Deterministic Layout Extraction
             </span>
             <span className="workbench-pill">
-              <Check size={12} /> Visual Format & Card Replication
+              <Check size={12} /> Section & Hierarchy Replication
             </span>
             <span className="workbench-pill">
-              <Check size={12} /> Grounded Strictly in Raw Data
+              <Check size={12} /> Grounded Strictly in Content DNA
             </span>
             <span className="workbench-pill">
               <Check size={12} /> Zero Manual Redesign
             </span>
           </div>
-
-          {/* Mode Selector Tabs */}
-          <div className="workbench-mode-tabs">
-            <button
-              type="button"
-              className={`workbench-tab ${templateMode === 'blueprint' ? 'active' : ''}`}
-              onClick={() => setTemplateMode('blueprint')}
-            >
-              <Sparkles size={14} />
-              <span>Interactive Blueprint (Raw Data + Design)</span>
-            </button>
-            <button
-              type="button"
-              className={`workbench-tab ${templateMode === 'file' ? 'active' : ''}`}
-              onClick={() => setTemplateMode('file')}
-            >
-              <Upload size={14} />
-              <span>Upload Custom Document (PDF / DOCX / Image)</span>
-            </button>
-            <button
-              type="button"
-              className={`workbench-tab ${templateMode === 'text' ? 'active' : ''}`}
-              onClick={() => setTemplateMode('text')}
-            >
-              <FileText size={14} />
-              <span>Paste Layout Text / Markdown</span>
-            </button>
-          </div>
         </div>
 
-        {templateMode === 'blueprint' ? (
-          <div className="blueprint-interactive-showcase">
-            <div className="blueprint-meta-bar">
-              <span className="blueprint-meta-text">
-                <strong>Format-Preserving Layout Engine:</strong> Ingests unstyled raw telemetry on the left, analyzes the designed reference page in the middle, and synthesizes the exact matching deliverable on the right with zero hallucinations.
-              </span>
+        {/* Interactive Workspace Grid */}
+        <div className="workbench-interactive-grid">
+          {/* Left Column: Reference Ingestion (Dropzone / Text Area) */}
+          <div className="workbench-input-pane">
+            <div className="workbench-mode-tabs">
               <button
                 type="button"
-                id="tour-btn-clone-template"
-                className="blueprint-run-btn"
-                onClick={handleCloneBlueprint}
-                disabled={templateGenerating}
+                className={`workbench-tab ${templateMode === 'file' ? 'active' : ''}`}
+                onClick={() => setTemplateMode('file')}
               >
-                <Sparkles size={14} />
-                <span>
-                  {templateGenerating
-                    ? 'Extracting Layout & Injecting Data...'
-                    : hasClonedBlueprint
-                    ? 'Re-Clone Design & Inject Data'
-                    : 'Clone Reference Design & Inject Raw Data'}
-                </span>
-                {!templateGenerating && <ArrowRight size={14} />}
+                <Upload size={14} />
+                <span>Upload Reference Document (PDF / DOCX / Image)</span>
+              </button>
+              <button
+                type="button"
+                className={`workbench-tab ${templateMode === 'text' ? 'active' : ''}`}
+                onClick={() => setTemplateMode('text')}
+              >
+                <FileText size={14} />
+                <span>Paste Layout Text / Markdown</span>
               </button>
             </div>
 
-            <div className="blueprint-columns-grid">
-              {/* Column 1: Raw Unstyled Data Feed */}
-              <div className="blueprint-column raw-data-col">
-                <div className="blueprint-col-header">
-                  <div className="col-header-title">
-                    <Terminal size={14} style={{ color: '#38bdf8' }} />
-                    <strong>1. Raw Unstyled Data</strong>
-                  </div>
-                  <span className="blueprint-pill monospace-pill">Raw Monospace Feed</span>
-                </div>
-                <div className="raw-terminal-box">
-                  <div className="terminal-top-dots">
-                    <span className="tdot red" />
-                    <span className="tdot yellow" />
-                    <span className="tdot green" />
-                    <span className="terminal-title">ingestion_stream_dna_l3.txt</span>
-                  </div>
-                  <pre className="raw-monospace-content">
-                    {RAW_UNSTYLED_DATA.rawLines.map((line, idx) => (
-                      <div key={idx} className="raw-line">
-                        <span className="raw-ln">{String(idx + 1).padStart(2, '0')}</span>
-                        <span className="raw-text">{line}</span>
+            {templateMode === 'file' ? (
+              <div
+                className={`workbench-dropzone ${templateFileBase64 ? 'has-file' : ''}`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleTemplateFileUpload(e.dataTransfer.files[0])
+                  }
+                }}
+              >
+                <input
+                  type="file"
+                  id="template-workbench-file-input"
+                  className="workbench-file-input"
+                  accept=".pdf,.docx,.doc,image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleTemplateFileUpload(e.target.files[0])
+                    }
+                  }}
+                />
+                {templateFileName ? (
+                  <div className="workbench-file-card">
+                    <div className="file-card-icon">
+                      <FileText size={32} />
+                    </div>
+                    <div className="file-card-meta">
+                      <div className="file-card-title-row">
+                        <strong className="file-name">{templateFileName}</strong>
+                        <span className="file-type-pill">{templateFileType?.toUpperCase() || 'DOCUMENT'}</span>
                       </div>
-                    ))}
-                  </pre>
-                </div>
-                <div className="blueprint-col-footer-note">
-                  Unformatted engineering telemetry extracted from multiple multimodal inputs.
-                </div>
-              </div>
-
-              {/* Column 2: Reference Designed Page */}
-              <div className="blueprint-column reference-design-col">
-                <div className="blueprint-col-header">
-                  <div className="col-header-title">
-                    <Layout size={14} style={{ color: '#a855f7' }} />
-                    <strong>2. Reference Designed Page</strong>
-                  </div>
-                  <span className="blueprint-pill design-pill">Target Visual Blueprint</span>
-                </div>
-
-                <div className="mock-page-container">
-                  <div className="mock-page-topbar">
-                    <div className="mock-page-brand">
-                      <span className="mock-brand-icon">▲</span>
-                      <span>AUTOMOTIVE EXECUTIVE REPORT</span>
+                      <span className="file-status">Blueprint ready for deterministic layout extraction</span>
                     </div>
-                    <span className="mock-badge">TEMPLATE SPEC V2.4</span>
-                  </div>
-
-                  <div className="mock-page-kicker">
-                    NEXT-GEN ARCHITECTURE · EXECUTIVE STATUS OVERVIEW
-                  </div>
-
-                  <div className="mock-kpi-grid">
-                    <div className="mock-kpi-card">
-                      <span className="kpi-mini-label">CELL DENSITY</span>
-                      <strong className="kpi-placeholder-val">[Target Wh/kg]</strong>
-                      <span className="kpi-micro-chip">+14% vs Gen-1</span>
-                    </div>
-                    <div className="mock-kpi-card">
-                      <span className="kpi-mini-label">CHARGE TURNAROUND</span>
-                      <strong className="kpi-placeholder-val">[Target Min]</strong>
-                      <span className="kpi-micro-chip">Exceeds Target</span>
-                    </div>
-                    <div className="mock-kpi-card">
-                      <span className="kpi-mini-label">INVERTER EFFICIENCY</span>
-                      <strong className="kpi-placeholder-val">[Target %]</strong>
-                      <span className="kpi-micro-chip">Bench Validated</span>
-                    </div>
-                    <div className="mock-kpi-card">
-                      <span className="kpi-mini-label">PACK PRODUCTION COST</span>
-                      <strong className="kpi-placeholder-val">[Target $/kWh]</strong>
-                      <span className="kpi-micro-chip">On Track</span>
-                    </div>
-                  </div>
-
-                  <div className="mock-callout-box">
-                    <span className="callout-heading">EXECUTIVE SUMMARY & FLEET DEPLOYMENT</span>
-                    <p className="callout-placeholder-line">[Takeaway 1: Commercial fleet operating range & validation]</p>
-                    <p className="callout-placeholder-line">[Takeaway 2: Diesel total cost of ownership payback horizon]</p>
-                  </div>
-
-                  <div className="mock-page-footer">
-                    <span className="footer-cert">ISO 26262 ASIL-D Validated · Fraunhofer Supplier Audit Seal</span>
-                    <span className="footer-date">Q3 2026 Reference</span>
-                  </div>
-                </div>
-
-                <div className="blueprint-col-footer-note">
-                  Corporate styled card defining layout hierarchy, metric boxes, and visual presentation.
-                </div>
-              </div>
-
-              {/* Column 3: Synthesized Cloned Output */}
-              <div className="blueprint-column synthesized-output-col">
-                <div className="blueprint-col-header">
-                  <div className="col-header-title">
-                    <Sparkles size={14} style={{ color: '#34d399' }} />
-                    <strong>3. Synthesized Cloned Output</strong>
-                  </div>
-                  <span className={`blueprint-pill ${hasClonedBlueprint ? 'active-pill' : 'pending-pill'}`}>
-                    {hasClonedBlueprint ? '✓ Same Design + Raw Data' : 'Pending Synthesis'}
-                  </span>
-                </div>
-
-                {!hasClonedBlueprint ? (
-                  <div className="cloned-output-placeholder">
-                    <div className="output-placeholder-pulse">
-                      <Sparkles size={28} style={{ color: '#38bdf8' }} />
-                    </div>
-                    <strong>Ready to Clone Blueprint</strong>
-                    <p>
-                      Click "Clone Reference Design & Inject Raw Data" to generate this exact format populated with the raw figures.
-                    </p>
                     <button
                       type="button"
-                      className="blueprint-run-btn primary"
-                      onClick={handleCloneBlueprint}
-                      disabled={templateGenerating}
+                      className="file-change-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleClearTemplateFile()
+                      }}
                     >
-                      <Sparkles size={14} />
-                      <span>{templateGenerating ? 'Synthesizing...' : 'Generate Cloned Output'}</span>
+                      Remove File
                     </button>
                   </div>
                 ) : (
-                  <div className="mock-page-container cloned-result-card page-enter">
-                    <div className="mock-page-topbar">
-                      <div className="mock-page-brand">
-                        <span className="mock-brand-icon">▲</span>
-                        <span>AUTOMOTIVE EXECUTIVE REPORT</span>
-                      </div>
-                      <span className="mock-badge live-badge">✓ CLONED BLUEPRINT</span>
+                  <label htmlFor="template-workbench-file-input" className="dropzone-label">
+                    <div className="dropzone-icon-circle">
+                      <Upload size={28} />
                     </div>
-
-                    <div className="mock-page-kicker">
-                      NEXT-GEN ARCHITECTURE · EXECUTIVE STATUS OVERVIEW
+                    <strong className="dropzone-prompt">Drop reference document here or click to browse</strong>
+                    <span className="dropzone-sub">Upload an existing report, memo, briefing sheet, or template</span>
+                    <div className="dropzone-supported-tags">
+                      <span>PDF Documents</span>
+                      <span>Word (.docx)</span>
+                      <span>Layout Screenshots (PNG, JPG)</span>
                     </div>
-
-                    <div className="mock-kpi-grid">
-                      {RAW_UNSTYLED_DATA.metrics.map((m) => (
-                        <div key={m.label} className="mock-kpi-card live-kpi-card">
-                          <span className="kpi-mini-label">{m.label}</span>
-                          <strong className="kpi-live-val">{m.value}</strong>
-                          <span className="kpi-micro-chip live-chip">{m.change}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mock-callout-box live-callout-box">
-                      <span className="callout-heading">EXECUTIVE SUMMARY & FLEET DEPLOYMENT</span>
-                      {RAW_UNSTYLED_DATA.takeaways.map((t, idx) => (
-                        <p key={idx} className="callout-live-line">
-                          <span className="callout-bullet">▸</span>
-                          <span>{t}</span>
-                        </p>
-                      ))}
-                    </div>
-
-                    <div className="mock-page-footer">
-                      <span className="footer-cert live-cert">
-                        <CheckCircle2 size={11} style={{ color: '#34d399' }} />
-                        ISO 26262 ASIL-D Validated · Fraunhofer Supplier Audit Confirmed
-                      </span>
-                      <span className="footer-date">September 2026</span>
-                    </div>
-                  </div>
+                  </label>
                 )}
-
-                <div className="blueprint-col-footer-note">
-                  {hasClonedBlueprint ? (
-                    <span className="success-footer-text">
-                      <CheckCircle2 size={12} style={{ color: '#34d399' }} />
-                      Generated with the exact layout of Column 2 and 100% verified facts from Column 1.
-                    </span>
-                  ) : (
-                    'Synthesized publication preserves visual layout while eliminating hallucinations.'
-                  )}
-                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          /* Interactive Workspace Grid for custom upload or text */
-          <div className="workbench-interactive-grid">
-            {/* Left Column: Reference Ingestion (Dropzone / Text Area) */}
-            <div className="workbench-input-pane">
-              {templateMode === 'file' ? (
-                <div
-                  className={`workbench-dropzone ${templateFileBase64 ? 'has-file' : ''}`}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      handleTemplateFileUpload(e.dataTransfer.files[0])
-                    }
-                  }}
-                >
-                  <input
-                    type="file"
-                    id="template-workbench-file-input"
-                    className="workbench-file-input"
-                    accept=".pdf,.docx,.doc,image/*"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleTemplateFileUpload(e.target.files[0])
-                      }
-                    }}
-                  />
-                  {templateFileName ? (
-                    <div className="workbench-file-card">
-                      <div className="file-card-icon">
-                        <FileText size={32} />
-                      </div>
-                      <div className="file-card-meta">
-                        <div className="file-card-title-row">
-                          <strong className="file-name">{templateFileName}</strong>
-                          <span className="file-type-pill">{templateFileType?.toUpperCase() || 'DOCUMENT'}</span>
-                        </div>
-                        <span className="file-status">Blueprint ready for deterministic layout extraction</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="file-change-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleClearTemplateFile()
-                        }}
-                      >
-                        Remove File
-                      </button>
-                    </div>
-                  ) : (
-                    <label htmlFor="template-workbench-file-input" className="dropzone-label">
-                      <div className="dropzone-icon-circle">
-                        <Upload size={28} />
-                      </div>
-                      <strong className="dropzone-prompt">Drop reference document here or click to browse</strong>
-                      <span className="dropzone-sub">Upload an existing report, memo, briefing sheet, or template</span>
-                      <div className="dropzone-supported-tags">
-                        <span>PDF Documents</span>
-                        <span>Word (.docx)</span>
-                        <span>Layout Screenshots (PNG, JPG)</span>
-                      </div>
-                    </label>
-                  )}
-                </div>
-              ) : (
-                <div className="workbench-textarea-container">
-                  <textarea
-                    className="workbench-textarea"
-                    rows={8}
-                    placeholder={`Paste reference template structure or markdown layout...
+            ) : (
+              <div className="workbench-textarea-container">
+                <textarea
+                  className="workbench-textarea"
+                  rows={8}
+                  placeholder={`Paste reference template structure or markdown layout...
 Example:
 # [Report Title]
 ## Executive Summary (3 bullet points)
 ## Market Comparison Table [Quarter | Metric | Variance]
 ## Strategic Recommendations & Callouts`}
-                    value={templateText}
-                    onChange={(e) => setTemplateText(e.target.value)}
-                  />
-                </div>
-              )}
+                  value={templateText}
+                  onChange={(e) => setTemplateText(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Template Configuration & Synthesis Action */}
+          <div className="workbench-config-pane">
+            <div className="workbench-fields">
+              <div className="workbench-field">
+                <label htmlFor="workbench-template-name">
+                  <span>Deliverable Identifier / Name</span>
+                  <small>Output title for cloned deliverable</small>
+                </label>
+                <input
+                  id="workbench-template-name"
+                  type="text"
+                  className="workbench-input"
+                  placeholder="e.g. Q4 Executive Board Brief, Global Clinical Review"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+              </div>
+
+              <div className="workbench-field">
+                <label htmlFor="workbench-template-prompt">
+                  <span>Focus Objective & Persona Alignment <small>(Optional)</small></span>
+                  <small>Prioritize specific Content DNA dimensions</small>
+                </label>
+                <input
+                  id="workbench-template-prompt"
+                  type="text"
+                  className="workbench-input"
+                  placeholder="e.g. Focus on financial comparison, executive takeaways, and risk metrics"
+                  value={templatePrompt}
+                  onChange={(e) => setTemplatePrompt(e.target.value)}
+                />
+              </div>
             </div>
 
-            {/* Right Column: Template Configuration & Synthesis Action */}
-            <div className="workbench-config-pane">
-              <div className="workbench-fields">
-                <div className="workbench-field">
-                  <label htmlFor="workbench-template-name">
-                    <span>Deliverable Identifier / Name</span>
-                    <small>Output title for cloned deliverable</small>
-                  </label>
-                  <input
-                    id="workbench-template-name"
-                    type="text"
-                    className="workbench-input"
-                    placeholder="e.g. Q4 Executive Board Brief, Global Clinical Review"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                  />
-                </div>
-
-                <div className="workbench-field">
-                  <label htmlFor="workbench-template-prompt">
-                    <span>Focus Objective & Persona Alignment <small>(Optional)</small></span>
-                    <small>Prioritize specific Content DNA dimensions</small>
-                  </label>
-                  <input
-                    id="workbench-template-prompt"
-                    type="text"
-                    className="workbench-input"
-                    placeholder="e.g. Focus on financial comparison, executive takeaways, and risk metrics"
-                    value={templatePrompt}
-                    onChange={(e) => setTemplatePrompt(e.target.value)}
-                  />
-                </div>
+            {templateError && (
+              <div className="workbench-error-banner" role="alert">
+                <ShieldAlert size={14} />
+                <span>{templateError}</span>
               </div>
+            )}
 
-              {templateError && (
-                <div className="workbench-error-banner" role="alert">
-                  <ShieldAlert size={14} />
-                  <span>{templateError}</span>
-                </div>
-              )}
-
-              <div className="workbench-action-footer">
-                <button
-                  type="button"
-                  className="workbench-clone-btn primary"
-                  onClick={handleRunTemplateCloner}
-                  disabled={templateGenerating}
-                >
-                  <Camera size={18} />
-                  <span>
-                    {templateGenerating
-                      ? 'Extracting Layout & Synthesizing Deliverable...'
-                      : 'Clone Reference Template & Synthesize Deliverable'}
-                  </span>
-                  {!templateGenerating && <ArrowRight size={16} />}
-                </button>
-                <span className="workbench-guarantee-note">
-                  Strict Zero-Hallucination: Generated output is verified against your source Content DNA.
+            <div className="workbench-action-footer">
+              <button
+                type="button"
+                className="workbench-clone-btn primary"
+                onClick={handleRunTemplateCloner}
+                disabled={templateGenerating}
+              >
+                <Camera size={18} />
+                <span>
+                  {templateGenerating
+                    ? 'Extracting Layout & Synthesizing Deliverable...'
+                    : 'Clone Reference Template & Synthesize Deliverable'}
                 </span>
-              </div>
+                {!templateGenerating && <ArrowRight size={16} />}
+              </button>
+              <span className="workbench-guarantee-note">
+                Strict Zero-Hallucination: Generated output is verified against your source Content DNA.
+              </span>
             </div>
           </div>
-        )}
+        </div>
       </section>
 
       {/* Main Studio Two-Column Grid */}
@@ -929,7 +649,7 @@ Example:
           {selectedTypes.includes('presentation') && (
             <div className="slides-stepper-box tactile-card">
               <div className="stepper-header">
-                <span className="stepper-label">Number of Presentation Slides (1 to 15)</span>
+                <span className="stepper-label">Number of Presentation Slides (1–15)</span>
                 <strong className="stepper-count">{config.slides || 7} Slides</strong>
               </div>
               <input
@@ -1275,7 +995,7 @@ Example:
                     </div>
 
                     {/* Viewport: Interactive Slide Deck for Presentation, Document PDF for others */}
-                    <div className="deliverable-pdf-container" id="tour-deliverables-viewer">
+                    <div className="deliverable-pdf-container">
                       {artifact.type === 'presentation' ? (
                         <SlideDeckViewer
                           title={transformation.title}

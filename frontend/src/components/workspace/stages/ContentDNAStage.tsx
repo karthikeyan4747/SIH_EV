@@ -18,8 +18,6 @@ interface ContentDNAStageProps {
   transformation: Transformation
   dna: ContentDNA | null
   busy: boolean
-  viewMode?: 'lineage' | 'helix' | 'inspector' | 'versions'
-  onViewModeChange?: (mode: 'lineage' | 'helix' | 'inspector' | 'versions') => void
   onPatch: (patch: ContentDNAPatch) => Promise<void>
   onRestoreVersion?: (version: number) => void
   onProceedToIntegrity: () => void
@@ -29,22 +27,11 @@ export function ContentDNAStage({
   transformation,
   dna,
   busy,
-  viewMode: controlledViewMode,
-  onViewModeChange,
   onPatch,
   onRestoreVersion,
   onProceedToIntegrity,
 }: ContentDNAStageProps) {
-  const [internalViewMode, setInternalViewMode] = useState<
-    'lineage' | 'helix' | 'inspector' | 'versions'
-  >('lineage')
-
-  const activeMode = controlledViewMode ?? internalViewMode
-  const changeMode = (mode: 'lineage' | 'helix' | 'inspector' | 'versions') => {
-    setInternalViewMode(mode)
-    onViewModeChange?.(mode)
-  }
-
+  const [viewMode, setViewMode] = useState<'lineage' | 'helix' | 'inspector' | 'versions'>('lineage')
   const [selectedNode, setSelectedNode] = useState<DNASectionKey>('overview')
 
   const versionsCount = transformation.versions?.length || (dna ? 1 : 0)
@@ -57,8 +44,8 @@ export function ContentDNAStage({
           <div className="view-mode-toggle">
             <button
               type="button"
-              className={`mode-btn ${activeMode === 'lineage' ? 'active' : ''}`}
-              onClick={() => changeMode('lineage')}
+              className={`mode-btn ${viewMode === 'lineage' ? 'active' : ''}`}
+              onClick={() => setViewMode('lineage')}
               title="Interactive trace flow from raw sources to claims and deliverables"
             >
               <GitFork size={14} />
@@ -66,9 +53,8 @@ export function ContentDNAStage({
             </button>
             <button
               type="button"
-              id="tour-btn-helix"
-              className={`mode-btn ${activeMode === 'helix' ? 'active' : ''}`}
-              onClick={() => changeMode('helix')}
+              className={`mode-btn ${viewMode === 'helix' ? 'active' : ''}`}
+              onClick={() => setViewMode('helix')}
               title="3D Structural visualizer of the knowledge layer"
             >
               <Dna size={14} />
@@ -76,9 +62,8 @@ export function ContentDNAStage({
             </button>
             <button
               type="button"
-              id="tour-btn-inspector"
-              className={`mode-btn ${activeMode === 'inspector' ? 'active' : ''}`}
-              onClick={() => changeMode('inspector')}
+              className={`mode-btn ${viewMode === 'inspector' ? 'active' : ''}`}
+              onClick={() => setViewMode('inspector')}
               title="Detailed field editor and JSON patcher"
             >
               <Layers size={14} />
@@ -86,9 +71,8 @@ export function ContentDNAStage({
             </button>
             <button
               type="button"
-              id="tour-btn-versions"
-              className={`mode-btn ${activeMode === 'versions' ? 'active' : ''}`}
-              onClick={() => changeMode('versions')}
+              className={`mode-btn ${viewMode === 'versions' ? 'active' : ''}`}
+              onClick={() => setViewMode('versions')}
               title="Inspect DNA version snapshots, audit history, and rollback"
             >
               <History size={14} />
@@ -111,13 +95,13 @@ export function ContentDNAStage({
 
       {/* Main DNA Canvas & Inspector Layout */}
       <div className="dna-stage-main-grid">
-        {activeMode === 'versions' ? (
+        {viewMode === 'versions' ? (
           <DNAVersionTimelineView
             transformation={transformation}
             currentDna={dna}
             onRestoreVersion={onRestoreVersion}
           />
-        ) : activeMode === 'lineage' ? (
+        ) : viewMode === 'lineage' ? (
           <div className="lineage-canvas-wrapper tactile-card">
             <SemanticLineageGraphVisualizer
               transformation={transformation}
@@ -133,7 +117,7 @@ export function ContentDNAStage({
               Add sources in Stage 1 and extract DNA to inspect the canonical structure and helix visualization.
             </p>
           </div>
-        ) : activeMode === 'helix' ? (
+        ) : viewMode === 'helix' ? (
           <div className="helix-split-layout">
             <div className="helix-viewport tactile-card">
               <ContentDNAStructure
